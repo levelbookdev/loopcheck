@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "notes": "Stored-equipment preservation logs (ADR 0015). Recurring checklists run against a TAG during the delivered-but-not-yet-installed window, reusing the compliance-template shape (subject_kind='tag', tag_type null, phase null, recurrence set). Added by their own loader (1789000032) AFTER migration 1789000031_Q opens the weekly/monthly recurrence cadences — kept out of compliance_templates.json because the early loader 1789000009 reads that file before the enum is extended. Two templates, split by cadence rather than branched inside one (flat-template rule): a weekly log (shaft rotation, protection, heaters) and a monthly log (oil, rust, condensate, lubrication, desiccant). Skipped preservation is a common manufacturer warranty-void trigger, so this ledger is the provenance a warranty dispute (ADR 0005) turns on. DOMAIN REVIEW NEEDED: the exact item list, turn counts, and cadence split are the maintainer's / manufacturer's call. Recurring EXECUTION UI is Phase 5 (shared with the compliance logs) and not built yet — this seeds the content now.",
+  "templates": [
+    {
+      "template_key": "preservation.stored_equipment_weekly",
+      "tag_type": null,
+      "phase": null,
+      "name": "Stored Equipment — Weekly Preservation",
+      "recurrence": "weekly",
+      "subject_kind": "tag",
+      "witness_required": false,
+      "items": [
+        { "seq": 1, "text": "Shaft rotated the specified number of turns to redistribute lubricant and prevent bearing brinelling — record turns", "response": "value", "unit": "turns", "confirm_per_spec": true, "spec_reference": "manufacturer rotation frequency / turns" },
+        { "seq": 2, "text": "Covers, wrapping, and weather protection intact; equipment on dunnage and off the ground", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 3, "text": "Space heaters energized where provided (verify power)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 4, "text": "No standing water, condensation, or fresh rust observed on a quick visual", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "preservation.stored_equipment_monthly",
+      "tag_type": null,
+      "phase": null,
+      "name": "Stored Equipment — Monthly Preservation / Maintenance",
+      "recurrence": "monthly",
+      "subject_kind": "tag",
+      "witness_required": false,
+      "items": [
+        { "seq": 1, "text": "Equipment stored per manufacturer's long-term storage requirements (dunnage, covers, indoor/outdoor)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true, "spec_reference": "manufacturer long-term storage instructions" },
+        { "seq": 2, "text": "Oil level checked and topped off; condition acceptable (no water/emulsion) — record level/condition", "response": "text", "unit": null, "confirm_per_spec": false },
+        { "seq": 3, "text": "No rust or corrosion on machined/unpainted surfaces; preservative/coating reapplied as needed", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 4, "text": "Condensate drained from casing / gearbox / oil reservoir", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 5, "text": "Bearings / lubrication serviced per manufacturer (grease/oil, purge as required)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true, "spec_reference": "manufacturer lubrication interval" },
+        { "seq": 6, "text": "Desiccant / VCI checked and replaced; enclosure openings resealed and covered", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 7, "text": "Photo of the stored equipment and its protection this cycle", "response": "photo_required", "unit": null, "confirm_per_spec": false }
+      ]
+    }
+  ]
+}

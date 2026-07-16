@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoopCheck — Sign</title>
+<!--
+  Signing surface (ADR 0010). Signs a turnover package (?package=ID) or a
+  single check / witnessed hold point (?check=ID).
+
+  A signature REQUIRES an account (ADR 0011 §7): an attestation of identity is
+  worthless if anyone can mint one. This page redirects to login when there is
+  no session. The typed name IS the signature; the drawn mark is optional (a
+  witness who just types their name must not be blocked — hard constraint #1).
+
+  HONESTY, LOTO-style (review C4): this is a recorded attestation over an
+  append-only ledger, NOT a qualified e-signature, and the caveat says so on
+  the page — signer identity is only as strong as this deployment's access
+  controls until the auth lockdown fully lands.
+-->
+<link rel="stylesheet" href="/app.css">
+<script defer src="/lc-auth.js"></script>
+<script defer src="/vendor/alpine.min.js"></script>
+<style>
+  .subject { border: 3px solid var(--ink); padding: 14px; margin-bottom: 16px; }
+  .subject .line { color: var(--steel); font-size: 14px; margin-top: 4px; }
+  .hash { font-family: ui-monospace, Consolas, monospace; font-size: 12px; word-break: break-all; color: var(--steel); }
+  .caveat { border-left: 6px solid var(--sev-b); background: #fdf6e9; padding: 12px 14px; margin: 14px 0; font-size: 13px; }
+  .sigpad-wrap { border: 2px solid var(--ink); margin-top: 6px; }
+  canvas.sigpad { display: block; width: 100%; height: 160px; touch-action: none; background: #fff; }
+  .sig { border: 2px solid var(--line); padding: 10px 12px; margin-top: 8px; }
+  .sig .who { font-weight: 800; }
+  .sig .line { color: var(--steel); font-size: 13px; margin-top: 3px; }
+  .sig .stmt { font-size: 14px; margin-top: 6px; font-style: italic; }
+  .sig img.mark { max-width: 260px; margin-top: 8px; border: 1px solid var(--line); }
+</style>
+</head>
+<body>
+
+<div x-data="signPage()" x-init="load()">
+  <header class="bar">
+    <span class="mark"><a href="/">LoopCheck</a></span>
+    <span class="meta">Sign</span>
+  </header>
+
+  <template x-if="state === 'loading'"><p class="loading">Loading…</p></template>
+  <template x-if="state === 'error'"><div class="error" x-text="errorMsg"></div></template>
+
+  <template x-if="state === 'ready'">
+    <main>
+      <h1>Sign</h1>
+
+      <!-- What is being signed -->
+      <div class="subject">
+        <template x-if="kind === 'package'">
+          <div>
+            <strong x-text="pkg.title || 'Turnover package'"></strong>
+            <div class="line" x-text="scopeLabel"></div>
+            <div class="line">
+              <span x-text="stand.records_included + ' records · ' + stand.checks_included + ' checks'"></span>
+              <span x-show="stand.open_punch"> · open punch A <span x-text="stand.open_punch.A"></span> / B <span x-text="stand.open_punch.B"></span> / C <span x-text="stand.open_punch.C"></span></span>
+              <span x-show="stand.active_locks"> · <strong x-text="stand.active_locks + ' active LOTO lock(s)'"></strong></span>
+            </div>
+            <div class="line">Sealed <span class="mono" x-text="pkg.hash_algo"></span>:</div>
+            <div class="hash" x-text="pkg.content_hash"></div>
+          </div>
+        </template>
+        <template x-if="kind === 'check'">
+          <div>
+            <strong x-text="prettyPhase(chk.phase) + ' — ' + (chk.result || '').toUpperCase()"></strong>
+            <div class="line" x-text="'Check ' + chk.id + (chk.performed_by ? ' · ' + chk.performed_by : '')"></div>
+            <div class="line" x-show="chk.performed_at" x-text="'Performed ' + fmtDate(chk.performed_at)"></div>
+          </div>
+        </template>
+      </div>
+
+      <div class="caveat">
+        <strong>This records an attestation, not a qualified electronic signature.</strong>
+        Your name, role, and the wording below are written to an append-only
+        ledger with the exact content above. Signer identity is only as strong
+        as this deployment's access controls.
+      </div>
+
+      <!-- ===== Capture ===== -->
+      <label class="fl">Your name</label>
+      <input type="text" x-model="form.signer_name" placeholder="The name that signs">
+
+      <label class="fl">Signing as</label>
+      <select x-model="form.signer_role" @change="applyDefaultStatement()">
+        <option value="contractor">Contractor</option>
+        <option value="owner">Owner</option>
+        <option value="engineer">Engineer of record</option>
+        <option value="vendor">Vendor</option>
+        <option value="witness">Witness</option>
+        <option value="other">Other</option>
+      </select>
+
+      <label class="fl">Title / capacity (optional)</label>
+      <input type="text" x-model="form.signer_title" placeholder="e.g. Project Manager, Resident Engineer">
+
+      <label class="fl">Statement (frozen exactly as written)</label>
+      <textarea x-model="form.statement" rows="3"></textarea>
+
+      <label class="fl">Drawn signature (optional)</label>
+      <div class="sigpad-wrap">
+        <canvas class="sigpad" x-ref="pad"></canvas>
+      </div>
+      <button class="link" style="margin-top:8px" @click="clearPad()">Clear drawing</button>
+
+      <button class="go" :disabled="busy || !form.signer_name || !form.statement"
+              @click="sign()" x-text="busy ? 'Signing…' : 'Sign'"></button>
+      <button class="link" style="margin-top:12px" @click="goBack()">Cancel</button>
+
+      <div class="flash" x-show="flash" x-text="flash"></div>
+      <div class="error" x-show="signError" x-text="signError"></div>
+
+      <!-- ===== Existing signatures on this subject ===== -->
+      <h2 class="section">
+        Signatures
+        <span x-show="signatures.length" x-text="'(' + signatures.length + ')'"></span>
+      </h2>
+      <template x-if="!signatures.length">
+        <p class="empty">No signatures yet on this record.</p>
+      </template>
+      <template x-for="s in signatures" :key="s.id">
+        <div class="sig">
+          <span class="who" x-text="s.signer_name"></span>
+          <span x-show="s.signer_role" x-text="' — ' + prettyRole(s.signer_role)"></span>
+          <span x-show="s.signer_title" x-text="' (' + s.signer_title + ')'"></span>
+          <div class="line">
+            signed <span x-text="fmtDate(s.signed_at || s.created)"></span>
+            <template x-if="kind === 'package' && s.signed_content_hash">
+              <span> · <span x-text="s.signed_content_hash === pkg.content_hash ? 'attests THIS snapshot' : '⚠ attests a different snapshot'"></span></span>
+            </template>
+          </div>
+          <div class="stmt" x-text="'“' + s.statement + '”'"></div>
+          <template x-for="a in marksFor(s.id)" :key="a.id">
+            <img class="mark" :src="fileUrl(a)" alt="Drawn signature" loading="lazy">
+          </template>
+        </div>
+      </template>
+    </main>
+  </template>
+</div>
+
+<script>
+function signPage() {
+  const PB = window.location.origin;
+  const STATEMENTS = {
+    contractor: "I certify the checks recorded here were performed and accurately recorded.",
+    owner: "Accepted for beneficial use.",
+    engineer: "Reviewed and accepted for startup.",
+    vendor: "Vendor representative — work performed as recorded.",
+    witness: "I witnessed the check(s) recorded here.",
+    other: "",
+  };
+  return {
+    kind: "", subjectId: "",
+    state: "loading", errorMsg: "",
+    pkg: null, chk: null,
+    stand: {}, scopeLabel: "",
+    signatures: [], sigMarks: [],
+    form: { signer_name: "", signer_role: "contractor", signer_title: "", statement: STATEMENTS.contractor },
+    busy: false, flash: "", signError: "",
+    _pad: null,
+
+    prettyPhase(p) {
+      return { installation: "Installation", point_to_point: "Point-to-Point",
+               energization: "Energization", loop_check: "Loop Check",
+               functional: "Functional", performance: "Performance" }[p] || p || "Check";
+    },
+    prettyRole(r) {
+      return { contractor: "Contractor", owner: "Owner", engineer: "Engineer of record",
+               vendor: "Vendor", witness: "Witness", other: "Other" }[r] || r;
+    },
+    fmtDate(d) {
+      return new Date(String(d).replace(" ", "T")).toLocaleString(undefined,
+        { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+    },
+    fileUrl(a) { return `${PB}/api/files/attachments/${a.id}/${a.file}`; },
+    marksFor(sigId) { return this.sigMarks.filter(a => a.parent_id === sigId); },
+    applyDefaultStatement() {
+      // Offer the role default, but only overwrite if the field is empty or
+      // still equals another role's default (don't clobber the signer's edits).
+      const defaults = Object.values(STATEMENTS);
+      if (!this.form.statement || defaults.indexOf(this.form.statement) !== -1) {
+        this.form.statement = STATEMENTS[this.form.signer_role] || "";
+      }
+    },
+
+    async load() {
+      // Signing requires an account. Validate the session, then gate.
+      await window.lcAuth.refresh();
+      if (!window.lcAuth.requireAuth()) return; // redirects to login?next=
+      this.form.signer_name = window.lcAuth.displayName() || "";
+
+      const q = new URLSearchParams(location.search);
+      const pkgId = q.get("package"), chkId = q.get("check");
+      try {
+        if (pkgId) {
+          this.kind = "package"; this.subjectId = pkgId;
+          const r = await fetch(`${PB}/api/collections/turnover_packages/records/${pkgId}`);
+          if (!r.ok) throw new Error("turnover package not found");
+          this.pkg = await r.json();
+          this.stand = this.pkg.standing_snapshot || {};
+          this.scopeLabel = this.pkg.system ? "System turnover" : "Project turnover";
+        } else if (chkId) {
+          this.kind = "check"; this.subjectId = chkId;
+          const r = await fetch(`${PB}/api/collections/checks/records/${chkId}`);
+          if (!r.ok) throw new Error("check not found");
+          this.chk = await r.json();
+        } else {
+          throw new Error("Nothing to sign — open as /sign.html?package=… or ?check=…");
+        }
+        await this.loadSignatures();
+        this.state = "ready";
+        this.$nextTick(() => this.initPad());
+      } catch (err) {
+        this.state = "error"; this.errorMsg = err.message;
+      }
+    },
+
+    async loadSignatures() {
+      const f = encodeURIComponent(`subject_collection='${this.kind === 'package' ? 'turnover_packages' : 'checks'}' && subject_id='${this.subjectId}'`);
+      const res = await fetch(`${PB}/api/collections/signatures/records?filter=(${f})&sort=created&perPage=200`);
+      this.signatures = (await res.json()).items || [];
+      if (this.signatures.length) {
+        const ors = this.signatures.map(s => `parent_id='${s.id}'`).join(" || ");
+        const af = encodeURIComponent(`parent_collection='signatures' && (${ors})`);
+        const ar = await fetch(`${PB}/api/collections/attachments/records?filter=(${af})&perPage=500`);
+        this.sigMarks = (ar.ok ? (await ar.json()).items : []) || [];
+      } else { this.sigMarks = []; }
+    },
+
+    // ---- Hand-rolled signature pad (no library; ~a few hundred bytes) -------
+    initPad() {
+      const c = this.$refs.pad; if (!c) return;
+      this._drew = false; // "anything drawn since last clear?" — sticky, not per-stroke
+      // Size the backing store to the displayed size for crisp strokes.
+      const rect = c.getBoundingClientRect();
+      c.width = rect.width; c.height = rect.height;
+      const ctx = c.getContext("2d");
+      ctx.lineWidth = 2.5; ctx.lineCap = "round"; ctx.strokeStyle = "#14161a";
+      let drawing = false;
+      const pos = (e) => {
+        const r = c.getBoundingClientRect();
+        return { x: e.clientX - r.left, y: e.clientY - r.top };
+      };
+      c.addEventListener("pointerdown", (e) => { drawing = true; const p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); c.setPointerCapture(e.pointerId); });
+      c.addEventListener("pointermove", (e) => { if (!drawing) return; const p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); this._drew = true; });
+      c.addEventListener("pointerup", () => { drawing = false; });
+      c.addEventListener("pointerleave", () => { drawing = false; });
+      this._pad = c;
+    },
+    clearPad() {
+      const c = this._pad; if (!c) return;
+      c.getContext("2d").clearRect(0, 0, c.width, c.height); this._drew = false;
+    },
+    padDataURL() {
+      return this._drew && this._pad ? this._pad.toDataURL("image/png") : "";
+    },
+
+    async sign() {
+      this.busy = true; this.signError = ""; this.flash = "";
+      try {
+        const body = {
+          subject_collection: this.kind === "package" ? "turnover_packages" : "checks",
+          subject_id: this.subjectId,
+          signer_name: this.form.signer_name,
+          signer_role: this.form.signer_role,
+          signer_title: this.form.signer_title,
+          statement: this.form.statement,
+          signed_at: new Date().toISOString().replace("T", " ").slice(0, 19),
+          // Bind the signature to exactly the frozen content it covers.
+          signed_content_hash: this.kind === "package" ? (this.pkg.content_hash || "") : "",
+        };
+        const res = await fetch(`${PB}/api/collections/signatures/records`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...window.lcAuth.header() },
+          body: JSON.stringify(body),
+        });
+        if (res.status === 401 || res.status === 403) {
+          this.signError = "Your session expired. Please sign in again.";
+          window.lcAuth.requireAuth(); return;
+        }
+        if (!res.ok) throw new Error("signature rejected (" + res.status + ")");
+        const sig = await res.json();
+
+        // Optional drawn mark → attachment on the signature (auth-gated create,
+        // allowed because the signer is authenticated).
+        const dataUrl = this.padDataURL();
+        if (dataUrl) {
+          const blob = await (await fetch(dataUrl)).blob();
+          const fd = new FormData();
+          fd.append("file", blob, "signature.png");
+          fd.append("parent_collection", "signatures");
+          fd.append("parent_id", sig.id);
+          fd.append("uploaded_by", this.form.signer_name);
+          const aRes = await fetch(`${PB}/api/collections/attachments/records`, {
+            method: "POST", headers: { ...window.lcAuth.header() }, body: fd });
+          // The signature is already recorded (typed name is the signature); if
+          // only the drawn mark failed to upload, say so rather than swallow it.
+          if (!aRes.ok) {
+            this.flash = "✓ Signed — but the drawn mark did not upload (" + aRes.status + ").";
+            await this.loadSignatures();
+            return;
+          }
+        }
+
+        this.flash = "✓ Signed";
+        this.clearPad();
+        await this.loadSignatures();
+      } catch (err) {
+        this.signError = "Could not sign: " + err.message;
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    goBack() {
+      if (this.kind === "package" && this.pkg) location.href = "/turnover.html?project=" + this.pkg.project;
+      else history.length > 1 ? history.back() : (location.href = "/");
+    },
+  };
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoopCheck — Cutover Board</title>
+
+<!--
+  Cutover board (ADR 0006) — every service on the job, one row each, ordered
+  by station, phase-status chips across. This replaces the highlighter on the
+  plan sheet and the spreadsheet that's wrong by Wednesday.
+
+  Everything on this board is DERIVED live from the check ledger and the punch
+  ledger on each load — no stored status anywhere. The board is print-friendly
+  (the free-tier deliverable); the compiled district-facing Cutover Status
+  Report with outage durations and the notice-evidence index is the paid
+  sidecar's job, built on these same API reads.
+
+  PII RULE (CLAUDE.md): reachable without sign-in, so every services request
+  uses a `fields=` list that excludes customer_name and customer_phone.
+-->
+<link rel="stylesheet" href="/app.css">
+<script defer src="/vendor/alpine.min.js"></script>
+<style>
+  /* The board wants width; app.css's 560px phone column does not apply. */
+  body { max-width: 1060px; }
+
+  .filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; margin: 10px 0 4px; }
+  .filters > div { flex: 1; min-width: 150px; }
+  .filters label.fl { margin-top: 0; }
+  .filters input[type=number] { min-height: 44px; padding: 8px; }
+  .filters select { min-height: 44px; padding: 8px; }
+  .filters .tog { display: flex; align-items: center; gap: 8px; min-height: 44px;
+    font-size: 14px; font-weight: 700; cursor: pointer; }
+  .filters .tog input { width: 20px; height: 20px; }
+
+  .totals { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px;
+    color: var(--steel); font-size: 14px; }
+  .totals strong { color: var(--ink); font-size: 18px; }
+
+  table.board { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  .board th { text-align: left; font-size: 11px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--steel); padding: 6px 8px;
+    border-bottom: 2px solid var(--ink); }
+  .board td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  .board tr.svc { cursor: pointer; }
+  .board tr.svc:hover { background: var(--wash); }
+  .board .addr { font-weight: 700; }
+  .board .addr a { text-decoration: none; }
+  .board .sta { font-family: ui-monospace, Consolas, monospace; white-space: nowrap; }
+
+  /* Phase chip strip — the highlighter marks. */
+  .strip { display: flex; gap: 3px; }
+  .cell {
+    width: 30px; height: 26px; display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 800; border: 2px solid var(--line); color: var(--steel);
+  }
+  .cell.pass    { border-color: var(--go); background: var(--go); color: #fff; }
+  .cell.fail    { border-color: var(--sev-a); background: var(--sev-a); color: #fff; }
+  .cell.partial { border-color: var(--sev-b); background: #fdf1de; color: var(--sev-b); }
+
+  .pbadge { font-family: ui-monospace, Consolas, monospace; font-size: 12px;
+    font-weight: 800; white-space: nowrap; }
+
+  .warnrow { color: var(--sev-b); font-weight: 700; font-size: 12px; white-space: nowrap; }
+
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px;
+    font-size: 12px; color: var(--steel); }
+  .legend .cell { width: 22px; height: 18px; font-size: 9px; }
+  .legend span { display: flex; gap: 5px; align-items: center; }
+
+  @media print {
+    @page { size: letter landscape; margin: 0.5in; }
+    body { max-width: none; padding: 0; }
+    .noprint { display: none !important; }
+    .board tr.svc:hover { background: none; }
+    .board td, .board th { padding: 4px 6px; font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+
+<div x-data="cutoverBoard()" x-init="load()">
+
+  <header class="bar">
+    <span class="mark"><a href="/">LoopCheck</a></span>
+    <span class="meta">Cutover board</span>
+  </header>
+
+  <template x-if="state === 'loading'"><p class="loading">Loading board…</p></template>
+  <template x-if="state === 'error'"><div class="error" x-text="errorMsg"></div></template>
+
+  <template x-if="state === 'ready'">
+    <main>
+      <div class="noprint">
+        <a class="crumb" :href="'/project.html?id=' + projectId">← Project</a>
+      </div>
+      <h1 x-text="(project?.name || 'Project') + ' — service cutover'"></h1>
+
+      <div class="totals">
+        <span><strong x-text="services.length"></strong> services</span>
+        <span><strong x-text="doneCount"></strong> fully complete</span>
+        <span :style="staleCount ? 'color:var(--sev-b); font-weight:700' : ''">
+          <strong x-text="staleCount"></strong> noticed &gt; <span x-text="staleDays"></span> days, not tied over</span>
+        <span :style="punchServiceCount ? 'color:var(--sev-a); font-weight:700' : ''">
+          <strong x-text="punchServiceCount"></strong> with open punch</span>
+      </div>
+
+      <!-- Filters — screen only; the printed board is the whole street. -->
+      <div class="filters noprint">
+        <div>
+          <label class="fl" for="fphase">Next phase due</label>
+          <select id="fphase" x-model="fPhase">
+            <option value="">All services</option>
+            <template x-for="ph in phaseOrder" :key="ph">
+              <option :value="ph" x-text="'Waiting on ' + phaseLabel(ph)"></option>
+            </template>
+          </select>
+        </div>
+        <div>
+          <label class="fl" for="fdays">Notice-age alarm (days)</label>
+          <input id="fdays" type="number" min="1" x-model.number="staleDays">
+        </div>
+        <div>
+          <label class="tog"><input type="checkbox" x-model="fStale">
+            Noticed, not tied over &gt; <span x-text="staleDays"></span>d</label>
+          <label class="tog"><input type="checkbox" x-model="fPunch"> Open punch only</label>
+        </div>
+        <div>
+          <button class="go secondary" style="margin-top:0; min-height:44px" onclick="window.print()">Print board</button>
+        </div>
+      </div>
+
+      <template x-if="!services.length">
+        <p class="empty">No services in this project yet. Load them on the
+          <a href="/import_services.html">service CSV import</a> page.</p>
+      </template>
+
+      <template x-if="services.length">
+        <div>
+          <table class="board">
+            <thead>
+              <tr>
+                <th>Station</th>
+                <th>Address</th>
+                <th>Size</th>
+                <th>Phases</th>
+                <th>Punch</th>
+                <th class="noprint"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="s in visible" :key="s.id">
+                <tr class="svc" @click="window.location = '/s/' + s.id">
+                  <td class="sta" x-text="s.station || '—'"></td>
+                  <td class="addr"><a :href="'/s/' + s.id" @click.stop x-text="s.address"></a></td>
+                  <td x-text="s.service_size || ''"></td>
+                  <td>
+                    <div class="strip">
+                      <template x-for="ph in phaseOrder" :key="ph">
+                        <span class="cell" :class="phaseState(s.id, ph)"
+                              :title="phaseLabel(ph) + ' — ' + phaseState(s.id, ph)"
+                              x-text="phaseAbbrev(ph)"></span>
+                      </template>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="pbadge sev-A" x-show="punchFor(s.id).A" x-text="'A' + punchFor(s.id).A"></span>
+                    <span class="pbadge sev-B" x-show="punchFor(s.id).B" x-text="' B' + punchFor(s.id).B"></span>
+                    <span class="pbadge sev-C" x-show="punchFor(s.id).C" x-text="' C' + punchFor(s.id).C"></span>
+                  </td>
+                  <td class="warnrow noprint" x-text="staleFor(s.id) ? '⚠ noticed ' + staleFor(s.id) + 'd ago' : ''"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+
+          <div class="legend">
+            <span><span class="cell pass">✓</span> passed</span>
+            <span><span class="cell partial">…</span> started / incomplete</span>
+            <span><span class="cell fail">✗</span> failed — needs re-check</span>
+            <span><span class="cell">·</span> pending</span>
+            <span>N notice · L locate/pothole · S new service · M meter · T tie-over · R restoration</span>
+          </div>
+        </div>
+      </template>
+    </main>
+  </template>
+
+</div>
+
+<script>
+function cutoverBoard() {
+  const PB = window.location.origin;
+  const SERVICE_PHASES = ['notice','locate_pothole','new_service','meter','tie_over','restoration'];
+  const PHASE_LABELS = {
+    notice: 'Notice', locate_pothole: 'Locate/Pothole', new_service: 'New Service',
+    meter: 'Meter', tie_over: 'Tie-Over', restoration: 'Restoration',
+  };
+  const PHASE_ABBREV = { notice: 'N', locate_pothole: 'L', new_service: 'S',
+    meter: 'M', tie_over: 'T', restoration: 'R' };
+
+  // "14+52 LT" → 1452, so 9+50 sorts before 14+52. Anything unparseable
+  // sorts last (then alphabetical by address).
+  function stationValue(s) {
+    const m = (s || '').match(/(\d+)\s*\+\s*(\d+(?:\.\d+)?)/);
+    return m ? parseInt(m[1], 10) * 100 + parseFloat(m[2]) : Infinity;
+  }
+
+  // PocketBase pages max out at 500 records; a real job is hundreds of
+  // services and thousands of checks, so every list read pages to the end.
+  async function fetchAll(pathAndQuery) {
+    let page = 1, out = [];
+    for (;;) {
+      const res = await fetch(`${PB}/api/collections/${pathAndQuery}&perPage=500&page=${page}`);
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+      const data = await res.json();
+      out = out.concat(data.items);
+      if (page >= data.totalPages) return out;
+      page++;
+    }
+  }
+
+  return {
+    projectId: new URLSearchParams(location.search).get('project') || '',
+    state: 'loading', errorMsg: '',
+    project: null,
+    services: [],
+    checksByService: {},   // serviceId -> [checks]
+    punchByService: {},    // serviceId -> {A,B,C}
+    phaseOrder: [],        // derived from the template library
+
+    // Filters
+    fPhase: '',
+    fPunch: false,
+    fStale: false,
+    staleDays: 5,          // the angry-customer early warning threshold
+
+    phaseLabel(p) { return PHASE_LABELS[p] || p; },
+    phaseAbbrev(p) { return PHASE_ABBREV[p] || p[0].toUpperCase(); },
+
+    // Same fold as the service page: any pass wins; else any fail; else any
+    // record means started. Derived per render, from data fetched per load.
+    phaseState(sid, ph) {
+      const of = (this.checksByService[sid] || []).filter(c => c.phase === ph);
+      if (of.some(c => c.result === 'pass')) return 'pass';
+      if (of.some(c => c.result === 'fail')) return 'fail';
+      if (of.length) return 'partial';
+      return 'pending';
+    },
+    nextPhase(sid) {
+      return this.phaseOrder.find(ph => this.phaseState(sid, ph) !== 'pass') || '';
+    },
+    punchFor(sid) {
+      return this.punchByService[sid] || { A: 0, B: 0, C: 0 };
+    },
+    // Days since the notice passed, IF the service is not yet tied over and
+    // the age exceeds the threshold — the "we noticed them and then went
+    // dark" early warning. 0 = not stale.
+    staleFor(sid) {
+      if (this.phaseState(sid, 'tie_over') === 'pass') return 0;
+      const notice = (this.checksByService[sid] || [])
+        .filter(c => c.phase === 'notice' && c.result === 'pass')
+        .map(c => new Date(c.performed_at || c.created))
+        .sort((a, b) => b - a)[0];
+      if (!notice) return 0;
+      const days = Math.floor((Date.now() - notice.getTime()) / 86400000);
+      return days > this.staleDays ? days : 0;
+    },
+
+    get visible() {
+      return this.services.filter(s => {
+        if (this.fPhase && this.nextPhase(s.id) !== this.fPhase) return false;
+        if (this.fPunch) {
+          const p = this.punchFor(s.id);
+          if (!(p.A + p.B + p.C)) return false;
+        }
+        if (this.fStale && !this.staleFor(s.id)) return false;
+        return true;
+      });
+    },
+    get doneCount() {
+      return this.services.filter(s => this.phaseOrder.length &&
+        this.phaseOrder.every(ph => this.phaseState(s.id, ph) === 'pass')).length;
+    },
+    get staleCount() {
+      return this.services.filter(s => this.staleFor(s.id)).length;
+    },
+    get punchServiceCount() {
+      return this.services.filter(s => {
+        const p = this.punchFor(s.id);
+        return p.A + p.B + p.C > 0;
+      }).length;
+    },
+
+    async load() {
+      if (!this.projectId) {
+        this.state = 'error'; this.errorMsg = 'No project in the URL. Open this from a project page.';
+        return;
+      }
+      try {
+        const pRes = await fetch(`${PB}/api/collections/projects/records/${this.projectId}`);
+        if (!pRes.ok) throw new Error('project not found (' + pRes.status + ')');
+        this.project = await pRes.json();
+
+        // Phase columns are DERIVED from the template library, same as a
+        // service's required phases — the board never hardcodes the set.
+        const tf = encodeURIComponent(`subject_kind='service' && phase != ''`);
+        const tpl = await fetchAll(`checklist_templates/records?filter=(${tf})&fields=phase`);
+        const phases = [...new Set(tpl.map(t => t.phase))];
+        this.phaseOrder = SERVICE_PHASES.filter(p => phases.includes(p))
+          .concat(phases.filter(p => !SERVICE_PHASES.includes(p)));
+
+        // 1. Every service on the job — `fields=` excludes the customer PII
+        //    (CLAUDE.md rule); the board is a public page.
+        const sf = encodeURIComponent(`project='${this.projectId}'`);
+        const svcs = await fetchAll(
+          `services/records?filter=(${sf})&fields=id,address,station,service_size&sort=address`);
+        svcs.sort((a, b) =>
+          (stationValue(a.station) - stationValue(b.station)) ||
+          a.address.localeCompare(b.address));
+        this.services = svcs;
+
+        // 2. Every service check on the job in ONE paged read, filtered
+        //    through the relation (service.project), then grouped locally.
+        const cf = encodeURIComponent(`service.project='${this.projectId}'`);
+        const checks = await fetchAll(
+          `checks/records?filter=(${cf})&fields=service,phase,result,performed_at,created`);
+        const byService = {};
+        for (const c of checks) (byService[c.service] ||= []).push(c);
+        this.checksByService = byService;
+
+        // 3. Open punch counts by service — severity color language, as on
+        //    the project home.
+        const puf = encodeURIComponent(`project='${this.projectId}' && status='open' && service != ''`);
+        const punch = await fetchAll(
+          `punch_items/records?filter=(${puf})&fields=service,severity`);
+        const pby = {};
+        for (const p of punch) {
+          (pby[p.service] ||= { A: 0, B: 0, C: 0 });
+          pby[p.service][p.severity]++;
+        }
+        this.punchByService = pby;
+
+        this.state = 'ready';
+      } catch (err) {
+        this.state = 'error';
+        this.errorMsg = 'Could not load the board. (' + err.message + ')';
+      }
+    },
+  };
+}
+</script>
+</body>
+</html>

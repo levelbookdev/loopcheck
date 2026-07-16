@@ -1,0 +1,11 @@
+Tag No.,Service Description,Type,System,P&ID,Area,Spec Section,Loop No.,PLC,MCC / Breaker,Single Line,Extra Notes Column
+PMP-3101,RAS Pump No. 1,Pump,32,M-501,Area 3,11312,3101,PLC-3,MCC-3A / 3,E-601,ignored column
+PMP-3102,RAS Pump No. 2,pump,32,M-501,Area 3,11312,3102,PLC-3,MCC-3A / 5,E-601,
+MOV-3201,RAS Header Isolation Valve,MOV,32,M-501,Area 3,15100,3201,PLC-3,MCC-3A / 8,E-601,
+FIT-3210,RAS Flow Meter,flow,32,M-502,Area 3,17300,3210,PLC-3,,I-301,mag meter
+LIT-4110,Aeration Basin Level,Level,41,M-610,Area 4,17300,4110,PLC-4,,I-401,
+CP-4100,Aeration Control Panel,control panel,41,E-201,Area 4,17400,,PLC-4,MCC-4B / 1,E-602,
+AIT-4120,Aeration DO Analyzer,analyzer,41,M-610,Area 4,17300,4120,PLC-4,,I-401,
+PMP-0101,Aeration Blower No. 1,Pump,41,M-611,Area 4,11376,0101,PLC-4,MCC-4B / 3,E-602,
+MOV-5301,Chlorine Contact Inlet Valve,motor operated valve,53,M-720,Area 5,15100,5301,PLC-5,MCC-5A / 2,E-603,
+UNKNOWN-01,Spare instrument no type,,53,,Area 5,,,,,,type left blank on purpose

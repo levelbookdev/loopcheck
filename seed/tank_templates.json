@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "notes": "Tank / basin acceptance templates. A tank is a TAG subject (tag_type 'tank', added by migration 1789000027_N); its checkout is the leak test, at the 'leakTest' phase (snake_cased to 'leak_test' by the loader). Kept in its own file + loader (1789000028), NOT in checkout_templates.json, because the early loader 1789000009 runs BEFORE the tank tag_type / leak_test phase enums are opened. The Tank Leak Test is the OPEN half of an open->resolve duration test (ADR 0012): the 48-hr test is signed at start with result 'pending' and resolves at 48 hr as a separate resolve check that points back via checks.resolves (final loss + pass/fail), never mutating this record; a mid-test leak is a new open event. NOTE (blocked): the open->resolve EXECUTION UI and the derived 'running' standing state are not built yet (shared with the already-seeded bac-t) — until they land this template can be seeded and run as an ordinary check, but the pending/resolve flow is not yet executable. DOMAIN REVIEW NEEDED: item wording, the intermediate-inspection schedule, and which standard to cite (AWWA D110 prestressed / D115 wire-wound / D103 steel, or spec) are the maintainer's call.",
+  "templates": [
+    {
+      "template_key": "tank.leakTest",
+      "tag_type": "tank",
+      "phase": "leakTest",
+      "name": "Tank / Basin — Leak Test (48-hr) — start & inspections",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "witness_required": false,
+      "items": [
+        { "seq": 1, "text": "Initial test or retest — record which (a retest follows a repair; the failed test stays in the ledger)", "response": "text", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Tank/basin filled to test level; test level / elevation recorded", "response": "value", "unit": "ft", "confirm_per_spec": true, "spec_reference": "spec test level" },
+        { "seq": 3, "text": "Stabilization / absorption period held before start reading, per spec", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true, "spec_reference": "AWWA D110/D115 / spec" },
+        { "seq": 4, "text": "Start date/time and reference level reading recorded", "response": "text", "unit": null, "confirm_per_spec": false },
+        { "seq": 5, "text": "Allowable loss criterion recorded (makeup water or level drop over 48 hr)", "response": "value", "unit": null, "confirm_per_spec": true, "spec_reference": "AWWA D110/D115 / spec allowable loss" },
+        { "seq": 6, "text": "Intermediate inspection ~8 hr — level/loss reading", "response": "value", "unit": null, "confirm_per_spec": false },
+        { "seq": 7, "text": "Intermediate inspection ~16 hr — level/loss reading", "response": "value", "unit": null, "confirm_per_spec": false },
+        { "seq": 8, "text": "Intermediate inspection ~24 hr — level/loss reading", "response": "value", "unit": null, "confirm_per_spec": false },
+        { "seq": 9, "text": "Intermediate inspection ~32 hr — level/loss reading", "response": "value", "unit": null, "confirm_per_spec": false },
+        { "seq": 10, "text": "Intermediate inspection ~40 hr — level/loss reading", "response": "value", "unit": null, "confirm_per_spec": false },
+        { "seq": 11, "text": "No visible leakage or damp spots at exterior walls, floor, construction joints, or pipe penetrations at any inspection", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 12, "text": "Photo of the tank/basin and level reference at start", "response": "photo_required", "unit": null, "confirm_per_spec": false }
+      ]
+    }
+  ]
+}

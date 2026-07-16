@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoopCheck — Turnover</title>
+<!--
+  Turnover board + free print-friendly view (ADR 0010, Phase 3).
+
+  The free deliverable: build a frozen, sealed turnover package for a system
+  (or the whole project), collect signatures against it, and print a clean
+  record. The compiled, branded PDF binder is the paid sidecar's job (ADR 0003);
+  this is the HTML the field tier prints, same pattern as cutover.html /
+  closeout-package.html.
+
+  Reads are public (a turnover package is a shareable deliverable). BUILDING a
+  package and SIGNING require an account (ADR 0011): the build button routes
+  through login; signing happens on sign.html.
+
+  Honesty (review C4): a signature here is a recorded attestation over an
+  append-only ledger, NOT a qualified e-signature — stated on the page.
+  Supersession (review C3): a re-issued package supersedes the prior one and
+  those older signatures attest the PRIOR snapshot — marked unmistakably so an
+  old sign-off never reads as current acceptance.
+-->
+<link rel="stylesheet" href="/app.css">
+<script defer src="/lc-auth.js"></script>
+<script defer src="/vendor/alpine.min.js"></script>
+<style>
+  .caveat { border-left: 6px solid var(--sev-b); background: #fdf6e9; padding: 12px 14px; margin: 14px 0; font-size: 13px; }
+  .pkg { border: 2px solid var(--ink); padding: 14px; margin-bottom: 14px; }
+  .pkg.superseded { border-color: var(--line); opacity: .8; }
+  .pkg .head { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+  .pkg .badge { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; padding: 2px 8px; border: 2px solid currentColor; }
+  .badge.current { color: var(--go); }
+  .badge.superseded { color: var(--sev-a); }
+  .pkg .line { color: var(--steel); font-size: 13px; margin-top: 4px; }
+  .hash { font-family: ui-monospace, Consolas, monospace; font-size: 11px; word-break: break-all; color: var(--steel); }
+  .drift { border-left: 6px solid var(--sev-a); background: #fbe9e7; padding: 10px 12px; margin-top: 10px; font-size: 13px; font-weight: 600; }
+  .supnote { border-left: 6px solid var(--sev-a); background: #fbe9e7; padding: 10px 12px; margin-top: 8px; font-size: 13px; font-weight: 700; }
+  .sig { border: 1px solid var(--line); padding: 8px 10px; margin-top: 6px; }
+  .sig .who { font-weight: 800; }
+  .sig .stmt { font-style: italic; font-size: 13px; margin-top: 3px; }
+  .sig .line { color: var(--steel); font-size: 12px; margin-top: 2px; }
+  .outstanding { font-size: 13px; margin-top: 8px; }
+  .outstanding .need { color: var(--sev-b); font-weight: 700; }
+  .witrow { border: 2px solid var(--line); border-left: 6px solid var(--sev-b); padding: 10px 12px; margin-bottom: 8px; }
+  @media print {
+    .noprint { display: none !important; }
+    .pkg, .witrow { break-inside: avoid; }
+    body { max-width: none; }
+  }
+</style>
+</head>
+<body>
+
+<div x-data="turnoverPage()" x-init="load()">
+  <header class="bar">
+    <span class="mark"><a href="/">LoopCheck</a></span>
+    <span class="meta">Turnover</span>
+  </header>
+
+  <template x-if="state === 'loading'"><p class="loading">Loading…</p></template>
+  <template x-if="state === 'error'"><div class="error" x-text="errorMsg"></div></template>
+
+  <template x-if="state === 'ready'">
+    <main>
+      <a class="crumb noprint" :href="'/project.html?id=' + projectId">← Project</a>
+      <h1 x-text="project.name + ' — Turnover'"></h1>
+
+      <div class="caveat">
+        Signatures here are <strong>recorded attestations over an append-only
+        ledger, not qualified electronic signatures</strong>. Each is bound to
+        the exact sealed content of its package; signer identity is only as
+        strong as this deployment's access controls.
+      </div>
+
+      <!-- ===== Build a package ===== -->
+      <div class="noprint">
+        <h2 class="section">Build a turnover package</h2>
+        <p class="meta">
+          Freezes a sealed snapshot of the current ledger for the chosen scope.
+          A new build supersedes the prior package for that scope, and everyone
+          re-signs the new snapshot.
+        </p>
+        <label class="fl">Scope</label>
+        <select x-model="buildScope">
+          <option value="">Whole project</option>
+          <template x-for="s in systems" :key="s.id">
+            <option :value="s.id" x-text="'System ' + s.number + (s.name ? ' — ' + s.name : '')"></option>
+          </template>
+        </select>
+        <label class="fl">Title (optional)</label>
+        <input type="text" x-model="buildTitle" placeholder="e.g. Influent Pump Station turnover">
+        <button class="go" :disabled="busy" @click="build()"
+                x-text="busy ? 'Building…' : (isAuthed ? 'Build turnover package' : 'Sign in to build')"></button>
+        <div class="error" x-show="buildError" x-text="buildError"></div>
+        <div class="flash" x-show="buildFlash" x-text="buildFlash"></div>
+      </div>
+
+      <!-- ===== Ready to witness ===== -->
+      <h2 class="section noprint">
+        Ready to witness
+        <span x-show="readyToWitness.length" x-text="'(' + readyToWitness.length + ')'"></span>
+      </h2>
+      <template x-if="state === 'ready'">
+        <div class="noprint">
+          <template x-if="!readyToWitness.length">
+            <p class="empty">No checks are awaiting an owner/EOR witness signature.</p>
+          </template>
+          <template x-for="c in readyToWitness" :key="c.id">
+            <div class="witrow">
+              <div style="display:flex; justify-content:space-between; gap:10px; align-items:baseline">
+                <span>
+                  <strong x-text="tagLabel(c)"></strong>
+                  <span x-text="' · ' + prettyPhase(c.phase)"></span>
+                  <span x-text="' · ' + (c.result || '').toUpperCase()"></span>
+                </span>
+                <a class="go secondary" style="min-height:40px; padding:8px 14px; text-decoration:none; display:inline-flex; align-items:center"
+                   :href="'/sign.html?check=' + c.id">Witness →</a>
+              </div>
+              <div class="line" style="color:var(--steel); font-size:13px" x-show="c.performed_by" x-text="'performed by ' + c.performed_by"></div>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- ===== Packages ===== -->
+      <h2 class="section">Turnover packages</h2>
+      <template x-if="!packages.length">
+        <p class="empty">No turnover packages yet. Build one above.</p>
+      </template>
+
+      <template x-for="p in packages" :key="p.id">
+        <div class="pkg" :class="{superseded: !isCurrent(p)}">
+          <div class="head">
+            <strong x-text="p.title || 'Turnover'"></strong>
+            <span class="badge" :class="isCurrent(p) ? 'current' : 'superseded'"
+                  x-text="isCurrent(p) ? 'Current' : 'Superseded'"></span>
+          </div>
+          <div class="line">
+            <span x-text="scopeLabel(p)"></span>
+            · built <span x-text="fmtDate(p.generated_at || p.created)"></span>
+            <span x-show="p.generated_by"> by <span x-text="p.generated_by"></span></span>
+          </div>
+          <div class="line">
+            <span x-text="stand(p).records_included + ' records · ' + stand(p).checks_included + ' checks'"></span>
+            <template x-if="stand(p).open_punch">
+              <span> · open punch A <span x-text="stand(p).open_punch.A"></span> / B <span x-text="stand(p).open_punch.B"></span> / C <span x-text="stand(p).open_punch.C"></span></span>
+            </template>
+            <span x-show="stand(p).active_locks"> · <strong x-text="stand(p).active_locks + ' active LOTO lock(s)'"></strong></span>
+          </div>
+          <div class="hash" x-text="p.hash_algo + ' · ' + p.content_hash"></div>
+
+          <!-- Superseded marker (C3) -->
+          <template x-if="!isCurrent(p)">
+            <div class="supnote"
+                 x-text="'SUPERSEDED' + (supersededBy(p) ? ' by a package built ' + fmtDate(supersededBy(p).generated_at || supersededBy(p).created) : '') + ' — the signatures below attest this prior snapshot, not current state.'"></div>
+          </template>
+
+          <!-- Drift warning on the current package (C3) -->
+          <template x-if="isCurrent(p) && driftCount(p) > 0 && sigsFor(p.id).length">
+            <div class="drift" x-text="'Signed, but ' + driftCount(p) + ' check(s) were logged after this snapshot was frozen — re-issue to re-attest.'"></div>
+          </template>
+
+          <!-- Signatures -->
+          <div style="margin-top:10px">
+            <template x-if="!sigsFor(p.id).length">
+              <p class="meta" style="margin:4px 0">No signatures yet.</p>
+            </template>
+            <template x-for="s in sigsFor(p.id)" :key="s.id">
+              <div class="sig">
+                <span class="who" x-text="s.signer_name"></span>
+                <span x-show="s.signer_role" x-text="' — ' + prettyRole(s.signer_role)"></span>
+                <span x-show="s.signer_title" x-text="' (' + s.signer_title + ')'"></span>
+                <div class="stmt" x-text="'“' + s.statement + '”'"></div>
+                <div class="line">
+                  signed <span x-text="fmtDate(s.signed_at || s.created)"></span>
+                  <span x-show="s.signed_content_hash && s.signed_content_hash !== p.content_hash"> · ⚠ attests a different snapshot</span>
+                </div>
+              </div>
+            </template>
+
+            <!-- Outstanding, on the current package -->
+            <template x-if="isCurrent(p)">
+              <div class="outstanding">
+                <template x-if="outstanding(p).length">
+                  <span class="need" x-text="'Awaiting: ' + outstanding(p).join(', ')"></span>
+                </template>
+                <template x-if="!outstanding(p).length && sigsFor(p.id).length">
+                  <span style="color:var(--go); font-weight:700">Contractor and owner/EOR signatures on file.</span>
+                </template>
+              </div>
+            </template>
+          </div>
+
+          <div class="noprint" style="margin-top:10px" x-show="isCurrent(p)">
+            <a class="link" :href="'/sign.html?package=' + p.id">Sign this package →</a>
+          </div>
+        </div>
+      </template>
+
+      <p class="meta noprint" style="margin-top:16px">
+        Tip: use your browser's Print to save or print this turnover record.
+        The compiled, bookmarked PDF binder is a paid-tier deliverable.
+      </p>
+    </main>
+  </template>
+</div>
+
+<script>
+function turnoverPage() {
+  const PB = window.location.origin;
+  return {
+    projectId: new URLSearchParams(location.search).get("project") || "",
+    state: "loading", errorMsg: "",
+    project: null, systems: [],
+    packages: [], signatures: [], witnessChecks: [], witnessSigs: [],
+    supersededIds: {},
+    isAuthed: false,
+    buildScope: new URLSearchParams(location.search).get("system") || "",
+    buildTitle: "", busy: false, buildError: "", buildFlash: "",
+    _driftCache: {},
+
+    prettyPhase(p) {
+      return { installation: "Installation", point_to_point: "Point-to-Point",
+               energization: "Energization", loop_check: "Loop Check",
+               functional: "Functional", performance: "Performance" }[p] || p || "Check";
+    },
+    prettyRole(r) {
+      return { contractor: "Contractor", owner: "Owner", engineer: "Engineer of record",
+               vendor: "Vendor", witness: "Witness", other: "Other" }[r] || r;
+    },
+    fmtDate(d) {
+      return new Date(String(d).replace(" ", "T")).toLocaleString(undefined,
+        { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+    },
+    stand(p) { return p.standing_snapshot || {}; },
+    scopeLabel(p) {
+      if (!p.system) return "Whole project";
+      const s = this.systems.find(x => x.id === p.system);
+      return s ? ("System " + s.number + (s.name ? " — " + s.name : "")) : "System";
+    },
+    sigsFor(pkgId) { return this.signatures.filter(s => s.subject_id === pkgId); },
+    isCurrent(p) { return !this.supersededIds[p.id]; },
+    supersededBy(p) { return this.packages.find(x => x.supersedes === p.id) || null; },
+    // Turnover convention (not enforced): needs a contractor sign-off and an
+    // owner-or-EOR acceptance. Honest about being a convention.
+    outstanding(p) {
+      const roles = {};
+      this.sigsFor(p.id).forEach(s => { roles[s.signer_role] = true; });
+      const need = [];
+      if (!roles.contractor) need.push("contractor");
+      if (!roles.owner && !roles.engineer) need.push("owner or engineer");
+      return need;
+    },
+    driftCount(p) { return this._driftCache[p.id] || 0; },
+
+    tagLabel(c) {
+      const t = c.expand && c.expand.tag;
+      return t ? (t.tag_number || "tag") : (c.system ? "System check" : "Check");
+    },
+    get readyToWitness() {
+      const witnessed = {};
+      this.witnessSigs.forEach(s => { if (s.signer_role === "witness") witnessed[s.subject_id] = true; });
+      return this.witnessChecks.filter(c => !witnessed[c.id]);
+    },
+
+    async load() {
+      if (!this.projectId) { this.state = "error"; this.errorMsg = "No project id (open as /turnover.html?project=…)."; return; }
+      await window.lcAuth.refresh();
+      this.isAuthed = window.lcAuth.isAuthed();
+      try {
+        const pRes = await fetch(`${PB}/api/collections/projects/records/${this.projectId}`);
+        if (!pRes.ok) throw new Error("project not found");
+        this.project = await pRes.json();
+
+        const pf = encodeURIComponent(`project='${this.projectId}'`);
+        const [sysRes, pkgRes] = await Promise.all([
+          fetch(`${PB}/api/collections/systems/records?filter=(${pf})&sort=startup_sequence,number&perPage=500&fields=id,number,name`),
+          fetch(`${PB}/api/collections/turnover_packages/records?filter=(${pf})&sort=-created&perPage=500`),
+        ]);
+        this.systems = (await sysRes.json()).items || [];
+        this.packages = (await pkgRes.json()).items || [];
+
+        // Superseded set: any package referenced by another's `supersedes`.
+        const sup = {};
+        this.packages.forEach(p => { if (p.supersedes) sup[p.supersedes] = true; });
+        this.supersededIds = sup;
+
+        // Signatures on these packages.
+        if (this.packages.length) {
+          const ors = this.packages.map(p => `subject_id='${p.id}'`).join(" || ");
+          const sf = encodeURIComponent(`subject_collection='turnover_packages' && (${ors})`);
+          const sRes = await fetch(`${PB}/api/collections/signatures/records?filter=(${sf})&sort=created&perPage=500`);
+          this.signatures = (await sRes.json()).items || [];
+        }
+
+        // Drift: checks are APPEND-ONLY, so a scope's live count only ever
+        // grows. If the live count exceeds the frozen `checks_included`, checks
+        // were logged after this snapshot was sealed. Comparing counts is
+        // robust — it sidesteps datetime-literal filter parsing entirely.
+        for (const p of this.packages) {
+          if (!this.isCurrent(p)) continue;
+          const scope = p.system
+            ? `(tag.system='${p.system}' || system='${p.system}')`
+            : `(tag.project='${this.projectId}' || system.project='${this.projectId}')`;
+          const dRes = await fetch(`${PB}/api/collections/checks/records?filter=(${encodeURIComponent(scope)})&perPage=1&fields=id`);
+          if (dRes.ok) {
+            const live = (await dRes.json()).totalItems || 0;
+            const frozen = (p.standing_snapshot && p.standing_snapshot.checks_included) || 0;
+            this._driftCache[p.id] = Math.max(0, live - frozen);
+          }
+        }
+
+        // Ready to witness: checks with witness_required and no witness signature.
+        const wf = encodeURIComponent(`witness_required=true && (tag.project='${this.projectId}' || system.project='${this.projectId}')`);
+        const wRes = await fetch(`${PB}/api/collections/checks/records?filter=(${wf})&sort=-performed_at&perPage=500&expand=tag`);
+        this.witnessChecks = (await wRes.json()).items || [];
+        if (this.witnessChecks.length) {
+          const ors = this.witnessChecks.map(c => `subject_id='${c.id}'`).join(" || ");
+          const wsf = encodeURIComponent(`subject_collection='checks' && (${ors})`);
+          const wsRes = await fetch(`${PB}/api/collections/signatures/records?filter=(${wsf})&perPage=500&fields=subject_id,signer_role`);
+          this.witnessSigs = (await wsRes.json()).items || [];
+        }
+
+        this.state = "ready";
+      } catch (err) {
+        this.state = "error"; this.errorMsg = "Could not load turnover data. (" + err.message + ")";
+      }
+    },
+
+    async build() {
+      if (!window.lcAuth.isAuthed()) { window.lcAuth.requireAuth(); return; }
+      this.busy = true; this.buildError = ""; this.buildFlash = "";
+      try {
+        const res = await fetch(`${PB}/api/turnover/build`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...window.lcAuth.header() },
+          body: JSON.stringify({
+            project: this.projectId,
+            system: this.buildScope || "",
+            title: this.buildTitle || "",
+            generated_by: window.lcAuth.displayName() || "",
+          }),
+        });
+        if (res.status === 401 || res.status === 403) { window.lcAuth.requireAuth(); return; }
+        if (!res.ok) throw new Error("build failed (" + res.status + ")");
+        this.buildFlash = "✓ Turnover package built. Collect signatures below.";
+        this.buildTitle = "";
+        await this.load();
+      } catch (err) {
+        this.buildError = "Could not build: " + err.message;
+      } finally {
+        this.busy = false;
+      }
+    },
+  };
+}
+</script>
+</body>
+</html>

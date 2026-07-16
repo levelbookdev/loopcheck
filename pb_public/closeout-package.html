@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoopCheck — Warranty Log &amp; Closeout Package</title>
+<!--
+  Warranty Log & Closeout Package — the print-friendly HTML view (ADR 0005).
+  Per project, optionally narrowed to one system (?project=…&system=…).
+
+  This is the FREE tier's version of the deliverable: open it, hit Print.
+  The compiled PDF package (hyperlinked, signed, multi-hundred-tag) belongs
+  to the paid deliverables phase alongside the turnover binder (ADR 0003) —
+  that tool reads exactly the same public API this page does.
+
+  Warranty end dates in the table are DERIVED at render time from
+  clock_start_date + duration_months; the stored facts (basis, trigger
+  date, duration) are printed alongside because they are the provenance a
+  warranty dispute is actually about.
+-->
+<link rel="stylesheet" href="/app.css">
+<script defer src="/vendor/alpine.min.js"></script>
+<style>
+  body { max-width: 960px; }
+  table { border-collapse: collapse; font-size: 12px; width: 100%; margin-top: 8px; }
+  th, td { padding: 5px 7px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+  th { color: var(--steel); text-transform: uppercase; letter-spacing: .06em; font-size: 10px; }
+  .scroll { overflow-x: auto; }
+  h2.section { margin-top: 30px; }
+  .w-expired  { color: var(--sev-a); font-weight: 800; }
+  .w-expiring { color: var(--sev-b); font-weight: 800; }
+  .w-active   { color: var(--go); font-weight: 800; }
+  .w-pending  { color: var(--steel); }
+  @media print {
+    .noprint { display: none; }
+    body { max-width: none; padding: 0; }
+    a { text-decoration: none; color: inherit; }
+    .scroll { overflow: visible; }
+  }
+</style>
+</head>
+<body>
+
+<div x-data="packagePage()" x-init="load()">
+  <header class="bar">
+    <span class="mark"><a href="/">LoopCheck</a></span>
+    <span class="meta">Warranty Log &amp; Closeout Package</span>
+  </header>
+
+  <template x-if="state === 'loading'"><p class="loading">Loading…</p></template>
+  <template x-if="state === 'error'"><div class="error" x-text="errorMsg"></div></template>
+
+  <template x-if="state === 'ready'">
+    <main>
+      <div class="noprint">
+        <a class="crumb" :href="'/project.html?id=' + projectId">← Project</a>
+        <label class="fl" for="sys">Scope</label>
+        <select id="sys" x-model="systemId" @change="applyScope()">
+          <option value="">Whole project</option>
+          <template x-for="s in systems" :key="s.id">
+            <option :value="s.id" x-text="'System ' + s.number + (s.name ? ' — ' + s.name : '')"></option>
+          </template>
+        </select>
+        <button class="go secondary" onclick="window.print()">Print</button>
+      </div>
+
+      <h1 x-text="project.name"></h1>
+      <p class="meta">
+        Warranty Log &amp; Closeout Package
+        <span x-show="scopeName" x-text="' — ' + scopeName"></span>
+        · generated <span x-text="fmtDate(new Date())"></span>
+        <span x-show="project.owner_name" x-text="' · Owner: ' + project.owner_name"></span>
+        <span x-show="project.contractor_name" x-text="' · ' + project.contractor_name"></span>
+      </p>
+
+      <h2 class="section">Warranty log — <span x-text="scopedWarranties.length"></span> records</h2>
+      <div class="scroll"><table>
+        <thead><tr>
+          <th>Tag</th><th>Equipment</th><th>Vendor</th><th>Contact</th>
+          <th>Basis</th><th>Clock start</th><th>Months</th><th>Ends (derived)</th><th>Status</th>
+        </tr></thead>
+        <tbody>
+          <template x-for="w in scopedWarranties" :key="w.id">
+            <tr>
+              <td class="mono" x-text="tagOf(w.tag).tag_number"></td>
+              <td x-text="tagOf(w.tag).description"></td>
+              <td>
+                <span x-text="w.vendor_name"></span>
+                <div class="meta" style="font-size:11px" x-show="w.basis_note" x-text="w.basis_note"></div>
+              </td>
+              <td>
+                <span x-show="w.vendor_contact_name" x-text="w.vendor_contact_name"></span>
+                <div x-show="w.vendor_phone" x-text="w.vendor_phone"></div>
+                <div x-show="w.vendor_email" x-text="w.vendor_email"></div>
+              </td>
+              <td x-text="prettyBasis(w.basis)"></td>
+              <td x-text="w.clock_start_date ? fmtDate(w.clock_start_date) : 'not started'"></td>
+              <td x-text="w.duration_months || ''"></td>
+              <td x-text="wEnd(w) ? fmtDate(wEnd(w)) : '—'"></td>
+              <td :class="'w-' + wStatus(w).state" x-text="wStatus(w).label"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table></div>
+
+      <h2 class="section">Closeout deliverables — <span x-text="scopedReqs.length"></span> records</h2>
+      <div class="scroll"><table>
+        <thead><tr>
+          <th>Tag</th><th>Type</th><th>Description</th><th>Status</th>
+          <th>Received</th><th>Accepted by</th><th>Storage location</th>
+        </tr></thead>
+        <tbody>
+          <template x-for="r in scopedReqs" :key="r.id">
+            <tr>
+              <td class="mono" x-text="tagOf(r.tag).tag_number"></td>
+              <td x-text="prettyReq(r.req_type)"></td>
+              <td x-text="r.description"></td>
+              <td x-text="r.status"></td>
+              <td x-text="r.received_date ? fmtDate(r.received_date) : ''"></td>
+              <td x-text="r.accepted_by"></td>
+              <td x-text="r.storage_location"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table></div>
+
+      <h2 class="section">Warranty claim history — <span x-text="scopedClaims.length"></span> records</h2>
+      <div class="scroll"><table>
+        <thead><tr>
+          <th>Tag</th><th>Opened</th><th>By</th><th>Description</th>
+          <th>Vendor notified</th><th>Resolution</th><th>Closed</th>
+        </tr></thead>
+        <tbody>
+          <template x-for="c in scopedClaims" :key="c.id">
+            <tr>
+              <td class="mono" x-text="tagOf(c.tag).tag_number"></td>
+              <td x-text="fmtDate(c.opened_at)"></td>
+              <td x-text="c.opened_by"></td>
+              <td x-text="c.description"></td>
+              <td x-text="c.vendor_notified_date ? fmtDate(c.vendor_notified_date) : ''"></td>
+              <td x-text="c.resolution_note"></td>
+              <td x-text="c.closed_at ? (fmtDate(c.closed_at) + (c.closed_by ? ' — ' + c.closed_by : '')) : 'OPEN'"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table></div>
+    </main>
+  </template>
+</div>
+
+<script>
+function packagePage() {
+  const PB = window.location.origin;
+  return {
+    projectId: new URLSearchParams(location.search).get('project') || '',
+    systemId: new URLSearchParams(location.search).get('system') || '',
+    state: 'loading', errorMsg: '',
+    project: null,
+    systems: [],
+    tagById: {},
+    warranties: [], reqs: [], claims: [],
+
+    // ---- the same derivations as the tag page (ADR 0005) ----
+    wEnd(w) {
+      if (!w.clock_start_date || !w.duration_months) return null;
+      const [y, m, d] = w.clock_start_date.slice(0, 10).split('-').map(Number);
+      const t = (m - 1) + w.duration_months;
+      const ny = y + Math.floor(t / 12), nm = t % 12;
+      const last = new Date(Date.UTC(ny, nm + 1, 0)).getUTCDate();
+      return new Date(Date.UTC(ny, nm, Math.min(d, last)));
+    },
+    wStatus(w) {
+      const end = this.wEnd(w);
+      if (!end) return { state: 'pending', label: 'Awaiting trigger event' };
+      const now = new Date();
+      const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+      const days = Math.round((end.getTime() - today) / 86400000);
+      if (days < 0)  return { state: 'expired', label: 'Expired' };
+      if (days <= 90) return { state: 'expiring', label: days === 0 ? 'Expires today' : 'Expires in ' + days + ' days' };
+      return { state: 'active', label: 'Active' };
+    },
+    prettyBasis(b) {
+      return { substantial_completion: 'Substantial completion',
+               beneficial_use: 'Beneficial use',
+               startup: 'Successful startup',
+               shipment_cap: 'Shipment (capped)',
+               other: 'Other' }[b] || b;
+    },
+    prettyReq(t) {
+      return { om_manual: 'O&M manual', spare_parts: 'Spare parts',
+               special_tools: 'Special tools', training: 'Training',
+               warranty_cert: 'Warranty certificate', test_report: 'Test report',
+               other: 'Other' }[t] || t;
+    },
+    fmtDate(d) {
+      return new Date(d).toLocaleDateString(undefined,
+        { month: 'short', day: 'numeric', year: 'numeric' });
+    },
+    tagOf(id) { return this.tagById[id] || { tag_number: '?', description: '' }; },
+
+    // System scoping is done client-side through tag membership — warranties
+    // and claims store project + tag; the tag knows its system.
+    inScope(rec) {
+      if (!this.systemId) return true;
+      return this.tagOf(rec.tag).system === this.systemId;
+    },
+    byTagNumber(a, b) {
+      return this.tagOf(a.tag).tag_number.localeCompare(this.tagOf(b.tag).tag_number);
+    },
+    get scopedWarranties() {
+      return this.warranties.filter(w => this.inScope(w)).sort((a, b) => this.byTagNumber(a, b));
+    },
+    get scopedReqs() {
+      return this.reqs.filter(r => this.inScope(r)).sort((a, b) => this.byTagNumber(a, b));
+    },
+    get scopedClaims() {
+      return this.claims.filter(c => this.inScope(c)).sort((a, b) => this.byTagNumber(a, b));
+    },
+    get scopeName() {
+      const s = this.systems.find(s => s.id === this.systemId);
+      return s ? 'System ' + s.number + (s.name ? ' — ' + s.name : '') : '';
+    },
+    applyScope() {
+      // Keep the URL shareable/bookmarkable for the chosen scope.
+      const u = new URL(location.href);
+      if (this.systemId) u.searchParams.set('system', this.systemId);
+      else u.searchParams.delete('system');
+      history.replaceState(null, '', u);
+    },
+
+    async load() {
+      if (!this.projectId) {
+        this.state = 'error'; this.errorMsg = 'No project id in the URL (open as /closeout-package.html?project=…).'; return;
+      }
+      try {
+        const pRes = await fetch(`${PB}/api/collections/projects/records/${this.projectId}`);
+        if (!pRes.ok) throw new Error('project not found (' + pRes.status + ')');
+        this.project = await pRes.json();
+
+        const f = encodeURIComponent(`project='${this.projectId}'`);
+        const [sRes, tRes, wRes, rRes, cRes] = await Promise.all([
+          fetch(`${PB}/api/collections/systems/records?filter=(${f})&sort=number&perPage=500`),
+          fetch(`${PB}/api/collections/tags/records?filter=(${f})&perPage=500&fields=id,tag_number,description,system`),
+          fetch(`${PB}/api/collections/warranties/records?filter=(${f})&perPage=500`),
+          fetch(`${PB}/api/collections/closeout_requirements/records?filter=(${f})&perPage=1000`),
+          fetch(`${PB}/api/collections/warranty_claims/records?filter=(${f})&perPage=1000`),
+        ]);
+        this.systems = (await sRes.json()).items;
+        for (const t of (await tRes.json()).items) this.tagById[t.id] = t;
+        this.warranties = (await wRes.json()).items;
+        this.reqs = (await rRes.json()).items;
+        this.claims = (await cRes.json()).items;
+
+        this.state = 'ready';
+      } catch (err) {
+        this.state = 'error';
+        this.errorMsg = 'Could not load the package data. (' + err.message + ')';
+      }
+    },
+  };
+}
+</script>
+</body>
+</html>

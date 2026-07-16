@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoopCheck — Log Check</title>
+
+<!--
+  Check execution — the core promise: a tech standing at the equipment (or
+  at a service address, ADR 0006) runs a checklist and the result lands in
+  the APPEND-ONLY ledger.
+
+  Open as:  check.html?tag={tagRecordId}[&template={templateId}]
+       or:  check.html?service={serviceRecordId}[&template={templateId}]
+
+  The subject decides which templates are offered: a tag gets its tag_type's
+  checkout checklists; a service gets the subject_kind='service' cutover
+  checklists. Everything downstream — frozen prompts, derived results,
+  punch links — is one engine, deliberately not forked.
+
+  What this page enforces (and why):
+  - The template is frozen ONTO the record at submit: each check_item gets a
+    copy of its prompt text, and the check gets witness_required and a
+    human-readable test-equipment note. Templates and the registry are
+    living; checks are frozen (ADR 0001/0002/0004).
+  - The overall result is DERIVED from the answered lines, never picked:
+    any fail => fail; anything required left unanswered => incomplete;
+    otherwise pass. An incomplete run is a legitimate ledger entry — crews
+    get pulled off checks all the time; the record should say so.
+  - A failed line offers "flag punch item" right on the completion screen,
+    carrying source_check — the evidence chain (ADR 0004).
+  - Writes are sequential (check first, then its items, then photos): if a
+    later write fails we have a visible, correctable partial record — the
+    order can never lose the check itself.
+-->
+<link rel="stylesheet" href="/app.css">
+<script defer src="/vendor/alpine.min.js"></script>
+<style>
+  /* Execution-page components, on top of app.css tokens. */
+  .tpl-pick { display: grid; gap: 8px; }
+  .tpl-pick button {
+    text-align: left; font: inherit; cursor: pointer;
+    border: 2px solid var(--ink); background: var(--paper);
+    padding: 12px; min-height: 56px;
+  }
+  .tpl-pick button .ph { font-size: 12px; font-weight: 700; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--steel); }
+  .tpl-pick button .nm { font-weight: 700; }
+  .tpl-pick button .done { color: var(--go); font-weight: 700; font-size: 13px; }
+
+  .item {
+    border: 2px solid var(--line);
+    padding: 12px; margin-bottom: 10px;
+  }
+  .item .seq { color: var(--steel); font-size: 12px; font-weight: 700; }
+  .item .txt { font-size: 16px; font-weight: 600; margin: 2px 0 10px; }
+
+  /* pass / FAIL / N/A — glove-sized segmented control */
+  .pfn { display: flex; gap: 6px; }
+  .pfn button {
+    flex: 1; min-height: 52px; font: inherit; font-weight: 800;
+    border: 2px solid var(--line); background: var(--paper); cursor: pointer;
+  }
+  .pfn button.on-pass { border-color: var(--go); color: var(--go); background: #e9f5ee; }
+  .pfn button.on-fail { border-color: var(--sev-a); color: var(--sev-a); background: #fbe9e7; }
+  .pfn button.on-na   { border-color: var(--steel); color: var(--steel); background: var(--wash); }
+
+  .valrow { display: flex; gap: 8px; align-items: center; }
+  .valrow input { flex: 1; }
+  .valrow .unit { font-family: ui-monospace, Consolas, monospace; font-weight: 700;
+    color: var(--steel); white-space: nowrap; }
+
+  .chip-spec {
+    display: inline-block; font-size: 11px; font-weight: 800;
+    letter-spacing: .06em; text-transform: uppercase;
+    color: var(--sev-b); border: 2px solid var(--sev-b);
+    padding: 1px 7px; margin-bottom: 6px;
+  }
+
+  .equip { border: 2px solid var(--line); padding: 12px; }
+  .equip label.pick { display: flex; gap: 10px; align-items: baseline;
+    padding: 8px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .equip label.pick:last-child { border-bottom: none; }
+  .equip input[type=checkbox] { width: 22px; height: 22px; }
+  .equip .cal { color: var(--steel); font-size: 13px; }
+  .equip .cal.overdue { color: var(--sev-a); font-weight: 700; }
+
+  .result-banner { padding: 16px; font-size: 20px; font-weight: 800;
+    text-transform: uppercase; letter-spacing: .04em; color: #fff; margin-top: 8px; }
+  .result-banner.pass { background: var(--go); }
+  .result-banner.fail { background: var(--sev-a); }
+  .result-banner.incomplete { background: var(--sev-b); }
+
+  .failflag { border: 2px solid var(--sev-a); padding: 12px; margin-top: 12px; }
+  .failflag .prompt { font-weight: 700; }
+</style>
+</head>
+<body>
+
+<div x-data="checkPage()" x-init="load()">
+
+  <header class="bar">
+    <span class="mark"><a href="/">LoopCheck</a></span>
+    <span class="tag" x-text="tag?.tag_number || service?.address || '—'"></span>
+  </header>
+
+  <template x-if="state === 'loading'"><p class="loading">Loading…</p></template>
+  <template x-if="state === 'error'"><div class="error" x-text="errorMsg"></div></template>
+
+  <!-- ============ 1. Pick the checklist ============ -->
+  <template x-if="state === 'pick'">
+    <main>
+      <a class="crumb" :href="backHref" x-text="'← ' + subjectName"></a>
+      <h1>Log a check</h1>
+      <p class="meta" x-text="subjectMeta"></p>
+
+      <h2 class="section">Checklist</h2>
+      <template x-if="!templates.length">
+        <p class="empty">No checklist templates exist for this subject.
+        Templates live in the seed library / admin UI.</p>
+      </template>
+      <div class="tpl-pick">
+        <template x-for="t in templates" :key="t.id">
+          <button @click="pick(t)">
+            <div class="ph" x-text="phaseLabel(t.phase)"></div>
+            <div class="nm" x-text="t.name"></div>
+            <div class="done" x-show="passedPhases.includes(t.phase)">✓ already has a passing check</div>
+            <!-- Read-only hint (ADR 0009): this phase is marked N/A for this
+                 tag. Still loggable — the tech may run it anyway — but it's
+                 out of the checkout-standing denominator. -->
+            <div x-show="naPhases.includes(t.phase)"
+                 style="color:var(--steel); font-weight:700; font-size:13px">
+              Marked N/A for this tag — not counted toward standing
+            </div>
+          </button>
+        </template>
+      </div>
+    </main>
+  </template>
+
+  <!-- ============ 2. Run it ============ -->
+  <template x-if="state === 'run'">
+    <main>
+      <button class="link" @click="state = 'pick'">← different checklist</button>
+      <h1 x-text="template.name"></h1>
+      <p class="meta">
+        <span x-text="phaseLabel(template.phase)"></span>
+        <strong x-show="template.witness_required" style="color: var(--sev-b)">
+          · Owner/EOR witness required</strong>
+      </p>
+
+      <h2 class="section">Checklist items</h2>
+      <template x-for="it in items" :key="it.id">
+        <div class="item">
+          <div class="seq" x-text="'#' + it.sequence"></div>
+          <div class="txt" x-text="it.text"></div>
+
+          <!-- confirm_per_spec: the template names the check; the PROJECT
+               confirms the number. Never a hardcoded acceptance value. -->
+          <div class="chip-spec" x-show="it.confirm_per_spec"
+               x-text="'Acceptance per spec ' + (it.spec_reference ? '— ' + it.spec_reference : 'section __')"></div>
+
+          <template x-if="it.response_type === 'pass_fail_na'">
+            <div class="pfn">
+              <button :class="ans[it.id].result === 'pass' && 'on-pass'"
+                      @click="ans[it.id].result = ans[it.id].result === 'pass' ? '' : 'pass'">PASS</button>
+              <button :class="ans[it.id].result === 'fail' && 'on-fail'"
+                      @click="ans[it.id].result = ans[it.id].result === 'fail' ? '' : 'fail'">FAIL</button>
+              <button :class="ans[it.id].result === 'na' && 'on-na'"
+                      @click="ans[it.id].result = ans[it.id].result === 'na' ? '' : 'na'">N/A</button>
+            </div>
+          </template>
+
+          <template x-if="it.response_type === 'value'">
+            <div class="valrow">
+              <input type="text" x-model="ans[it.id].value"
+                     :placeholder="it.confirm_per_spec ? 'reading (accept per spec)' : 'reading'">
+              <span class="unit" x-text="it.unit || ''"></span>
+            </div>
+          </template>
+
+          <template x-if="it.response_type === 'text'">
+            <textarea x-model="ans[it.id].note" placeholder="record it here"></textarea>
+          </template>
+
+          <template x-if="it.response_type === 'photo_required'">
+            <div>
+              <input type="file" accept="image/*" capture="environment"
+                     @change="ans[it.id].file = $event.target.files[0] || null">
+              <label class="fl" style="margin-top:6px">
+                <input type="checkbox" x-model="ans[it.id].na"> Not applicable to this equipment
+              </label>
+            </div>
+          </template>
+
+          <!-- a failed line deserves a word about why -->
+          <template x-if="ans[it.id].result === 'fail'">
+            <input type="text" x-model="ans[it.id].note" placeholder="what failed? (goes in the record)"
+                   style="margin-top:8px">
+          </template>
+        </div>
+      </template>
+
+      <!-- Test equipment used (ADR 0004): picked from the global registry,
+           frozen into a note on the check at submit. -->
+      <h2 class="section">Test equipment used</h2>
+      <div class="equip">
+        <template x-if="!equipment.length">
+          <p class="empty" style="padding:0">Registry is empty — add the instrument below.</p>
+        </template>
+        <template x-for="e in equipment" :key="e.id">
+          <label class="pick">
+            <input type="checkbox" :value="e.id" x-model="equipUsed"
+                   :disabled="equipUsed.length >= 3 && !equipUsed.includes(e.id)">
+            <span>
+              <span x-text="e.description"></span>
+              <span class="mono" x-show="e.serial_number" x-text="' s/n ' + e.serial_number"></span>
+              <span class="cal" :class="calOverdue(e) && 'overdue'"
+                    x-text="e.cal_due ? ' · cal due ' + fmtDate(e.cal_due) : ' · no cal date'"></span>
+            </span>
+          </label>
+        </template>
+        <template x-if="!showAddEquip">
+          <button class="link" @click="showAddEquip = true" style="margin-top:8px">+ Add an instrument</button>
+        </template>
+        <template x-if="showAddEquip">
+          <div style="margin-top:10px">
+            <input type="text" x-model="newEquip.description" placeholder="Description (Fluke 754 Process Calibrator)">
+            <input type="text" x-model="newEquip.serial_number" placeholder="Serial number" style="margin-top:8px">
+            <label class="fl" for="caldue">Calibration due</label>
+            <input id="caldue" type="date" x-model="newEquip.cal_due">
+            <button class="go secondary" style="min-height:48px" :disabled="!newEquip.description || busy"
+                    @click="addEquipment()">Add to registry</button>
+          </div>
+        </template>
+      </div>
+
+      <!-- Who / when -->
+      <h2 class="section">Sign-off</h2>
+      <label class="fl" for="pby">Performed by</label>
+      <input id="pby" type="text" x-model="performedBy" placeholder="Your name">
+      <label class="fl" for="wby">Witnessed by
+        <span x-show="template.witness_required" style="color:var(--sev-b)">(required for this checklist)</span>
+      </label>
+      <input id="wby" type="text" x-model="witnessedBy" placeholder="Witness name (if witnessed)">
+      <label class="fl" for="pat">Performed on</label>
+      <input id="pat" type="date" x-model="performedAt">
+      <label class="fl" for="nts">Notes</label>
+      <textarea id="nts" x-model="notes" placeholder="anything the record should carry"></textarea>
+
+      <p class="meta" style="margin-top:12px">
+        Result is derived from the lines above:
+        <strong x-text="derivedResult().toUpperCase()"></strong>
+        <span x-show="derivedResult() === 'incomplete'"> (unanswered items stay in the record as skipped)</span>
+      </p>
+
+      <button class="go" :disabled="busy || !performedBy.trim() || (template.witness_required && !witnessedBy.trim())"
+              @click="submit()" x-text="busy ? 'Writing to the ledger…' : 'Sign & log this check'"></button>
+      <p class="meta" x-show="template.witness_required && !witnessedBy.trim()"
+         style="color:var(--sev-b)">This checklist requires an owner/EOR witness name.</p>
+      <div class="error" x-show="submitError" x-text="submitError"></div>
+      <p class="meta" style="margin-top:8px">
+        Once signed, this record is append-only — it can never be edited or
+        deleted. A correction is a new check.
+      </p>
+    </main>
+  </template>
+
+  <!-- ============ 3. Done — and the evidence chain ============ -->
+  <template x-if="state === 'done'">
+    <main>
+      <h1 x-text="template.name"></h1>
+      <div class="result-banner" :class="finalResult" x-text="finalResult.toUpperCase()"></div>
+      <p class="meta" style="margin-top:8px">
+        Logged by <span x-text="performedBy"></span> · in the ledger, append-only.
+        <span x-show="partialErrors.length" style="color:var(--sev-a)"
+              x-text="' Some lines failed to write: ' + partialErrors.join('; ')"></span>
+      </p>
+
+      <template x-if="failedItems.length">
+        <div>
+          <h2 class="section">Failed lines — flag punch items</h2>
+          <template x-for="f in failedItems" :key="f.itemId">
+            <div class="failflag">
+              <div class="prompt" x-text="f.prompt"></div>
+              <template x-if="!f.flagged">
+                <div>
+                  <textarea x-model="f.desc"></textarea>
+                  <div class="sevpick" style="margin-top:8px">
+                    <label class="a" :class="f.sev === 'A' && 'on'"><input type="radio" value="A" x-model="f.sev">A<small>blocks startup</small></label>
+                    <label class="b" :class="f.sev === 'B' && 'on'"><input type="radio" value="B" x-model="f.sev">B<small>blocks completion</small></label>
+                    <label class="c" :class="f.sev === 'C' && 'on'"><input type="radio" value="C" x-model="f.sev">C<small>cosmetic</small></label>
+                  </div>
+                  <button class="go" style="margin-top:10px" :disabled="busy || !f.desc.trim()"
+                          @click="flagFailed(f)">Flag punch item (links this check as evidence)</button>
+                </div>
+              </template>
+              <template x-if="f.flagged">
+                <p class="flash" style="margin-top:8px">✓ Punch item flagged, source_check linked</p>
+              </template>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <a class="crumb" style="display:block; margin-top:20px"
+         :href="backHref" x-text="'← Back to ' + subjectName"></a>
+    </main>
+  </template>
+
+</div>
+
+<script>
+function checkPage() {
+  const PB = window.location.origin;
+  // Both phase sets in one ordered list — a subject's templates are all from
+  // one set, so sorting by index works for either (ADR 0006).
+  // `training` (ADR 0013) sorts last for a tag — a milestone after the six
+  // checkout phases, not part of the sequence.
+  const PHASES = ['installation','point_to_point','energization','loop_check','functional','performance',
+    'training',
+    'notice','locate_pothole','new_service','meter','tie_over','restoration'];
+  const PHASE_LABELS = { installation:'Installation', point_to_point:'Point-to-Point',
+    energization:'Energization', loop_check:'Loop Check', functional:'Functional', performance:'Performance',
+    training:'Training',
+    notice:'Notice', locate_pothole:'Locate/Pothole', new_service:'New Service',
+    meter:'Meter', tie_over:'Tie-Over', restoration:'Restoration' };
+
+  return {
+    tagId: new URLSearchParams(location.search).get('tag') || '',
+    serviceId: new URLSearchParams(location.search).get('service') || '',
+    preTemplate: new URLSearchParams(location.search).get('template') || '',
+    state: 'loading', errorMsg: '',
+    tag: null, service: null, templates: [], passedPhases: [], naPhases: [],
+    template: null, items: [], ans: {},
+    equipment: [], equipUsed: [], showAddEquip: false,
+    newEquip: { description: '', serial_number: '', cal_due: '' },
+    performedBy: localStorage.getItem('lc_name') || '',
+    witnessedBy: '',
+    performedAt: new Date().toISOString().slice(0, 10),
+    notes: '',
+    busy: false, submitError: '', partialErrors: [],
+    finalResult: '', checkId: '', failedItems: [],
+
+    // Subject-agnostic display bits — the tag number or the service address,
+    // whichever this check is about.
+    get subjectName() {
+      return this.tag ? this.tag.tag_number : (this.service ? this.service.address : '');
+    },
+    get backHref() {
+      return this.tag ? '/t/' + encodeURIComponent(this.tag.tag_number)
+                      : '/s/' + this.serviceId;
+    },
+    get subjectMeta() {
+      if (this.tag) return this.tag.description || '';
+      if (this.service) return this.service.station ? 'Sta ' + this.service.station : '';
+      return '';
+    },
+
+    phaseLabel(p) { return PHASE_LABELS[p] || p; },
+    fmtDate(d) { return new Date(d).toLocaleDateString(undefined,
+      { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }); },
+    calOverdue(e) { return e.cal_due && new Date(e.cal_due) < new Date(); },
+
+    async load() {
+      if (!this.tagId && !this.serviceId) {
+        this.state = 'error';
+        this.errorMsg = 'No tag or service in the URL. Open this page from a tag or a service.';
+        return;
+      }
+      try {
+        let templateFilter, passedFilter;
+        if (this.serviceId) {
+          // Service subject (ADR 0006). `fields=` deliberately excludes the
+          // customer PII — this page is reachable without sign-in
+          // (CLAUDE.md PII rule).
+          const sRes = await fetch(
+            `${PB}/api/collections/services/records/${this.serviceId}?fields=id,project,address,station`);
+          if (!sRes.ok) throw new Error('service not found (' + sRes.status + ')');
+          this.service = await sRes.json();
+
+          // A service's candidate checklists = the subject_kind='service'
+          // templates. (Its required phases are DERIVED from this list.)
+          templateFilter = `subject_kind='service' && phase != ''`;
+          passedFilter = `service='${this.service.id}' && result='pass'`;
+        } else {
+          const tRes = await fetch(`${PB}/api/collections/tags/records/${this.tagId}`);
+          if (!tRes.ok) throw new Error('tag not found (' + tRes.status + ')');
+          this.tag = await tRes.json();
+
+          // The tag's candidate checklists = templates for its tag_type, in
+          // phase order. (Required phases are DERIVED from this same list.)
+          templateFilter = `tag_type='${this.tag.tag_type}' && phase != ''`;
+          passedFilter = `tag='${this.tag.id}' && result='pass'`;
+
+          // Phases this tag marks Not-Applicable (ADR 0009), normalized to
+          // phase keys — the picker flags them (still loggable, just not
+          // counted toward standing). Free text, forgiving compare.
+          const norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const na = new Set((this.tag.phases_na || '').split(/[,\s]+/).map(norm).filter(Boolean));
+          this.naPhases = PHASES.filter(p => na.has(norm(p)));
+        }
+
+        const f = encodeURIComponent(templateFilter);
+        const res = await fetch(`${PB}/api/collections/checklist_templates/records?filter=(${f})&perPage=50`);
+        this.templates = (await res.json()).items
+          .sort((a, b) => PHASES.indexOf(a.phase) - PHASES.indexOf(b.phase));
+
+        // Which phases already pass? Shown as a hint in the picker; the tag
+        // and service pages turn the same fold into the standing plate.
+        const cf = encodeURIComponent(passedFilter);
+        const cRes = await fetch(`${PB}/api/collections/checks/records?filter=(${cf})&fields=phase&perPage=200`);
+        this.passedPhases = [...new Set((await cRes.json()).items.map(c => c.phase))];
+
+        // The instrument registry (global — ADR 0004), oldest cal first so
+        // the soon-to-expire ones are visible.
+        const eRes = await fetch(`${PB}/api/collections/test_equipment/records?sort=cal_due&perPage=100`);
+        this.equipment = (await eRes.json()).items;
+
+        const pre = this.templates.find(t => t.id === this.preTemplate);
+        if (pre) await this.pick(pre); else this.state = 'pick';
+      } catch (err) {
+        this.state = 'error';
+        this.errorMsg = 'Could not load: ' + err.message;
+      }
+    },
+
+    async pick(t) {
+      this.template = t;
+      const f = encodeURIComponent(`template='${t.id}'`);
+      const res = await fetch(`${PB}/api/collections/template_items/records?filter=(${f})&sort=sequence&perPage=200`);
+      this.items = (await res.json()).items;
+      // one answer slot per line
+      this.ans = {};
+      for (const it of this.items) this.ans[it.id] = { result: '', value: '', note: '', file: null, na: false };
+      this.state = 'run';
+      window.scrollTo(0, 0);
+    },
+
+    async addEquipment() {
+      this.busy = true;
+      try {
+        const body = { description: this.newEquip.description, serial_number: this.newEquip.serial_number };
+        if (this.newEquip.cal_due) body.cal_due = this.newEquip.cal_due + ' 00:00:00';
+        const res = await fetch(`${PB}/api/collections/test_equipment/records`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!res.ok) throw new Error('registry rejected (' + res.status + ')');
+        const rec = await res.json();
+        this.equipment.push(rec);
+        if (this.equipUsed.length < 3) this.equipUsed.push(rec.id);
+        this.newEquip = { description: '', serial_number: '', cal_due: '' };
+        this.showAddEquip = false;
+      } catch (err) { this.submitError = err.message; }
+      finally { this.busy = false; }
+    },
+
+    // Result is DERIVED, never picked: any fail => fail; any required line
+    // unanswered => incomplete; else pass. N/A counts as answered.
+    derivedResult() {
+      let incomplete = false;
+      for (const it of this.items) {
+        const a = this.ans[it.id];
+        if (it.response_type === 'pass_fail_na') {
+          if (a.result === 'fail') return 'fail';
+          if (!a.result) incomplete = true;
+        }
+        if (it.response_type === 'photo_required' && !a.file && !a.na) incomplete = true;
+      }
+      return incomplete ? 'incomplete' : 'pass';
+    },
+
+    async submit() {
+      this.busy = true; this.submitError = ''; this.partialErrors = [];
+      if (this.performedBy) localStorage.setItem('lc_name', this.performedBy);
+      try {
+        // Freeze the test-equipment note from the registry AT THIS MOMENT —
+        // the registry keeps living (cal_due rolls forward), the record
+        // must not (ADR 0004).
+        const used = this.equipment.filter(e => this.equipUsed.includes(e.id));
+        const note = used.map(e =>
+          e.description + (e.serial_number ? ' s/n ' + e.serial_number : '') +
+          (e.cal_due ? ', cal due ' + String(e.cal_due).slice(0, 10) : '')).join('; ');
+
+        const result = this.derivedResult();
+
+        // 1. The check itself, first — the write order can never lose it.
+        //    phase + witness_required are FROZEN from the template. The
+        //    subject is exactly one of tag XOR service here (system-subject
+        //    checks have no UI yet); the server-side createRule is the gate.
+        const subject = this.tag ? { tag: this.tag.id } : { service: this.service.id };
+        const cRes = await fetch(`${PB}/api/collections/checks/records`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...subject,
+            template: this.template.id,
+            phase: this.template.phase,
+            result,
+            performed_by: this.performedBy,
+            witnessed_by: this.witnessedBy,
+            performed_at: this.performedAt + ' 00:00:00',
+            notes: this.notes,
+            witness_required: !!this.template.witness_required,
+            test_equipment_used: this.equipUsed,
+            test_equipment_note: note,
+          }),
+        });
+        if (!cRes.ok) throw new Error('check rejected (' + cRes.status + ')');
+        const check = await cRes.json();
+        this.checkId = check.id;
+
+        // 2. Every line, answered or not — an unanswered line is recorded
+        //    with a blank result, so the record shows what was skipped.
+        //    Each line freezes its prompt text.
+        this.failedItems = [];
+        for (const it of this.items) {
+          const a = this.ans[it.id];
+          const body = {
+            check: check.id,
+            template_item: it.id,
+            prompt: it.text,
+            result: it.response_type === 'pass_fail_na' ? a.result
+                  : (it.response_type === 'photo_required' && a.na ? 'na' : ''),
+            value: a.value,
+            note: a.note,
+          };
+          const iRes = await fetch(`${PB}/api/collections/check_items/records`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body) });
+          if (!iRes.ok) { this.partialErrors.push('#' + it.sequence); continue; }
+          const item = await iRes.json();
+
+          // 3. Photo evidence rides the polymorphic attachments collection,
+          //    parented to the check line it answers.
+          if (it.response_type === 'photo_required' && a.file) {
+            const fd = new FormData();
+            fd.append('file', a.file);
+            fd.append('parent_collection', 'check_items');
+            fd.append('parent_id', item.id);
+            fd.append('uploaded_by', this.performedBy);
+            const aRes = await fetch(`${PB}/api/collections/attachments/records`, { method: 'POST', body: fd });
+            if (!aRes.ok) this.partialErrors.push('#' + it.sequence + ' photo');
+          }
+
+          if (body.result === 'fail') {
+            this.failedItems.push({
+              itemId: item.id, prompt: it.text, flagged: false, sev: 'A',
+              desc: this.subjectName + ' failed ' + this.phaseLabel(this.template.phase).toLowerCase() +
+                    ' line: ' + it.text + (a.note ? ' — ' + a.note : ''),
+            });
+          }
+        }
+
+        this.finalResult = result;
+        this.state = 'done';
+        window.scrollTo(0, 0);
+      } catch (err) {
+        this.submitError = 'Could not write the check: ' + err.message;
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    // The evidence chain: a punch item born from a failed check carries
+    // source_check (ADR 0004).
+    async flagFailed(f) {
+      this.busy = true;
+      try {
+        // Subject shape mirrors the check's: a tag punch carries tag+system
+        // (system is the equipment rollup); a service punch carries service
+        // only. The punch_items createRule enforces it.
+        const subject = this.tag
+          ? { tag: this.tag.id, system: this.tag.system || null }
+          : { service: this.service.id };
+        const res = await fetch(`${PB}/api/collections/punch_items/records`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project: this.tag ? this.tag.project : this.service.project,
+            ...subject,
+            description: f.desc,
+            severity: f.sev,
+            status: 'open',
+            assigned_party: 'contractor',
+            created_by: this.performedBy,
+            source_check: this.checkId,
+          }),
+        });
+        if (!res.ok) throw new Error('punch rejected (' + res.status + ')');
+        f.flagged = true;
+      } catch (err) { this.submitError = err.message; }
+      finally { this.busy = false; }
+    },
+  };
+}
+</script>
+</body>
+</html>

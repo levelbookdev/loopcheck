@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoopCheck — Sign in</title>
+<!--
+  Sign in (ADR 0011 §6). Accounts are created by the maintainer in the admin
+  UI — there is NO self-signup (users.createRule = null). A shared field
+  account per crew keeps the field flow zero-friction; PMs get personal
+  accounts. Preserves ?next= so a scanned QR → login → the page it pointed at.
+-->
+<link rel="stylesheet" href="/app.css">
+<script defer src="/lc-auth.js"></script>
+<script defer src="/vendor/alpine.min.js"></script>
+</head>
+<body>
+
+<div x-data="loginPage()">
+  <header class="bar">
+    <span class="mark"><a href="/">LoopCheck</a></span>
+    <span class="meta">Sign in</span>
+  </header>
+
+  <main>
+    <h1>Sign in</h1>
+    <p class="meta">
+      Field scanning — seeing status and flagging a punch item — needs no
+      account. Sign in to log checks, close punch items, and sign or build
+      turnover packages.
+    </p>
+
+    <label class="fl" for="email">Email</label>
+    <input id="email" type="text" inputmode="email" autocomplete="username"
+           x-model="email" @keydown.enter="submit()">
+    <label class="fl" for="pw">Password</label>
+    <input id="pw" type="password" autocomplete="current-password"
+           x-model="password" @keydown.enter="submit()">
+
+    <button class="go" :disabled="busy || !email || !password"
+            @click="submit()" x-text="busy ? 'Signing in…' : 'Sign in'"></button>
+    <div class="error" x-show="error" x-text="error"></div>
+
+    <p class="meta" style="margin-top:18px">
+      No account? Accounts are created by the project's LoopCheck operator —
+      there is no self-signup. Ask them for the crew sign-in.
+    </p>
+  </main>
+</div>
+
+<script>
+function loginPage() {
+  return {
+    email: "", password: "", busy: false, error: "",
+    // Only same-origin relative paths are honored, so ?next= can't be used to
+    // bounce a signed-in session off to another site. Must start with a single
+    // "/" NOT followed by "/" or "\" — browsers normalise "/\" and "//" to a
+    // protocol-relative (off-origin) URL, so both are rejected as open-redirects.
+    nextUrl() {
+      const n = new URLSearchParams(location.search).get("next") || "/";
+      return /^\/($|[^\/\\])/.test(n) ? n : "/";
+    },
+    async submit() {
+      this.busy = true; this.error = "";
+      try {
+        await window.lcAuth.login(this.email.trim(), this.password);
+        location.href = this.nextUrl();
+      } catch (err) {
+        this.error = err.message || "Could not sign in.";
+        this.busy = false;
+      }
+    },
+  };
+}
+</script>
+</body>
+</html>

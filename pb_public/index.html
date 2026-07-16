@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoopCheck</title>
+<!--
+  LoopCheck home — the list of projects. Each project links to its systems,
+  ordered by startup sequence. New projects are created here; equipment is then
+  loaded through the CSV import page.
+-->
+<link rel="stylesheet" href="/app.css">
+<script defer src="/vendor/alpine.min.js"></script>
+</head>
+<body>
+
+<div x-data="home()" x-init="load()">
+  <header class="bar">
+    <span class="mark">LoopCheck</span>
+    <span class="meta">Startup &amp; commissioning</span>
+  </header>
+
+  <h2 class="section">Projects</h2>
+
+  <template x-if="state === 'loading'"><p class="loading">Loading…</p></template>
+  <template x-if="state === 'error'"><div class="error" x-text="errorMsg"></div></template>
+
+  <template x-if="state === 'ready'">
+    <div>
+      <template x-if="!projects.length">
+        <p class="empty">No projects yet. Create one below, then import your instrument index.</p>
+      </template>
+
+      <template x-for="p in projects" :key="p.id">
+        <a class="card" :href="'/project.html?id=' + p.id">
+          <div class="title" x-text="p.name"></div>
+          <div class="sub">
+            <span x-show="p.owner_name" x-text="'Owner: ' + p.owner_name"></span>
+            <span x-show="p.contractor_name" x-text="' · ' + p.contractor_name"></span>
+          </div>
+        </a>
+      </template>
+
+      <!-- New project -->
+      <h2 class="section">New project</h2>
+      <template x-if="!showNew">
+        <button class="go" @click="showNew = true">Create project</button>
+      </template>
+      <template x-if="showNew">
+        <div>
+          <label class="fl" for="pn">Project name</label>
+          <input id="pn" type="text" x-model="nName" placeholder="e.g. North WRF Expansion">
+          <label class="fl" for="po">Owner</label>
+          <input id="po" type="text" x-model="nOwner" placeholder="e.g. City of Springfield">
+          <label class="fl" for="pe">Engineer of record</label>
+          <input id="pe" type="text" x-model="nEor" placeholder="Design engineer">
+          <label class="fl" for="pc">Contractor</label>
+          <input id="pc" type="text" x-model="nContractor" placeholder="General contractor">
+          <button class="go" :disabled="busy || !nName" @click="create()"
+                  x-text="busy ? 'Saving…' : 'Create project'"></button>
+          <button class="link" style="margin-top:12px" @click="showNew = false">Cancel</button>
+          <div class="error" x-show="errorMsg2" x-text="errorMsg2"></div>
+        </div>
+      </template>
+
+      <h2 class="section">Tools</h2>
+      <a class="card" href="/import.html">
+        <div class="title">CSV import — equipment</div>
+        <div class="sub">Load an instrument index / equipment schedule into a project</div>
+      </a>
+      <a class="card" href="/import_services.html">
+        <div class="title">CSV import — service connections</div>
+        <div class="sub">Load a service list for a water main replacement (address, station, meter)</div>
+      </a>
+      <a class="card" href="/labels.html">
+        <div class="title">QR label sheet</div>
+        <div class="sub">Print QR labels for a system's tags or the service meter boxes (Avery 5160)</div>
+      </a>
+    </div>
+  </template>
+</div>
+
+<script>
+function home() {
+  const PB = window.location.origin;
+  return {
+    state: 'loading', errorMsg: '', errorMsg2: '',
+    projects: [],
+    showNew: false, busy: false,
+    nName: '', nOwner: '', nEor: '', nContractor: '',
+
+    async load() {
+      try {
+        const res = await fetch(`${PB}/api/collections/projects/records?sort=name&perPage=200`);
+        if (!res.ok) throw new Error('API error ' + res.status);
+        this.projects = (await res.json()).items;
+        this.state = 'ready';
+      } catch (err) {
+        this.state = 'error';
+        this.errorMsg = 'Could not reach the server. Is PocketBase running? (' + err.message + ')';
+      }
+    },
+
+    async create() {
+      this.busy = true; this.errorMsg2 = '';
+      try {
+        const res = await fetch(`${PB}/api/collections/projects/records`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: this.nName, owner_name: this.nOwner,
+            engineer_of_record: this.nEor, contractor_name: this.nContractor,
+          }),
+        });
+        if (!res.ok) throw new Error('rejected (' + res.status + ')');
+        const p = await res.json();
+        location.href = '/project.html?id=' + p.id;
+      } catch (err) {
+        this.errorMsg2 = 'Could not create project: ' + err.message;
+        this.busy = false;
+      }
+    },
+  };
+}
+</script>
+</body>
+</html>

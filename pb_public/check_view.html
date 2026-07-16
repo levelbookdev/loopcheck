@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoopCheck — Check Record</title>
+
+<!--
+  Printable single-check record (Phase 2b). Open as check_view.html?id={checkId}.
+
+  This renders ONE check from the append-only ledger, exactly as it was
+  frozen at execution: the prompt text, results, values, notes, and photos
+  are read straight off the check_items (frozen copies), not re-derived from
+  the living template. That is the whole point — this page is the turnover
+  evidence for a single check, and it must read the same in five years even
+  if the template has changed. Read-only; there is nothing to edit here.
+
+  It is also the free per-check deliverable. The compiled, multi-hundred-tag
+  hyperlinked turnover binder is the paid sidecar's job (ADR 0003); a single
+  check's record is always free — print to PDF from the browser.
+-->
+<link rel="stylesheet" href="/app.css">
+<script defer src="/vendor/alpine.min.js"></script>
+<style>
+  .banner { padding: 14px 16px; font-size: 18px; font-weight: 800;
+    text-transform: uppercase; letter-spacing: .04em; color: #fff; margin: 10px 0 18px; }
+  .banner.pass { background: var(--go); }
+  .banner.fail { background: var(--sev-a); }
+  .banner.incomplete { background: var(--sev-b); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 8px 0; }
+  .kv dt { color: var(--steel); font-weight: 700; font-size: 13px; }
+  .kv dd { margin: 0; }
+  .ci { border: 1px solid var(--line); border-left: 5px solid var(--line); padding: 10px 12px; margin-bottom: 8px; }
+  .ci.pass { border-left-color: var(--go); }
+  .ci.fail { border-left-color: var(--sev-a); }
+  .ci.na   { border-left-color: var(--steel); }
+  .ci .cprompt { font-weight: 600; }
+  .ci .cans { margin-top: 4px; font-size: 14px; }
+  .ci .cres { font-weight: 800; text-transform: uppercase; font-size: 12px; letter-spacing: .05em; }
+  .ci img.thumb { max-width: 220px; margin-top: 8px; border: 1px solid var(--line); display: block; }
+  .printbtn { margin: 4px 0 18px; }
+  @media print {
+    .noprint { display: none !important; }
+    body { max-width: none; padding: 0; }
+    .ci, .banner { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<div x-data="checkView()" x-init="load()">
+
+  <header class="bar noprint">
+    <span class="mark"><a href="/">LoopCheck</a></span>
+    <span class="meta">Check record</span>
+  </header>
+
+  <template x-if="state === 'loading'"><p class="loading">Loading…</p></template>
+  <template x-if="state === 'error'"><div class="error" x-text="errorMsg"></div></template>
+
+  <template x-if="state === 'ready'">
+    <main>
+      <a class="crumb noprint" :href="backHref" x-text="'← ' + subjectLabel"></a>
+
+      <h1 x-text="check.expand?.template?.name || (prettyPhase(check.phase) + ' check')"></h1>
+      <p class="meta">
+        <span class="mono" x-text="subjectLabel"></span>
+        · <span x-text="prettyPhase(check.phase)"></span>
+      </p>
+
+      <div class="banner" :class="check.result" x-text="check.result"></div>
+
+      <button class="go secondary printbtn noprint" style="min-height:48px" @click="window.print()">
+        Print / Save as PDF
+      </button>
+
+      <dl class="kv">
+        <dt>Performed by</dt><dd x-text="check.performed_by || '—'"></dd>
+        <template x-if="check.witness_required || check.witnessed_by">
+          <dt>Witnessed by</dt>
+        </template>
+        <template x-if="check.witness_required || check.witnessed_by">
+          <dd>
+            <span x-text="check.witnessed_by || '— (required, not yet witnessed)'"></span>
+            <span x-show="check.witness_required" style="color:var(--sev-b); font-weight:700"> · owner/EOR witness required</span>
+          </dd>
+        </template>
+        <dt>Performed on</dt><dd x-text="fmtDate(check.performed_at || check.created)"></dd>
+        <dt>Logged</dt><dd x-text="fmtDateTime(check.created)"></dd>
+        <template x-if="check.test_equipment_note">
+          <dt>Test equipment</dt>
+        </template>
+        <template x-if="check.test_equipment_note">
+          <dd x-text="check.test_equipment_note"></dd>
+        </template>
+        <template x-if="check.notes">
+          <dt>Notes</dt>
+        </template>
+        <template x-if="check.notes">
+          <dd x-text="check.notes"></dd>
+        </template>
+      </dl>
+
+      <h2 class="section">Checklist items (<span x-text="items.length"></span>)</h2>
+      <template x-for="it in items" :key="it.id">
+        <div class="ci" :class="it.result">
+          <div class="cprompt" x-text="it.prompt"></div>
+          <div class="cans">
+            <template x-if="it.result">
+              <span class="cres" :style="'color:' + resColor(it.result)" x-text="it.result"></span>
+            </template>
+            <span x-show="it.value"> · <strong x-text="it.value"></strong></span>
+            <span x-show="it.note" x-text="(it.result || it.value ? ' — ' : '') + it.note"></span>
+            <span x-show="!it.result && !it.value && !it.note && !photoFor(it.id)"
+                  style="color:var(--steel)">— not answered</span>
+          </div>
+          <template x-if="photoFor(it.id)">
+            <img class="thumb" :src="photoFor(it.id)" alt="Check photo" loading="lazy">
+          </template>
+        </div>
+      </template>
+
+      <p class="meta" style="margin-top:16px">
+        Append-only record from the LoopCheck ledger — frozen at execution,
+        never edited. A correction is a new check.
+      </p>
+    </main>
+  </template>
+
+</div>
+
+<script>
+function checkView() {
+  const PB = window.location.origin;
+  return {
+    checkId: new URLSearchParams(location.search).get('id') || '',
+    state: 'loading', errorMsg: '',
+    check: null, items: [], photos: {},   // check_item id -> file URL
+
+    prettyPhase(p) {
+      return { installation: 'Installation', point_to_point: 'Point-to-Point',
+               energization: 'Energization', loop_check: 'Loop Check',
+               functional: 'Functional', performance: 'Performance',
+               // service phases (ADR 0006) read through unchanged if unmapped
+             }[p] || (p ? p.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Check');
+    },
+    resColor(r) {
+      return { pass: 'var(--go)', fail: 'var(--sev-a)', na: 'var(--steel)' }[r] || 'var(--ink)';
+    },
+    fmtDate(d) { return d ? new Date(d).toLocaleDateString(undefined,
+      { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '—'; },
+    fmtDateTime(d) { return d ? new Date(d).toLocaleString(undefined,
+      { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—'; },
+    photoFor(itemId) { return this.photos[itemId] || null; },
+
+    // Where "back" goes and how the subject reads — a check is against a tag,
+    // a system, or a service (the three subject kinds).
+    get subjectLabel() {
+      const c = this.check;
+      if (c?.expand?.tag) return c.expand.tag.tag_number;
+      if (c?.expand?.system) return 'System ' + (c.expand.system.number || '');
+      if (c?.expand?.service) return c.expand.service.address || 'Service';
+      return 'Subject';
+    },
+    get backHref() {
+      const c = this.check;
+      if (c?.expand?.tag) return '/t/' + encodeURIComponent(c.expand.tag.tag_number);
+      if (c?.expand?.system) return '/system.html?id=' + c.system;
+      if (c?.expand?.service) return '/s/' + c.service;
+      return '/';
+    },
+
+    async load() {
+      if (!this.checkId) { this.state = 'error'; this.errorMsg = 'No check id in the URL.'; return; }
+      try {
+        // The check, with its subject and template expanded for the header.
+        const cRes = await fetch(
+          `${PB}/api/collections/checks/records/${this.checkId}?expand=tag,system,service,template`);
+        if (!cRes.ok) throw new Error('check not found (' + cRes.status + ')');
+        this.check = await cRes.json();
+
+        // The frozen answered lines, in the order they were written.
+        const f = encodeURIComponent(`check='${this.checkId}'`);
+        const iRes = await fetch(
+          `${PB}/api/collections/check_items/records?filter=(${f})&sort=created&perPage=500`);
+        this.items = (await iRes.json()).items;
+
+        // Photos attached to any of these lines (polymorphic attachments).
+        if (this.items.length) {
+          const ors = this.items.map(it => `parent_id='${it.id}'`).join(' || ');
+          const aFilter = encodeURIComponent(`parent_collection='check_items' && (${ors})`);
+          const aRes = await fetch(`${PB}/api/collections/attachments/records?filter=(${aFilter})&perPage=500`);
+          for (const a of (await aRes.json()).items) {
+            this.photos[a.parent_id] = `${PB}/api/files/attachments/${a.id}/${a.file}`;
+          }
+        }
+
+        this.state = 'ready';
+      } catch (err) {
+        this.state = 'error';
+        this.errorMsg = 'Could not load the check: ' + err.message;
+      }
+    },
+  };
+}
+</script>
+</body>
+</html>

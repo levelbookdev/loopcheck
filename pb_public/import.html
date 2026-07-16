@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoopCheck — CSV Import</title>
+<!--
+  CSV import — the onboarding moment. Ingests an instrument index / equipment
+  schedule and creates tags (and any missing systems) in a chosen project.
+
+  Deliberately forgiving of real-world sheets: it tolerates extra columns,
+  blank rows, messy header names (synonyms), and loose tag-type spellings. It
+  previews before writing anything, and reports exactly what it created and
+  skipped.
+-->
+<link rel="stylesheet" href="/app.css">
+<script defer src="/vendor/alpine.min.js"></script>
+<style>
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--steel); text-transform: uppercase; letter-spacing: .06em; font-size: 11px; }
+  .scroll { overflow-x: auto; border: 2px solid var(--ink); }
+  .warn { color: var(--sev-b); font-size: 13px; margin-top: 8px; }
+  .tt { font-family: ui-monospace, Consolas, monospace; }
+  .result li { margin-bottom: 4px; }
+</style>
+</head>
+<body>
+
+<div x-data="importPage()" x-init="load()">
+  <header class="bar">
+    <span class="mark"><a href="/">LoopCheck</a></span>
+    <span class="meta">CSV Import</span>
+  </header>
+
+  <a class="crumb" href="/">← Home</a>
+  <h1>Import</h1>
+  <p class="meta" x-show="mode === 'tags'">Load an instrument index or equipment schedule. Recognized columns:
+    <span class="tt">tag_number, description, tag_type, system_number, pid_reference</span>,
+    plus <span class="tt">area, spec_section, loop_numbers, plc, mcc_breaker,
+    drawing_refs, manufacturer, has_vfd, phases_na</span> when your sheet has them
+    (synonyms work too: <span class="tt">tag, name, system_group, vendor,
+    equipment_type, vfd</span>…). Column order does not matter
+    and extra columns are ignored.</p>
+  <p class="meta" x-show="mode === 'warranties'">Migrate an existing closeout spreadsheet.
+    Recognized columns: <span class="tt">tag_number, vendor, contact, phone, email,
+    basis, basis_note, clock_start_date, duration_months</span>. Tags must already
+    exist in the project (import the equipment schedule first). Basis values are
+    matched loosely (<span class="tt">SC</span>, <span class="tt">substantial completion</span>,
+    <span class="tt">startup</span>, <span class="tt">shipment</span>…); anything
+    unrecognized becomes <span class="tt">other</span> with the original text
+    preserved in the note.</p>
+
+  <template x-if="state === 'error'"><div class="error" x-text="errorMsg"></div></template>
+
+  <!-- 1. Project -->
+  <h2 class="section">1. Project</h2>
+  <select x-model="projectId">
+    <option value="" disabled>Choose a project…</option>
+    <template x-for="p in projects" :key="p.id">
+      <option :value="p.id" x-text="p.name"></option>
+    </template>
+  </select>
+  <p class="meta" x-show="!projects.length">No projects yet — create one on the <a href="/">home page</a> first.</p>
+
+  <!-- 2. What kind of sheet -->
+  <h2 class="section">2. What are you importing?</h2>
+  <div class="sevpick">
+    <label :class="{on: mode === 'tags'}" style="font-weight:800">
+      <input type="radio" value="tags" x-model="mode" @change="rows = []; result = null; warnings = []">
+      Equipment tags
+      <small>instrument index / equipment schedule</small>
+    </label>
+    <label :class="{on: mode === 'warranties'}" style="font-weight:800">
+      <input type="radio" value="warranties" x-model="mode" @change="rows = []; result = null; warnings = []">
+      Warranties
+      <small>closeout spreadsheet (ADR 0005)</small>
+    </label>
+  </div>
+
+  <!-- 3. Data -->
+  <h2 class="section">3. Paste or upload CSV</h2>
+  <input type="file" accept=".csv,text/csv,text/plain" @change="onFile($event)">
+  <label class="fl" for="csv">…or paste CSV text</label>
+  <textarea id="csv" x-model="raw"
+            :placeholder="mode === 'tags'
+              ? 'tag_number,description,tag_type,system_number,pid_reference\nPMP-3101,RAS Pump No. 1,pump,32,M-501'
+              : 'tag_number,vendor,basis,clock_start_date,duration_months\nPMP-3101,Demo Pump Co.,substantial completion,2026-03-15,12'"></textarea>
+  <button class="go secondary" @click="parse()" :disabled="!raw.trim()">Preview</button>
+
+  <!-- 3. Preview -->
+  <template x-if="rows.length">
+    <div>
+      <h2 class="section">4. Preview — <span x-text="rows.length"></span> rows</h2>
+      <template x-if="warnings.length">
+        <div>
+          <template x-for="w in warnings" :key="w"><div class="warn" x-text="'⚠ ' + w"></div></template>
+        </div>
+      </template>
+      <div class="scroll">
+        <table x-show="mode === 'tags'">
+          <thead><tr><th>#</th><th>Tag number</th><th>Description</th><th>Type</th><th>System</th><th>P&amp;ID</th><th>Mfr</th><th>VFD</th></tr></thead>
+          <tbody>
+            <template x-for="(r, i) in rows.slice(0, 50)" :key="i">
+              <tr>
+                <td x-text="i + 1"></td>
+                <td class="tt" x-text="r.tag_number"></td>
+                <td x-text="r.description"></td>
+                <td class="tt" x-text="r.tag_type"></td>
+                <td class="tt" x-text="r.system_number"></td>
+                <td class="tt" x-text="r.pid_reference"></td>
+                <td x-text="r.manufacturer"></td>
+                <td class="tt" x-text="r.has_vfd ? 'VFD' : ''"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <table x-show="mode === 'warranties'">
+          <thead><tr><th>#</th><th>Tag number</th><th>Vendor</th><th>Basis</th><th>Clock start</th><th>Months</th><th>Note</th></tr></thead>
+          <tbody>
+            <template x-for="(r, i) in rows.slice(0, 50)" :key="i">
+              <tr>
+                <td x-text="i + 1"></td>
+                <td class="tt" x-text="r.tag_number"></td>
+                <td x-text="r.vendor_name"></td>
+                <td class="tt" x-text="r.basis"></td>
+                <td class="tt" x-text="r.clock_start_date || '(not started)'"></td>
+                <td class="tt" x-text="r.duration_months"></td>
+                <td x-text="r.basis_note"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+      <p class="meta" x-show="rows.length > 50" x-text="'Showing first 50 of ' + rows.length + ' rows.'"></p>
+
+      <button class="go" :disabled="busy || !projectId" @click="doImport()"
+              x-text="busy ? ('Importing… ' + progress + '/' + rows.length)
+                           : ('Import ' + rows.length + (mode === 'tags' ? ' tags' : ' warranties'))"></button>
+      <p class="meta" x-show="!projectId">Choose a project above first.</p>
+    </div>
+  </template>
+
+  <!-- 4. Result -->
+  <template x-if="result">
+    <div>
+      <h2 class="section">Import complete</h2>
+      <div class="flash">✓ Done</div>
+      <ul class="result" style="margin-top:12px; padding-left:18px" x-show="mode === 'tags'">
+        <li><strong x-text="result.tagsCreated"></strong> tags created</li>
+        <li><strong x-text="result.systemsCreated"></strong> systems created</li>
+        <li><strong x-text="result.duplicates"></strong> duplicate tag numbers skipped</li>
+        <li><strong x-text="result.blank"></strong> blank rows skipped</li>
+        <li x-show="result.errors.length" style="color:var(--sev-a)">
+          <strong x-text="result.errors.length"></strong> errors</li>
+      </ul>
+      <ul class="result" style="margin-top:12px; padding-left:18px" x-show="mode === 'warranties'">
+        <li><strong x-text="result.warrantiesCreated"></strong> warranties created</li>
+        <li x-show="result.unknownTags"><strong x-text="result.unknownTags"></strong> rows skipped — tag number not in this project</li>
+        <li x-show="result.errors.length" style="color:var(--sev-a)">
+          <strong x-text="result.errors.length"></strong> errors</li>
+      </ul>
+      <template x-for="e in result.errors.slice(0, 20)" :key="e"><div class="warn" x-text="e"></div></template>
+      <a class="go" x-show="mode === 'tags'" style="display:block; text-align:center; text-decoration:none; line-height:60px"
+         :href="'/project.html?id=' + projectId">Open project →</a>
+      <a class="go" x-show="mode === 'warranties'" style="display:block; text-align:center; text-decoration:none; line-height:60px"
+         :href="'/warranty.html?project=' + projectId">Open warranty timeline →</a>
+    </div>
+  </template>
+</div>
+
+<script>
+function importPage() {
+  const PB = window.location.origin;
+
+  // Header synonyms → our canonical field names. Compared after lowercasing and
+  // stripping non-alphanumerics, so "Tag No.", "tag_number", "TAGNUMBER" all hit.
+  const HEADER_MAP = {
+    tagnumber: 'tag_number', tag: 'tag_number', tagno: 'tag_number',
+    tagid: 'tag_number', equipmenttag: 'tag_number', loopnumber: 'tag_number',
+    description: 'description', desc: 'description', service: 'description', name: 'description',
+    servicedescription: 'description', servicedesc: 'description',
+    tagtype: 'tag_type', type: 'tag_type', equipmenttype: 'tag_type', category: 'tag_type',
+    systemnumber: 'system_number', system: 'system_number', systemno: 'system_number',
+    sys: 'system_number', systemno2: 'system_number',
+    systemgroup: 'system_number', group: 'system_number',
+    pidreference: 'pid_reference', pid: 'pid_reference', pidref: 'pid_reference',
+    drawing: 'pid_reference', pandid: 'pid_reference', pidno: 'pid_reference',
+    // Capture-side fields (ADR 0002) — real instrument indexes carry these
+    // under many names; capture them at import so nothing needs retro-tagging.
+    area: 'area', bldg: 'area', building: 'area', locationarea: 'area',
+    spec: 'spec_section', specsection: 'spec_section', specno: 'spec_section',
+    loop: 'loop_numbers', loops: 'loop_numbers', loopno: 'loop_numbers',
+    loopnumbers: 'loop_numbers',
+    plc: 'plc', rtu: 'plc', controller: 'plc',
+    mcc: 'mcc_breaker', breaker: 'mcc_breaker', mccbreaker: 'mcc_breaker',
+    bucket: 'mcc_breaker', fedfrom: 'mcc_breaker',
+    singleline: 'drawing_refs', schematic: 'drawing_refs',
+    drawingrefs: 'drawing_refs', loopdrawing: 'drawing_refs',
+    // Nameplate + VFD flag (ADR 0008). "vendor" on an equipment schedule is
+    // the nameplate manufacturer; the warranty-holder sense of vendor lives
+    // on warranties.vendor_name (warranty import mode).
+    manufacturer: 'manufacturer', vendor: 'manufacturer', mfr: 'manufacturer',
+    mfg: 'manufacturer', make: 'manufacturer',
+    hasvfd: 'has_vfd', vfd: 'has_vfd', isvfd: 'has_vfd', vfddriven: 'has_vfd',
+    // Phases this tag doesn't owe (ADR 0009) — space/comma list of phase keys
+    // or friendly labels; the derivation normalizes them.
+    phasesna: 'phases_na', naphases: 'phases_na', phasesnotapplicable: 'phases_na',
+    notapplicablephases: 'phases_na', skipphases: 'phases_na',
+  };
+
+  const VALID_TYPES = ['pump_centrifugal','valve_motor_operated','motor',
+    'instrument_flow','instrument_level','instrument_pressure',
+    'analyzer','control_panel','loop','other'];
+  // Loose tag-type spellings → enum value. Instrument indexes say "pump" or
+  // "MOV", not "pump_centrifugal" — every plain spelling maps to the finer
+  // seed-library name so real-world CSVs import unchanged.
+  const TYPE_MAP = {
+    pump: 'pump_centrifugal', centrifugalpump: 'pump_centrifugal',
+    pumpcentrifugal: 'pump_centrifugal',
+    motor: 'motor',
+    mov: 'valve_motor_operated', motoroperatedvalve: 'valve_motor_operated',
+    valve: 'valve_motor_operated', valvemotoroperated: 'valve_motor_operated',
+    flow: 'instrument_flow', flowmeter: 'instrument_flow', magmeter: 'instrument_flow',
+    fit: 'instrument_flow', flowinstrument: 'instrument_flow', instrumentflow: 'instrument_flow',
+    level: 'instrument_level', lit: 'instrument_level',
+    levelinstrument: 'instrument_level', instrumentlevel: 'instrument_level',
+    pressure: 'instrument_pressure', pit: 'instrument_pressure',
+    pressureinstrument: 'instrument_pressure', instrumentpressure: 'instrument_pressure',
+    analyzer: 'analyzer', ait: 'analyzer', analytical: 'analyzer',
+    panel: 'control_panel', controlpanel: 'control_panel', plc: 'control_panel', rio: 'control_panel',
+    loop: 'loop',
+  };
+
+  // Warranty-mode header synonyms (ADR 0005) — a real closeout spreadsheet
+  // says "Vendor", "Warranty Start", "Term (mo)", not our field names.
+  const HEADER_MAP_W = {
+    tagnumber: 'tag_number', tag: 'tag_number', tagno: 'tag_number',
+    tagid: 'tag_number', equipmenttag: 'tag_number',
+    vendor: 'vendor_name', vendorname: 'vendor_name',
+    manufacturer: 'vendor_name', supplier: 'vendor_name',
+    contact: 'vendor_contact_name', contactname: 'vendor_contact_name',
+    vendorcontact: 'vendor_contact_name', vendorcontactname: 'vendor_contact_name',
+    phone: 'vendor_phone', vendorphone: 'vendor_phone', contactphone: 'vendor_phone',
+    tel: 'vendor_phone', telephone: 'vendor_phone',
+    email: 'vendor_email', vendoremail: 'vendor_email', contactemail: 'vendor_email',
+    basis: 'basis', warrantybasis: 'basis', clockbasis: 'basis', warrantyfrom: 'basis',
+    basisnote: 'basis_note', terms: 'basis_note', warrantyterms: 'basis_note',
+    note: 'basis_note', notes: 'basis_note',
+    clockstart: 'clock_start_date', clockstartdate: 'clock_start_date',
+    startdate: 'clock_start_date', warrantystart: 'clock_start_date',
+    warrantystartdate: 'clock_start_date', triggerdate: 'clock_start_date',
+    duration: 'duration_months', durationmonths: 'duration_months',
+    months: 'duration_months', warrantymonths: 'duration_months',
+    warrantyduration: 'duration_months', term: 'duration_months',
+    termmonths: 'duration_months', termmo: 'duration_months',
+  };
+
+  // Loose basis spellings -> the enum. Anything unrecognized becomes
+  // "other" with the original text preserved into basis_note — never
+  // silently drop the language the spec actually used.
+  const BASIS_MAP = {
+    substantialcompletion: 'substantial_completion', sc: 'substantial_completion',
+    substcompletion: 'substantial_completion',
+    beneficialuse: 'beneficial_use', beneficialoccupancy: 'beneficial_use',
+    bu: 'beneficial_use', occupancy: 'beneficial_use',
+    startup: 'startup', successfulstartup: 'startup', start: 'startup',
+    shipment: 'shipment_cap', shipmentcap: 'shipment_cap',
+    shipped: 'shipment_cap', whicheverfirst: 'shipment_cap',
+    shipmentwhicheverfirst: 'shipment_cap',
+    other: 'other',
+  };
+
+  const norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  return {
+    state: 'ready', errorMsg: '',
+    projects: [], projectId: '',
+    mode: 'tags',        // 'tags' | 'warranties'
+    raw: '',
+    rows: [], warnings: [],
+    busy: false, progress: 0, result: null,
+
+    async load() {
+      try {
+        const res = await fetch(`${PB}/api/collections/projects/records?sort=name&perPage=200`);
+        this.projects = (await res.json()).items;
+      } catch (err) {
+        this.state = 'error';
+        this.errorMsg = 'Could not load projects: ' + err.message;
+      }
+    },
+
+    onFile(e) {
+      const f = e.target.files[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => { this.raw = reader.result; this.parse(); };
+      reader.readAsText(f);
+    },
+
+    // A small, correct CSV parser: handles quoted fields, commas and newlines
+    // inside quotes, escaped "" quotes, and CRLF. Returns array of string arrays.
+    parseCSV(text) {
+      const rows = [];
+      let row = [], field = '', inQ = false;
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (inQ) {
+          if (c === '"') {
+            if (text[i + 1] === '"') { field += '"'; i++; } // escaped quote
+            else inQ = false;
+          } else field += c;
+        } else {
+          if (c === '"') inQ = true;
+          else if (c === ',') { row.push(field); field = ''; }
+          else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+          else if (c === '\r') { /* ignore; \n handles the break */ }
+          else field += c;
+        }
+      }
+      // last field/row (file may not end in newline)
+      if (field.length || row.length) { row.push(field); rows.push(row); }
+      return rows;
+    },
+
+    parse() {
+      this.rows = []; this.warnings = []; this.result = null;
+      const grid = this.parseCSV(this.raw).filter(r => r.some(c => c.trim() !== ''));
+      if (!grid.length) { this.warnings.push('No data found.'); return; }
+      if (this.mode === 'warranties') { this.parseWarranties(grid); return; }
+
+      // Map the header row to our canonical fields.
+      const header = grid[0].map(norm);
+      const colFor = {}; // canonical -> column index
+      header.forEach((h, idx) => {
+        const canon = HEADER_MAP[h];
+        if (canon && colFor[canon] === undefined) colFor[canon] = idx;
+      });
+
+      if (colFor.tag_number === undefined) {
+        this.warnings.push('No recognizable "tag_number" column found. Recognized names: tag_number, tag, tag no, equipment tag, loop number.');
+        return;
+      }
+      for (const need of ['description','tag_type','system_number','pid_reference']) {
+        if (colFor[need] === undefined)
+          this.warnings.push(`No "${need}" column — those values will be blank.`);
+      }
+
+      const get = (r, key) => (colFor[key] !== undefined ? (r[colFor[key]] || '').trim() : '');
+      const out = [];
+      for (let i = 1; i < grid.length; i++) {
+        const r = grid[i];
+        const tagNumber = get(r, 'tag_number');
+        if (!tagNumber) continue; // skip rows with no tag number
+        out.push({
+          tag_number: tagNumber,
+          description: get(r, 'description'),
+          tag_type: this.resolveType(get(r, 'tag_type')),
+          system_number: get(r, 'system_number'),
+          pid_reference: get(r, 'pid_reference'),
+          // Capture-side fields (ADR 0002) — blank when the sheet lacks them.
+          area: get(r, 'area'),
+          spec_section: get(r, 'spec_section'),
+          loop_numbers: get(r, 'loop_numbers'),
+          plc: get(r, 'plc'),
+          mcc_breaker: get(r, 'mcc_breaker'),
+          drawing_refs: get(r, 'drawing_refs'),
+          manufacturer: get(r, 'manufacturer'),
+          has_vfd: this.resolveBool(get(r, 'has_vfd')),
+          phases_na: get(r, 'phases_na'),
+        });
+      }
+      this.rows = out;
+      if (!out.length) this.warnings.push('No rows with a tag number were found.');
+    },
+
+    resolveType(raw) {
+      if (!raw) return '';
+      const n = norm(raw);
+      if (VALID_TYPES.includes(n)) return n;      // already an enum value
+      return TYPE_MAP[n] || 'other';
+    },
+
+    // Equipment schedules mark the VFD column many ways: Y, yes, TRUE, 1,
+    // X, or just "VFD". Anything else (blank, N, no, 0…) is false.
+    resolveBool(raw) {
+      return ['y', 'yes', 'true', '1', 'x', 'vfd'].includes(norm(raw));
+    },
+
+    // ---- Warranty mode (ADR 0005) ----------------------------------------
+
+    // Accept the date shapes closeout spreadsheets actually contain:
+    // 2026-03-15, 3/15/2026, 3-15-2026. Returns "YYYY-MM-DD" or ''.
+    parseDate(raw) {
+      const s = (raw || '').trim();
+      if (!s) return '';
+      let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+      if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+      m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);   // US month first
+      if (m) return `${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+      return '';
+    },
+
+    parseWarranties(grid) {
+      const header = grid[0].map(norm);
+      const colFor = {};
+      header.forEach((h, idx) => {
+        const canon = HEADER_MAP_W[h];
+        if (canon && colFor[canon] === undefined) colFor[canon] = idx;
+      });
+
+      if (colFor.tag_number === undefined) {
+        this.warnings.push('No recognizable "tag_number" column found. Recognized names: tag_number, tag, tag no, equipment tag.');
+        return;
+      }
+      for (const need of ['vendor_name', 'basis', 'clock_start_date', 'duration_months']) {
+        if (colFor[need] === undefined)
+          this.warnings.push(`No "${need}" column — those values will be blank.`);
+      }
+
+      const get = (r, key) => (colFor[key] !== undefined ? (r[colFor[key]] || '').trim() : '');
+      const out = [];
+      for (let i = 1; i < grid.length; i++) {
+        const r = grid[i];
+        const tagNumber = get(r, 'tag_number');
+        if (!tagNumber) continue;
+
+        const rawBasis = get(r, 'basis');
+        const basis = BASIS_MAP[norm(rawBasis)] || 'other';
+        let basisNote = get(r, 'basis_note');
+        // Unrecognized basis text is real spec language — keep it.
+        if (rawBasis && basis === 'other' && norm(rawBasis) !== 'other')
+          basisNote = basisNote ? `${rawBasis} — ${basisNote}` : rawBasis;
+
+        const rawDate = get(r, 'clock_start_date');
+        const clockStart = this.parseDate(rawDate);
+        if (rawDate && !clockStart)
+          this.warnings.push(`${tagNumber}: could not read date "${rawDate}" — clock start will be blank.`);
+
+        const months = parseInt(get(r, 'duration_months'), 10);
+        out.push({
+          tag_number: tagNumber,
+          vendor_name: get(r, 'vendor_name'),
+          vendor_contact_name: get(r, 'vendor_contact_name'),
+          vendor_phone: get(r, 'vendor_phone'),
+          vendor_email: get(r, 'vendor_email'),
+          basis: basis,
+          basis_note: basisNote,
+          clock_start_date: clockStart,
+          duration_months: Number.isFinite(months) && months > 0 ? months : '',
+        });
+      }
+      this.rows = out;
+      if (!out.length) this.warnings.push('No rows with a tag number were found.');
+      else this.warnings.push('Re-importing the same sheet creates duplicate warranty records — import once, then correct on the tag pages.');
+    },
+
+    async importWarranties() {
+      const res = { warrantiesCreated: 0, unknownTags: 0, errors: [] };
+      // Resolve tag numbers to record ids once for the whole sheet.
+      const tf = encodeURIComponent(`project='${this.projectId}'`);
+      const tRes = await fetch(
+        `${PB}/api/collections/tags/records?filter=(${tf})&perPage=500&fields=id,tag_number`);
+      const idByNumber = {};
+      for (const t of (await tRes.json()).items) idByNumber[t.tag_number.toUpperCase()] = t.id;
+
+      for (const r of this.rows) {
+        this.progress++;
+        const tagId = idByNumber[r.tag_number.toUpperCase()];
+        if (!tagId) { res.unknownTags++; res.errors.push(`${r.tag_number}: no such tag in this project`); continue; }
+        try {
+          const cr = await fetch(`${PB}/api/collections/warranties/records`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              project: this.projectId,
+              tag: tagId,
+              vendor_name: r.vendor_name,
+              vendor_contact_name: r.vendor_contact_name,
+              vendor_phone: r.vendor_phone,
+              vendor_email: r.vendor_email || null,
+              basis: r.basis,
+              basis_note: r.basis_note,
+              // Blank = trigger event hasn't happened yet — a valid state.
+              clock_start_date: r.clock_start_date ? r.clock_start_date + ' 00:00:00' : null,
+              duration_months: r.duration_months || null,
+            }),
+          });
+          if (cr.ok) res.warrantiesCreated++;
+          else res.errors.push(`${r.tag_number}: HTTP ${cr.status}`);
+        } catch (rowErr) {
+          res.errors.push(`${r.tag_number}: ${rowErr.message}`);
+        }
+      }
+      this.result = res;
+    },
+
+    async doImport() {
+      if (this.mode === 'warranties') {
+        this.busy = true; this.progress = 0;
+        try { await this.importWarranties(); }
+        catch (err) { this.state = 'error'; this.errorMsg = 'Import failed: ' + err.message; }
+        finally { this.busy = false; }
+        return;
+      }
+      this.busy = true; this.progress = 0;
+      const res = { tagsCreated: 0, systemsCreated: 0, duplicates: 0, blank: 0, errors: [] };
+      try {
+        // Cache existing systems for this project by number, so we create each
+        // missing system once and reuse its id across many tags.
+        const sFilter = encodeURIComponent(`project='${this.projectId}'`);
+        const sRes = await fetch(
+          `${PB}/api/collections/systems/records?filter=(${sFilter})&perPage=1000&fields=id,number`);
+        const sysByNumber = {};
+        for (const s of (await sRes.json()).items) sysByNumber[s.number] = s.id;
+
+        for (const r of this.rows) {
+          this.progress++;
+          try {
+            // Ensure the system exists (create on the fly, once).
+            let systemId = null;
+            if (r.system_number) {
+              if (!sysByNumber[r.system_number]) {
+                const cr = await fetch(`${PB}/api/collections/systems/records`, {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ project: this.projectId, number: r.system_number }),
+                });
+                if (cr.ok) {
+                  sysByNumber[r.system_number] = (await cr.json()).id;
+                  res.systemsCreated++;
+                } else {
+                  // A racing/duplicate create — re-read it.
+                  const rr = await fetch(
+                    `${PB}/api/collections/systems/records?filter=(${encodeURIComponent(`project='${this.projectId}' && number='${r.system_number.replace(/'/g,"\\'")}'`)})&perPage=1`);
+                  const found = (await rr.json()).items[0];
+                  if (found) sysByNumber[r.system_number] = found.id;
+                }
+              }
+              systemId = sysByNumber[r.system_number] || null;
+            }
+
+            // Create the tag. The unique (project, tag_number) index rejects
+            // duplicates — we count those as skipped rather than failing.
+            const cr = await fetch(`${PB}/api/collections/tags/records`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                project: this.projectId,
+                system: systemId,
+                tag_number: r.tag_number,
+                description: r.description,
+                tag_type: r.tag_type || null,
+                pid_reference: r.pid_reference,
+                area: r.area,
+                spec_section: r.spec_section,
+                loop_numbers: r.loop_numbers,
+                plc: r.plc,
+                mcc_breaker: r.mcc_breaker,
+                drawing_refs: r.drawing_refs,
+                manufacturer: r.manufacturer,
+                has_vfd: r.has_vfd,
+                phases_na: r.phases_na,
+              }),
+            });
+            if (cr.ok) { res.tagsCreated++; }
+            else if (cr.status === 400) { res.duplicates++; }  // unique index rejection
+            else { res.errors.push(`${r.tag_number}: HTTP ${cr.status}`); }
+          } catch (rowErr) {
+            res.errors.push(`${r.tag_number}: ${rowErr.message}`);
+          }
+        }
+        this.result = res;
+      } catch (err) {
+        this.state = 'error';
+        this.errorMsg = 'Import failed: ' + err.message;
+      } finally {
+        this.busy = false;
+      }
+    },
+  };
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoopCheck — Service CSV Import</title>
+<!--
+  Service connection CSV import (ADR 0006) — the onboarding moment for a
+  water main replacement job, with the same forgiving philosophy as the
+  instrument-index import: header synonyms, extra columns ignored, blank rows
+  skipped, preview before writing, honest report after.
+
+  The source sheet is usually the district's service/account export or the
+  contractor's takeoff: address, station, account or parcel, customer
+  name/phone, existing meter number, size, material.
+
+  PII note: customer_name and customer_phone are imported and stored, but the
+  preview below deliberately renders the name only (mapping proof) and never
+  the phone — and no page reachable without sign-in ever renders either
+  (CLAUDE.md PII rule). What you paste here stays in your browser until you
+  click Import.
+-->
+<link rel="stylesheet" href="/app.css">
+<script defer src="/vendor/alpine.min.js"></script>
+<style>
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--steel); text-transform: uppercase; letter-spacing: .06em; font-size: 11px; }
+  .scroll { overflow-x: auto; border: 2px solid var(--ink); }
+  .warn { color: var(--sev-b); font-size: 13px; margin-top: 8px; }
+  .tt { font-family: ui-monospace, Consolas, monospace; }
+  .result li { margin-bottom: 4px; }
+</style>
+</head>
+<body>
+
+<div x-data="importServicesPage()" x-init="load()">
+  <header class="bar">
+    <span class="mark"><a href="/">LoopCheck</a></span>
+    <span class="meta">Service CSV Import</span>
+  </header>
+
+  <a class="crumb" href="/">← Home</a>
+  <h1>Import service connections</h1>
+  <p class="meta">Load a service list for a water main replacement job. Recognized columns:
+    <span class="tt">address, station, account/parcel, customer name, customer phone,
+    meter number, size, material</span>. Column order does not matter and extra
+    columns are ignored. Address is the only required column.</p>
+
+  <template x-if="state === 'error'"><div class="error" x-text="errorMsg"></div></template>
+
+  <!-- 1. Project -->
+  <h2 class="section">1. Project</h2>
+  <select x-model="projectId">
+    <option value="" disabled>Choose a project…</option>
+    <template x-for="p in projects" :key="p.id">
+      <option :value="p.id" x-text="p.name"></option>
+    </template>
+  </select>
+  <p class="meta" x-show="!projects.length">No projects yet — create one on the <a href="/">home page</a> first.</p>
+
+  <!-- 2. Data -->
+  <h2 class="section">2. Paste or upload CSV</h2>
+  <input type="file" accept=".csv,text/csv,text/plain" @change="onFile($event)">
+  <label class="fl" for="csv">…or paste CSV text</label>
+  <textarea id="csv" x-model="raw" placeholder="address,station,account,customer name,phone,meter,size,material&#10;1414 Maplewood Ave,10+05 RT,44-0210,J. Alvarez,555-0134,58112203,3/4&quot;,copper"></textarea>
+  <button class="go secondary" @click="parse()" :disabled="!raw.trim()">Preview</button>
+
+  <!-- 3. Preview -->
+  <template x-if="rows.length">
+    <div>
+      <h2 class="section">3. Preview — <span x-text="rows.length"></span> rows</h2>
+      <template x-if="warnings.length">
+        <div>
+          <template x-for="w in warnings" :key="w"><div class="warn" x-text="'⚠ ' + w"></div></template>
+        </div>
+      </template>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>#</th><th>Address</th><th>Station</th><th>Acct/parcel</th><th>Customer</th><th>Meter</th><th>Size</th><th>Material</th></tr></thead>
+          <tbody>
+            <template x-for="(r, i) in rows.slice(0, 50)" :key="i">
+              <tr>
+                <td x-text="i + 1"></td>
+                <td x-text="r.address"></td>
+                <td class="tt" x-text="r.station"></td>
+                <td class="tt" x-text="r.account_or_parcel"></td>
+                <td x-text="r.customer_name"></td>
+                <td class="tt" x-text="r.old_meter_number"></td>
+                <td class="tt" x-text="r.service_size"></td>
+                <td x-text="r.service_material"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+      <p class="meta" x-show="rows.length > 50" x-text="'Showing first 50 of ' + rows.length + ' rows.'"></p>
+
+      <button class="go" :disabled="busy || !projectId" @click="doImport()"
+              x-text="busy ? ('Importing… ' + progress + '/' + rows.length) : ('Import ' + rows.length + ' services')"></button>
+      <p class="meta" x-show="!projectId">Choose a project above first.</p>
+    </div>
+  </template>
+
+  <!-- 4. Result -->
+  <template x-if="result">
+    <div>
+      <h2 class="section">Import complete</h2>
+      <div class="flash">✓ Done</div>
+      <ul class="result" style="margin-top:12px; padding-left:18px">
+        <li><strong x-text="result.created"></strong> services created</li>
+        <li><strong x-text="result.duplicates"></strong> duplicates skipped (same address + station already in the project)</li>
+        <li><strong x-text="result.blank"></strong> blank rows skipped</li>
+        <li x-show="result.errors.length" style="color:var(--sev-a)">
+          <strong x-text="result.errors.length"></strong> errors</li>
+      </ul>
+      <template x-for="e in result.errors.slice(0, 20)" :key="e"><div class="warn" x-text="e"></div></template>
+      <a class="go" style="display:block; text-align:center; text-decoration:none; line-height:60px"
+         :href="'/cutover.html?project=' + projectId">Open cutover board →</a>
+    </div>
+  </template>
+</div>
+
+<script>
+function importServicesPage() {
+  const PB = window.location.origin;
+
+  // Header synonyms → canonical field names, compared after lowercasing and
+  // stripping non-alphanumerics — same mechanics as the instrument-index
+  // import, so "Service Address", "SITE_ADDRESS", and "address" all hit.
+  const HEADER_MAP = {
+    address: 'address', serviceaddress: 'address', siteaddress: 'address',
+    streetaddress: 'address', street: 'address', location: 'address',
+    situsaddress: 'address', situs: 'address', premise: 'address',
+    premiseaddress: 'address',
+    station: 'station', sta: 'station', stationing: 'station',
+    stationoffset: 'station', planstation: 'station',
+    account: 'account_or_parcel', accountno: 'account_or_parcel',
+    accountnumber: 'account_or_parcel', acct: 'account_or_parcel',
+    acctno: 'account_or_parcel', parcel: 'account_or_parcel',
+    parcelno: 'account_or_parcel', apn: 'account_or_parcel',
+    accountorparcel: 'account_or_parcel',
+    customer: 'customer_name', customername: 'customer_name',
+    name: 'customer_name', owner: 'customer_name', resident: 'customer_name',
+    occupant: 'customer_name', ownername: 'customer_name',
+    phone: 'customer_phone', customerphone: 'customer_phone',
+    phoneno: 'customer_phone', phonenumber: 'customer_phone',
+    telephone: 'customer_phone', contactphone: 'customer_phone',
+    meter: 'old_meter_number', meterno: 'old_meter_number',
+    meternumber: 'old_meter_number', meterid: 'old_meter_number',
+    oldmeter: 'old_meter_number', oldmeterno: 'old_meter_number',
+    oldmeternumber: 'old_meter_number', existingmeter: 'old_meter_number',
+    newmeter: 'new_meter_number', newmeterno: 'new_meter_number',
+    newmeternumber: 'new_meter_number',
+    size: 'service_size', servicesize: 'service_size',
+    metersize: 'service_size', diameter: 'service_size',
+    material: 'service_material', servicematerial: 'service_material',
+    pipematerial: 'service_material', existingmaterial: 'service_material',
+    pipe: 'service_material',
+  };
+
+  const norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  return {
+    state: 'ready', errorMsg: '',
+    projects: [], projectId: new URLSearchParams(location.search).get('project') || '',
+    raw: '',
+    rows: [], warnings: [],
+    busy: false, progress: 0, result: null,
+
+    async load() {
+      try {
+        const res = await fetch(`${PB}/api/collections/projects/records?sort=name&perPage=200`);
+        this.projects = (await res.json()).items;
+      } catch (err) {
+        this.state = 'error';
+        this.errorMsg = 'Could not load projects: ' + err.message;
+      }
+    },
+
+    onFile(e) {
+      const f = e.target.files[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => { this.raw = reader.result; this.parse(); };
+      reader.readAsText(f);
+    },
+
+    // Same small, correct CSV parser as import.html: quoted fields, commas
+    // and newlines inside quotes, escaped "" quotes, CRLF.
+    parseCSV(text) {
+      const rows = [];
+      let row = [], field = '', inQ = false;
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (inQ) {
+          if (c === '"') {
+            if (text[i + 1] === '"') { field += '"'; i++; }
+            else inQ = false;
+          } else field += c;
+        } else {
+          if (c === '"') inQ = true;
+          else if (c === ',') { row.push(field); field = ''; }
+          else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+          else if (c === '\r') { /* ignore; \n handles the break */ }
+          else field += c;
+        }
+      }
+      if (field.length || row.length) { row.push(field); rows.push(row); }
+      return rows;
+    },
+
+    parse() {
+      this.rows = []; this.warnings = []; this.result = null;
+      const grid = this.parseCSV(this.raw).filter(r => r.some(c => c.trim() !== ''));
+      if (!grid.length) { this.warnings.push('No data found.'); return; }
+
+      const header = grid[0].map(norm);
+      const colFor = {};
+      header.forEach((h, idx) => {
+        const canon = HEADER_MAP[h];
+        if (canon && colFor[canon] === undefined) colFor[canon] = idx;
+      });
+
+      if (colFor.address === undefined) {
+        this.warnings.push('No recognizable "address" column found. Recognized names: address, service address, site address, street, location.');
+        return;
+      }
+      for (const need of ['station', 'account_or_parcel', 'customer_name', 'old_meter_number']) {
+        if (colFor[need] === undefined)
+          this.warnings.push(`No "${need}" column — those values will be blank.`);
+      }
+
+      const get = (r, key) => (colFor[key] !== undefined ? (r[colFor[key]] || '').trim() : '');
+      const out = [];
+      const seen = new Set(); // same address+station twice in one file = one service
+      for (let i = 1; i < grid.length; i++) {
+        const r = grid[i];
+        const address = get(r, 'address');
+        if (!address) continue;
+        const key = address.toLowerCase() + '|' + get(r, 'station').toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({
+          address,
+          station: get(r, 'station'),
+          account_or_parcel: get(r, 'account_or_parcel'),
+          customer_name: get(r, 'customer_name'),
+          customer_phone: get(r, 'customer_phone'),
+          old_meter_number: get(r, 'old_meter_number'),
+          new_meter_number: get(r, 'new_meter_number'),
+          service_size: get(r, 'service_size'),
+          service_material: get(r, 'service_material'),
+        });
+      }
+      this.rows = out;
+      if (!out.length) this.warnings.push('No rows with an address were found.');
+    },
+
+    async doImport() {
+      this.busy = true; this.progress = 0;
+      const res = { created: 0, duplicates: 0, blank: 0, errors: [] };
+      try {
+        for (const r of this.rows) {
+          this.progress++;
+          try {
+            // The unique (project, address, station) index rejects re-imports
+            // as HTTP 400 — counted as skipped, same pattern as tags.
+            const cr = await fetch(`${PB}/api/collections/services/records`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ project: this.projectId, ...r }),
+            });
+            if (cr.ok) { res.created++; }
+            else if (cr.status === 400) { res.duplicates++; }
+            else { res.errors.push(`${r.address}: HTTP ${cr.status}`); }
+          } catch (rowErr) {
+            res.errors.push(`${r.address}: ${rowErr.message}`);
+          }
+        }
+        this.result = res;
+      } catch (err) {
+        this.state = 'error';
+        this.errorMsg = 'Import failed: ' + err.message;
+      } finally {
+        this.busy = false;
+      }
+    },
+  };
+}
+</script>
+</body>
+</html>

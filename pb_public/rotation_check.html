@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoopCheck — Rotation Check</title>
+
+<!--
+  VFD Rotation & Parameter Check — the glove-sized capture page (ADR 0008).
+
+  Open as:  rotation_check.html?tag={tagRecordId}
+
+  Why a dedicated page instead of the generic check.html: the LIVE, colour-coded
+  guidance is the module's reason to exist. A motor that runs backward is not
+  necessarily wired backward — on a VFD, a drive parameter can reverse one
+  control mode in software. The diagnostic is the PAIR of observations (Hand and
+  Auto), and the page must tell the tech "do NOT swap leads" WHILE they stand at
+  the drive, before they LOTO the MCC and reland leads on a software fault.
+
+  The record itself is an ORDINARY check (ADR 0008): standard checks +
+  check_items, same append-only ledger, same frozen prompts, one engine — no new
+  collection, no new result value. Direction is stored as the two 'value' lines
+  ('forward' / 'reverse'); the hardware-vs-software reading is DERIVED from those
+  two facts by this page and the board, never stored (hard constraint #4).
+
+  The template is chosen by the tag's has_vfd flag — two templates, not one with
+  an if (hard constraint #5): {tag_type}.rotation vs {tag_type}.rotationVfd.
+-->
+<link rel="stylesheet" href="/app.css">
+<script defer src="/vendor/alpine.min.js"></script>
+<style>
+  /* Direction picker — glove-sized. Selected reads simply as "chosen"
+     (dark fill), NOT as good/bad: reverse is not inherently a fault
+     (reverse+reverse is hardware, forward+reverse is software). The
+     DIAGNOSIS banner below does all the interpreting. */
+  .dirblock { border: 2px solid var(--line); padding: 14px; margin-bottom: 12px; }
+  .dirblock .lbl { font-size: 12px; font-weight: 800; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--steel); }
+  .dirblock .hint { font-size: 13px; color: var(--steel); margin: 2px 0 10px; }
+  .dir { display: flex; gap: 10px; }
+  .dir button {
+    flex: 1; min-height: 64px; font: inherit; font-size: 17px; font-weight: 800;
+    letter-spacing: .04em; border: 2px solid var(--ink); background: var(--paper);
+    color: var(--ink); cursor: pointer;
+  }
+  .dir button.on { background: var(--ink); color: var(--paper); }
+
+  /* Live diagnosis banner — the point of the whole page. */
+  .diag { padding: 16px; margin: 4px 0 16px; border: 3px solid var(--line); }
+  .diag .title { font-size: 18px; font-weight: 900; text-transform: uppercase;
+    letter-spacing: .03em; }
+  .diag .detail { margin-top: 6px; font-size: 15px; font-weight: 600; }
+  .diag.pass { border-color: var(--go); background: #e9f5ee; color: var(--go); }
+  .diag.hw   { border-color: var(--sev-a); background: #fbe9e7; color: var(--sev-a); }
+  .diag.sw   { border-color: var(--sev-b); background: #fdf1de; color: #8a5a00; }
+  .diag.inc  { border-color: var(--steel); background: var(--wash); color: var(--steel); }
+
+  .param { border: 2px solid var(--line); padding: 12px; margin-bottom: 10px; }
+  .param .txt { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+  .valrow { display: flex; gap: 8px; align-items: center; }
+  .valrow input { flex: 1; }
+  .valrow .unit { font-family: ui-monospace, Consolas, monospace; font-weight: 700;
+    color: var(--steel); white-space: nowrap; }
+
+  .vfdbadge { display: inline-block; font-size: 11px; font-weight: 800;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--safety);
+    border: 2px solid var(--safety); padding: 1px 7px; }
+
+  .result-banner { padding: 16px; font-size: 20px; font-weight: 800;
+    text-transform: uppercase; letter-spacing: .04em; color: #fff; margin-top: 8px; }
+  .result-banner.pass { background: var(--go); }
+  .result-banner.fail { background: var(--sev-a); }
+  .result-banner.incomplete { background: var(--sev-b); }
+
+  .failflag { border: 2px solid var(--sev-a); padding: 12px; margin-top: 12px; }
+</style>
+</head>
+<body>
+
+<div x-data="rotationCheck()" x-init="load()">
+
+  <header class="bar">
+    <span class="mark"><a href="/">LoopCheck</a></span>
+    <span class="tag" x-text="tag?.tag_number || '—'"></span>
+  </header>
+
+  <template x-if="state === 'loading'"><p class="loading">Loading…</p></template>
+  <template x-if="state === 'error'"><div class="error" x-text="errorMsg"></div></template>
+
+  <!-- No rotation checklist exists for this tag_type (only pump_centrifugal
+       and motor carry rotation templates in the seed library). -->
+  <template x-if="state === 'notype'">
+    <main>
+      <a class="crumb" :href="backHref" x-text="'← ' + (tag?.tag_number || 'Tag')"></a>
+      <h1>No rotation check for this equipment</h1>
+      <p class="empty">Rotation &amp; VFD verification applies to rotating equipment
+        (pumps and motors). This tag is
+        <strong x-text="tag?.tag_type || 'another type'"></strong>.</p>
+    </main>
+  </template>
+
+  <!-- ============ Capture ============ -->
+  <template x-if="state === 'run'">
+    <main>
+      <a class="crumb" :href="backHref" x-text="'← ' + (tag.description || tag.tag_number)"></a>
+      <h1 x-text="template.name"></h1>
+      <p class="meta">
+        Energization · rotation verification
+        <span x-show="tag.has_vfd"> · <span class="vfdbadge">VFD</span></span>
+      </p>
+
+      <!-- HAND -->
+      <div class="dirblock">
+        <div class="lbl">Rotation in HAND</div>
+        <div class="hint">Local bump — which way does it turn?</div>
+        <div class="dir">
+          <button :class="dir.hand === 'forward' && 'on'"
+                  @click="dir.hand = dir.hand === 'forward' ? '' : 'forward'">Forward</button>
+          <button :class="dir.hand === 'reverse' && 'on'"
+                  @click="dir.hand = dir.hand === 'reverse' ? '' : 'reverse'">Reverse</button>
+        </div>
+      </div>
+
+      <!-- AUTO -->
+      <div class="dirblock">
+        <div class="lbl">Rotation in AUTO</div>
+        <div class="hint">Remote / SCADA start — which way does it turn?</div>
+        <div class="dir">
+          <button :class="dir.auto === 'forward' && 'on'"
+                  @click="dir.auto = dir.auto === 'forward' ? '' : 'forward'">Forward</button>
+          <button :class="dir.auto === 'reverse' && 'on'"
+                  @click="dir.auto = dir.auto === 'reverse' ? '' : 'reverse'">Reverse</button>
+        </div>
+      </div>
+
+      <!-- LIVE diagnosis — updates on every tap. This is the safety guidance
+           shown while the tech is at the drive. -->
+      <div class="diag" :class="diag().cls">
+        <div class="title" x-text="diag().title"></div>
+        <div class="detail" x-text="diag().detail"></div>
+      </div>
+
+      <!-- VFD parameters — only on the has_vfd variant (value lines with
+           units). Vendors require the loaded parameters in the record. -->
+      <template x-if="paramItems.length">
+        <div>
+          <h2 class="section">VFD parameters (record as loaded)</h2>
+          <template x-for="it in paramItems" :key="it.id">
+            <div class="param">
+              <div class="txt" x-text="it.text"></div>
+              <div class="valrow">
+                <input type="text" inputmode="decimal" x-model="ans[it.id]"
+                       placeholder="setting">
+                <span class="unit" x-text="it.unit || ''"></span>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- Sign-off -->
+      <h2 class="section">Sign-off</h2>
+      <label class="fl" for="pby">Performed by</label>
+      <input id="pby" type="text" x-model="performedBy" placeholder="Your name">
+      <label class="fl" for="pat">Performed on</label>
+      <input id="pat" type="date" x-model="performedAt">
+      <label class="fl" for="nts">Notes</label>
+      <textarea id="nts" x-model="notes" placeholder="anything the record should carry"></textarea>
+      <label class="fl" for="photo">Photo (optional)</label>
+      <input id="photo" type="file" accept="image/*" capture="environment"
+             @change="photo = $event.target.files[0] || null">
+
+      <p class="meta" style="margin-top:12px">
+        Recorded result: <strong x-text="rotationResult().toUpperCase()"></strong>
+        <span x-show="rotationResult() === 'incomplete'"> — record both Hand and Auto for a conclusion.</span>
+      </p>
+
+      <button class="go" :disabled="busy || !performedBy.trim()"
+              @click="submit()" x-text="busy ? 'Writing to the ledger…' : 'Sign & log rotation check'"></button>
+      <div class="error" x-show="submitError" x-text="submitError"></div>
+      <p class="meta" style="margin-top:8px">
+        Once signed, this record is append-only — a re-test after the fix is a
+        new check. The failed record stays in the ledger as proof the conflict
+        was found.
+      </p>
+    </main>
+  </template>
+
+  <!-- ============ Done ============ -->
+  <template x-if="state === 'done'">
+    <main>
+      <h1 x-text="template.name"></h1>
+      <div class="result-banner" :class="finalResult" x-text="finalResult.toUpperCase()"></div>
+
+      <!-- The derived reading spelled out — the reason this page exists. -->
+      <div class="diag" :class="doneDiag.cls" style="margin-top:12px">
+        <div class="title" x-text="doneDiag.title"></div>
+        <div class="detail" x-text="doneDiag.detail"></div>
+      </div>
+
+      <p class="meta" style="margin-top:8px">
+        Logged by <span x-text="performedBy"></span> · in the ledger, append-only.
+        <span x-show="partialErrors.length" style="color:var(--sev-a)"
+              x-text="' Some lines failed to write: ' + partialErrors.join('; ')"></span>
+      </p>
+
+      <!-- A failed rotation is a punch item — carry source_check as evidence
+           (ADR 0004 / 0008). The description is pre-filled with the derived
+           diagnosis so the fault class rides into the punch list. -->
+      <template x-if="finalResult === 'fail' && !flagged">
+        <div class="failflag">
+          <div style="font-weight:700" x-text="doneDiag.title"></div>
+          <textarea x-model="flagDesc" style="margin-top:8px"></textarea>
+          <div class="sevpick" style="margin-top:8px">
+            <label class="a" :class="flagSev === 'A' && 'on'"><input type="radio" value="A" x-model="flagSev">A<small>blocks startup</small></label>
+            <label class="b" :class="flagSev === 'B' && 'on'"><input type="radio" value="B" x-model="flagSev">B<small>blocks completion</small></label>
+            <label class="c" :class="flagSev === 'C' && 'on'"><input type="radio" value="C" x-model="flagSev">C<small>cosmetic</small></label>
+          </div>
+          <button class="go" style="margin-top:10px" :disabled="busy || !flagDesc.trim()"
+                  @click="flagFail()">Flag punch item (links this check as evidence)</button>
+        </div>
+      </template>
+      <template x-if="flagged">
+        <p class="flash" style="margin-top:12px">✓ Punch item flagged, source_check linked</p>
+      </template>
+
+      <a class="crumb" style="display:block; margin-top:20px"
+         :href="backHref" x-text="'← Back to ' + tag.tag_number"></a>
+    </main>
+  </template>
+
+</div>
+
+<script>
+function rotationCheck() {
+  const PB = window.location.origin;
+
+  // The four-outcome diagnostic (ADR 0008). Given the two direction readings
+  // it returns the DERIVED reading and the stored result. Both fault classes
+  // store result='fail' (both block startup); the hardware-vs-software
+  // distinction is derived here, never stored.
+  function diagnose(hand, auto) {
+    if (!hand || !auto) {
+      return { key: 'incomplete', result: 'incomplete', cls: 'inc',
+        title: 'Incomplete',
+        detail: 'Record both Hand and Auto rotation to get a reading.' };
+    }
+    if (hand === 'forward' && auto === 'forward') {
+      return { key: 'pass', result: 'pass', cls: 'pass',
+        title: 'Rotation correct',
+        detail: 'Hand and Auto both run forward.' };
+    }
+    if (hand === auto) {
+      // both reverse — the copper is wrong the same way in every mode
+      return { key: 'hardware', result: 'fail', cls: 'hw',
+        title: 'Hardware fault — phase sequence',
+        detail: 'Both modes run reverse. Phase sequence is wrong at the motor — ' +
+          'swap two leads at the MCC (LOTO first). This is a wiring correction.' };
+    }
+    // Hand and Auto disagree — the copper cannot know which mode started the
+    // motor, so a mismatch is by definition NOT a wiring problem.
+    return { key: 'software', result: 'fail', cls: 'sw',
+      title: 'Software conflict — DO NOT swap leads',
+      detail: 'Hand and Auto disagree. The wiring is fine; a VFD reference / ' +
+        'direction parameter is reversing one control mode. Correct the drive ' +
+        'parameter, not the leads.' };
+  }
+
+  return {
+    tagId: new URLSearchParams(location.search).get('tag') || '',
+    state: 'loading', errorMsg: '',
+    tag: null, template: null, items: [], paramItems: [],
+    handItem: null, autoItem: null,
+    dir: { hand: '', auto: '' },   // 'forward' | 'reverse' | ''
+    ans: {},                        // paramItemId -> entered value string
+    performedBy: localStorage.getItem('lc_name') || '',
+    performedAt: new Date().toISOString().slice(0, 10),
+    notes: '', photo: null,
+    busy: false, submitError: '', partialErrors: [],
+    finalResult: '', checkId: '', doneDiag: {},
+    flagged: false, flagDesc: '', flagSev: 'A',
+
+    get backHref() {
+      return this.tag ? '/t/' + encodeURIComponent(this.tag.tag_number) : '/';
+    },
+
+    // Live reading for the capture screen.
+    diag() { return diagnose(this.dir.hand, this.dir.auto); },
+    rotationResult() { return this.diag().result; },
+
+    async load() {
+      if (!this.tagId) {
+        this.state = 'error';
+        this.errorMsg = 'No tag in the URL. Open this page from a tag.';
+        return;
+      }
+      try {
+        const tRes = await fetch(`${PB}/api/collections/tags/records/${this.tagId}`);
+        if (!tRes.ok) throw new Error('tag not found (' + tRes.status + ')');
+        this.tag = await tRes.json();
+
+        // Pick the template variant by the has_vfd flag — two templates, not
+        // an if (hard constraint #5). Fall back to the non-VFD variant if the
+        // VFD one is somehow absent, then give up cleanly.
+        const base = this.tag.tag_type + '.rotation';
+        const wanted = this.tag.has_vfd ? [base + 'Vfd', base] : [base, base + 'Vfd'];
+        let tpl = null;
+        for (const key of wanted) {
+          const f = encodeURIComponent(`template_key='${key}'`);
+          const r = await fetch(`${PB}/api/collections/checklist_templates/records?filter=(${f})&perPage=1`);
+          const items = (await r.json()).items;
+          if (items.length) { tpl = items[0]; break; }
+        }
+        if (!tpl) { this.state = 'notype'; return; }
+        this.template = tpl;
+
+        // Freeze-source lines, in order. HAND/AUTO are the two direction lines
+        // (matched by prompt); anything with a unit is a VFD parameter.
+        const f = encodeURIComponent(`template='${tpl.id}'`);
+        const iRes = await fetch(`${PB}/api/collections/template_items/records?filter=(${f})&sort=sequence&perPage=50`);
+        this.items = (await iRes.json()).items;
+        this.handItem = this.items.find(i => /\bHAND\b/i.test(i.text)) || null;
+        this.autoItem = this.items.find(i => /\bAUTO\b/i.test(i.text)) || null;
+        this.paramItems = this.items.filter(i => i.unit);
+        for (const it of this.paramItems) this.ans[it.id] = '';
+
+        this.state = 'run';
+      } catch (err) {
+        this.state = 'error';
+        this.errorMsg = 'Could not load: ' + err.message;
+      }
+    },
+
+    async submit() {
+      this.busy = true; this.submitError = ''; this.partialErrors = [];
+      if (this.performedBy) localStorage.setItem('lc_name', this.performedBy);
+      const d = this.diag();
+      try {
+        // 1. The check first — the write order can never lose it. phase is
+        //    FROZEN from the template; the result is the DERIVED rotation
+        //    result (pass / fail / incomplete), same three values every
+        //    existing consumer already understands (ADR 0008).
+        const cRes = await fetch(`${PB}/api/collections/checks/records`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tag: this.tag.id,
+            template: this.template.id,
+            phase: this.template.phase,
+            result: d.result,
+            performed_by: this.performedBy,
+            witnessed_by: '',
+            performed_at: this.performedAt + ' 00:00:00',
+            notes: this.notes,
+            witness_required: !!this.template.witness_required,
+            test_equipment_used: [],
+            test_equipment_note: '',
+          }),
+        });
+        if (!cRes.ok) throw new Error('check rejected (' + cRes.status + ')');
+        const check = await cRes.json();
+        this.checkId = check.id;
+
+        // 2. Every template line, freezing its prompt. Direction lines store
+        //    the 'forward'/'reverse' value; parameter lines store the reading.
+        //    These are the two facts the hardware-vs-software reading derives
+        //    from — the ledger holds the facts, not the interpretation.
+        for (const it of this.items) {
+          let value = '';
+          if (this.handItem && it.id === this.handItem.id) value = this.dir.hand;
+          else if (this.autoItem && it.id === this.autoItem.id) value = this.dir.auto;
+          else value = this.ans[it.id] || '';
+          const iRes = await fetch(`${PB}/api/collections/check_items/records`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              check: check.id,
+              template_item: it.id,
+              prompt: it.text,
+              result: '',
+              value,
+              note: '',
+            }),
+          });
+          if (!iRes.ok) this.partialErrors.push('#' + it.sequence);
+        }
+
+        // 3. Optional evidence photo rides the polymorphic attachments
+        //    collection, parented to the check (ADR 0004 anticipated
+        //    parent_collection='checks' — nameplate/evidence photos on checks).
+        if (this.photo) {
+          const fd = new FormData();
+          fd.append('file', this.photo);
+          fd.append('parent_collection', 'checks');
+          fd.append('parent_id', check.id);
+          fd.append('uploaded_by', this.performedBy);
+          const aRes = await fetch(`${PB}/api/collections/attachments/records`, { method: 'POST', body: fd });
+          if (!aRes.ok) this.partialErrors.push('photo');
+        }
+
+        this.finalResult = d.result;
+        this.doneDiag = d;
+        this.flagDesc = this.tag.tag_number + ' — ' + d.title + '. ' + d.detail;
+        this.flagSev = 'A';   // a rotation fault blocks startup
+        this.state = 'done';
+        window.scrollTo(0, 0);
+      } catch (err) {
+        this.submitError = 'Could not write the check: ' + err.message;
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    // Failed rotation -> punch item carrying source_check (the evidence chain).
+    async flagFail() {
+      this.busy = true;
+      try {
+        const res = await fetch(`${PB}/api/collections/punch_items/records`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project: this.tag.project,
+            tag: this.tag.id,
+            system: this.tag.system || null,
+            description: this.flagDesc,
+            severity: this.flagSev,
+            status: 'open',
+            assigned_party: 'contractor',
+            created_by: this.performedBy,
+            source_check: this.checkId,
+          }),
+        });
+        if (!res.ok) throw new Error('punch rejected (' + res.status + ')');
+        this.flagged = true;
+      } catch (err) {
+        this.submitError = err.message;
+      } finally {
+        this.busy = false;
+      }
+    },
+  };
+}
+</script>
+</body>
+</html>

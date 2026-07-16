@@ -1,0 +1,262 @@
+{
+  "schema_version": 1,
+  "notes": "Service cutover checklist templates — one per service phase, in cutover order: notice -> locatePothole -> newService -> meter -> tieOver -> restoration. subject_kind 'service' points these at the services collection (ADR 0006). Same four response types as every other template; confirm_per_spec marks values the project spec governs. The notice template is the dispute-proof record: a timestamped, photographed door-hanger log.",
+  "templates": [
+    {
+      "template_key": "service.notice",
+      "tag_type": null,
+      "phase": "notice",
+      "name": "Service Cutover — 48-Hour Notice",
+      "recurrence": null,
+      "subject_kind": "service",
+      "items": [
+        {
+          "seq": 1,
+          "text": "48-hour notice / door hanger delivered to the service address",
+          "response": "pass_fail_na",
+          "unit": null,
+          "confirm_per_spec": false
+        },
+        {
+          "seq": 2,
+          "text": "Photo of the door hanger in place on the door (the notice evidence)",
+          "response": "photo_required",
+          "unit": null,
+          "confirm_per_spec": false
+        },
+        {
+          "seq": 3,
+          "text": "Spoken contact with resident, if any — who, and their response",
+          "response": "text",
+          "unit": null,
+          "confirm_per_spec": false
+        }
+      ]
+    },
+    {
+      "template_key": "service.locatePothole",
+      "tag_type": null,
+      "phase": "locatePothole",
+      "name": "Service Cutover — Locate & Pothole",
+      "recurrence": null,
+      "subject_kind": "service",
+      "items": [
+        {
+          "seq": 1,
+          "text": "One-call / 811 ticket number covering this address",
+          "response": "text",
+          "unit": null,
+          "confirm_per_spec": false
+        },
+        {
+          "seq": 2,
+          "text": "Utility marks present and service potholed without conflict",
+          "response": "pass_fail_na",
+          "unit": null,
+          "confirm_per_spec": false
+        },
+        {
+          "seq": 3,
+          "text": "Depth of existing service at pothole",
+          "response": "value",
+          "unit": "in",
+          "confirm_per_spec": false
+        },
+        {
+          "seq": 4,
+          "text": "Existing service material and condition as found",
+          "response": "text",
+          "unit": null,
+          "confirm_per_spec": false
+        },
+        {
+          "seq": 5,
+          "text": "Offset of existing service from meter box / property corner",
+          "response": "value",
+          "unit": "ft",
+          "confirm_per_spec": false
+        },
+        {
+          "seq": 6,
+          "text": "Photo of the exposed service in the pothole",
+          "response": "photo_required",
+          "unit": null,
+          "confirm_per_spec": false
+        }
+      ]
+    },
+    {
+      "template_key": "service.newService",
+      "tag_type": null,
+      "phase": "newService",
+      "name": "Service Cutover — New Service Installation",
+      "recurrence": null,
+      "subject_kind": "service",
+      "items": [
+        {
+          "seq": 1,
+          "text": "Corporation stop installed at the new main — correct size and type per approved submittal",
+          "response": "pass_fail_na",
+          "unit": null,
+          "confirm_per_spec": false
+        },
+        {
+          "seq": 2,
+          "text": "New service line installed with minimum cover per spec",
+          "response": "pass_fail_na",
+          "unit": null,
+          "confirm_per_spec": true
+        },
+        {
+          "seq": 3,
+          "text": "Tracer wire / marking tape installed and continuous to the meter box",
+          "response": "pass_fail_na",
+          "unit": null,
+          "confirm_per_spec": false
+        },
+        {
+          "seq": 4,
+          "text": "Service pressure tested — with the main, or individually where the spec requires",
+          "response": "pass_fail_na",
+          "unit": null,
+          "confirm_per_spec": true
+        },
+        {
+          "seq": 5,
+          "text": "Test pressure held",
+          "response": "value",
+          "unit": "psi",
+          "confirm_per_spec": true
+        }
+      ]
+    },
+    {
+      "template_key": "service.meter",
+      "tag_type": null,
+      "phase": "meter",
+      "name": "Service Cutover — Meter Set / Swap",
+      "recurrence": null,
+      "subject_kind": "service",
+      "items": [
+        {
+          "seq": 1,
+          "text": "Old meter final register reading",
+          "response": "value",
+          "unit": "gal",
+          "confirm_per_spec": false
+        },
+        {
+          "seq": 2,
+          "text": "New meter initial register reading",
+          "response": "value",
+          "unit": "gal",
+          "confirm_per_spec": false
+        },
+        {
+          "seq": 3,
+          "text": "New meter number as set",
+          "response": "text",
+          "unit": null,
+          "confirm_per_spec": false
+        },
+        {
+          "seq": 4,
+          "text": "Meter, setter, and box set to grade; lid seats flush",
+          "response": "pass_fail_na",
+          "unit": null,
+          "confirm_per_spec": false
+        },
+        {
+          "seq": 5,
+          "text": "No leaks at setter or couplings under line pressure",
+          "response": "pass_fail_na",
+          "unit": null,
+          "confirm_per_spec": false
+        }
+      ]
+    },
+    {
+      "template_key": "service.tieOver",
+      "tag_type": null,
+      "phase": "tieOver",
+      "name": "Service Cutover — Tie-Over",
+      "recurrence": null,
+      "subject_kind": "service",
+      "items": [
+        {
+          "seq": 1,
+          "text": "Customer outage start time (24-hr)",
+          "response": "value",
+          "unit": "hh:mm",
+          "confirm_per_spec": false
+        },
+        {
+          "seq": 2,
+          "text": "Customer switched to new main — flow and pressure verified at outside hose bib",
+          "response": "pass_fail_na",
+          "unit": null,
+          "confirm_per_spec": false
+        },
+        {
+          "seq": 3,
+          "text": "Old service killed at the main — corp closed and capped / crimped per spec",
+          "response": "pass_fail_na",
+          "unit": null,
+          "confirm_per_spec": true
+        },
+        {
+          "seq": 4,
+          "text": "Customer outage end time (24-hr)",
+          "response": "value",
+          "unit": "hh:mm",
+          "confirm_per_spec": false
+        },
+        {
+          "seq": 5,
+          "text": "Customer advised to flush lines / air noted and cleared",
+          "response": "pass_fail_na",
+          "unit": null,
+          "confirm_per_spec": false
+        }
+      ]
+    },
+    {
+      "template_key": "service.restoration",
+      "tag_type": null,
+      "phase": "restoration",
+      "name": "Service Cutover — Restoration",
+      "recurrence": null,
+      "subject_kind": "service",
+      "items": [
+        {
+          "seq": 1,
+          "text": "Temporary patch placed, compacted, and marked",
+          "response": "pass_fail_na",
+          "unit": null,
+          "confirm_per_spec": false
+        },
+        {
+          "seq": 2,
+          "text": "Final hardscape restoration complete (AC / concrete / pavers to match existing)",
+          "response": "pass_fail_na",
+          "unit": null,
+          "confirm_per_spec": false
+        },
+        {
+          "seq": 3,
+          "text": "Final landscape restoration complete (turf, irrigation, plantings)",
+          "response": "pass_fail_na",
+          "unit": null,
+          "confirm_per_spec": false
+        },
+        {
+          "seq": 4,
+          "text": "Photo of completed restoration at the address",
+          "response": "photo_required",
+          "unit": null,
+          "confirm_per_spec": false
+        }
+      ]
+    }
+  ]
+}

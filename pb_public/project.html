@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoopCheck — Project</title>
+<!--
+  Project home — systems ordered by startup sequence, each showing its open
+  punch-item counts by severity. The counts are DERIVED live from the punch
+  ledger on every load; no status is stored on a system.
+-->
+<link rel="stylesheet" href="/app.css">
+<script defer src="/vendor/alpine.min.js"></script>
+</head>
+<body>
+
+<div x-data="projectPage()" x-init="load()">
+  <header class="bar">
+    <span class="mark"><a href="/">LoopCheck</a></span>
+    <span class="meta">Project</span>
+  </header>
+
+  <template x-if="state === 'loading'"><p class="loading">Loading…</p></template>
+  <template x-if="state === 'error'"><div class="error" x-text="errorMsg"></div></template>
+
+  <template x-if="state === 'ready'">
+    <main>
+      <a class="crumb" href="/">← All projects</a>
+      <h1 x-text="project.name"></h1>
+      <p class="meta">
+        <span x-show="project.owner_name" x-text="'Owner: ' + project.owner_name"></span>
+        <span x-show="project.engineer_of_record" x-text="' · EOR: ' + project.engineer_of_record"></span>
+        <span x-show="project.contractor_name" x-text="' · ' + project.contractor_name"></span>
+      </p>
+
+      <h2 class="section">Systems — startup sequence</h2>
+      <template x-if="!systems.length">
+        <p class="empty">No systems yet. Import an instrument index on the
+          <a href="/import.html">CSV import page</a> — systems are created from it automatically.</p>
+      </template>
+
+      <template x-for="s in systems" :key="s.id">
+        <a class="card" :href="'/system.html?id=' + s.id">
+          <div style="display:flex; justify-content:space-between; gap:10px; align-items:baseline">
+            <span class="title">
+              <span class="mono" x-text="s.number"></span>
+              <span x-show="s.name" x-text="' — ' + s.name"></span>
+            </span>
+            <span class="meta" x-show="s.startup_sequence !== null && s.startup_sequence !== ''"
+                  x-text="'seq ' + s.startup_sequence"></span>
+          </div>
+          <div class="counts">
+            <span class="count sev-A" :class="{zero: !counts(s.id).A}" x-text="'A ' + counts(s.id).A"></span>
+            <span class="count sev-B" :class="{zero: !counts(s.id).B}" x-text="'B ' + counts(s.id).B"></span>
+            <span class="count sev-C" :class="{zero: !counts(s.id).C}" x-text="'C ' + counts(s.id).C"></span>
+            <span class="count" style="color:var(--go)" x-show="!counts(s.id).total">clear</span>
+          </div>
+        </a>
+      </template>
+
+      <!-- Project-level punch items (not tied to any system) -->
+      <template x-if="projectPunchTotal">
+        <div>
+          <h2 class="section">Unassigned punch items</h2>
+          <div class="counts">
+            <span class="count sev-A" :class="{zero: !projectPunch.A}" x-text="'A ' + projectPunch.A"></span>
+            <span class="count sev-B" :class="{zero: !projectPunch.B}" x-text="'B ' + projectPunch.B"></span>
+            <span class="count sev-C" :class="{zero: !projectPunch.C}" x-text="'C ' + projectPunch.C"></span>
+          </div>
+          <p class="meta">Punch items on this project not linked to a system.</p>
+        </div>
+      </template>
+
+      <!-- Startup & commissioning deliverables. -->
+      <h2 class="section">Startup &amp; commissioning</h2>
+      <!-- Readiness matrix (forms-library review §3) — the turnover output
+           spec: one row per tag folding checkout phases + closeout
+           deliverables, dates in every cell. The free print view. -->
+      <a class="card" :href="'/readiness.html?project=' + project.id">
+        <div class="title">Readiness matrix</div>
+        <div class="sub">Every tag × checkout phase and closeout deliverable, completion dates, one grid — the turnover log, derived live</div>
+      </a>
+      <!-- Turnover packages (ADR 0010) — the signed, frozen deliverable. -->
+      <a class="card" :href="'/turnover.html?project=' + project.id">
+        <div class="title">Turnover &amp; signatures</div>
+        <div class="sub">Build a sealed, frozen turnover package, collect signatures, print the record — ready-to-witness list included</div>
+      </a>
+      <!-- Rotation & VFD board (ADR 0008) — the board is empty of rotating
+           equipment on non-motor jobs. -->
+      <a class="card" :href="'/rotation.html?project=' + project.id">
+        <div class="title">Rotation &amp; VFD board</div>
+        <div class="sub">Every pump and motor by system — Hand/Auto reading, hardware vs software conflict, derived live</div>
+      </a>
+      <!-- Instrument calibration (ADR 0016): current standing is derived from
+           the latest calibration date + interval, never stored on the tag. -->
+      <a class="card" :href="'/calibrations.html?project=' + project.id">
+        <div class="title">Instrument calibration</div>
+        <div class="sub">Every instrument by next due — overdue first, with expired-standard flags</div>
+      </a>
+
+      <!-- LOTO Status Board (ADR 0007) — safety visibility, always shown. -->
+      <h2 class="section">Safety</h2>
+      <a class="card" :href="'/loto.html?project=' + project.id">
+        <div class="title">LOTO status board</div>
+        <div class="sub">Every active lock, grouped by system, oldest first — visibility only, never authority</div>
+      </a>
+
+      <!-- Service cutover (ADR 0006) — only shown when the job has service
+           connections, so plant-only projects never see it. -->
+      <template x-if="hasServices">
+        <div>
+          <h2 class="section">Service cutover</h2>
+          <a class="card" :href="'/cutover.html?project=' + project.id">
+            <div class="title">Cutover board</div>
+            <div class="sub">Every service by station — notice through restoration, derived live</div>
+          </a>
+          <a class="card" :href="'/notice_batch.html?project=' + project.id">
+            <div class="title">Batch 48-hour notices</div>
+            <div class="sub">Walk the block; log each door hanger with its photo</div>
+          </a>
+        </div>
+      </template>
+
+      <h2 class="section">Print labels</h2>
+      <a class="card" :href="'/labels.html?project=' + project.id">
+        <div class="title">QR label sheet</div>
+        <div class="sub">Print tag QR labels for a system in this project</div>
+      </a>
+
+      <!-- Warranty & Closeout module (ADR 0005) -->
+      <h2 class="section">Warranty &amp; closeout</h2>
+      <a class="card" :href="'/closeout.html?project=' + project.id">
+        <div class="title">Closeout dashboard</div>
+        <div class="sub">Deliverables owed per tag — the "ready for final completion" view</div>
+      </a>
+      <a class="card" :href="'/warranty.html?project=' + project.id">
+        <div class="title">Warranty timeline</div>
+        <div class="sub">Derived expirations, soonest first; flags anything inside 90 days</div>
+      </a>
+      <a class="card" :href="'/closeout-package.html?project=' + project.id">
+        <div class="title">Warranty log &amp; closeout package</div>
+        <div class="sub">Print-friendly package per project or system</div>
+      </a>
+    </main>
+  </template>
+</div>
+
+<script>
+function projectPage() {
+  const PB = window.location.origin;
+  return {
+    projectId: new URLSearchParams(location.search).get('id') || '',
+    state: 'loading', errorMsg: '',
+    project: null,
+    systems: [],
+    punchBySystem: {},   // systemId -> {A,B,C,total}
+    projectPunch: { A: 0, B: 0, C: 0 },
+    hasServices: false,  // gates the cutover section (ADR 0006)
+
+    counts(sid) {
+      return this.punchBySystem[sid] || { A: 0, B: 0, C: 0, total: 0 };
+    },
+    get projectPunchTotal() {
+      return this.projectPunch.A + this.projectPunch.B + this.projectPunch.C;
+    },
+
+    async load() {
+      if (!this.projectId) {
+        this.state = 'error'; this.errorMsg = 'No project id in the URL.'; return;
+      }
+      try {
+        const pRes = await fetch(`${PB}/api/collections/projects/records/${this.projectId}`);
+        if (!pRes.ok) throw new Error('project not found (' + pRes.status + ')');
+        this.project = await pRes.json();
+
+        // Systems ordered by startup sequence (nulls last, then by number).
+        const sFilter = encodeURIComponent(`project='${this.projectId}'`);
+        const sRes = await fetch(
+          `${PB}/api/collections/systems/records?filter=(${sFilter})&sort=startup_sequence,number&perPage=500`);
+        this.systems = (await sRes.json()).items;
+
+        // All OPEN punch items on the project, grouped into severity counts by
+        // system. This is the derived readiness signal — computed here, never
+        // stored on a system row.
+        const puFilter = encodeURIComponent(`project='${this.projectId}' && status='open'`);
+        const puRes = await fetch(
+          `${PB}/api/collections/punch_items/records?filter=(${puFilter})&perPage=1000&fields=id,severity,system`);
+        const open = (await puRes.json()).items;
+        const by = {};
+        for (const p of open) {
+          if (p.system) {
+            (by[p.system] ||= { A: 0, B: 0, C: 0, total: 0 });
+            by[p.system][p.severity]++; by[p.system].total++;
+          } else {
+            this.projectPunch[p.severity]++;
+          }
+        }
+        this.punchBySystem = by;
+
+        // Does this job have service connections? One-record probe (no PII
+        // fields requested) decides whether the cutover section renders.
+        const svRes = await fetch(
+          `${PB}/api/collections/services/records?filter=(${sFilter})&perPage=1&fields=id`);
+        this.hasServices = svRes.ok && (await svRes.json()).items.length > 0;
+
+        this.state = 'ready';
+      } catch (err) {
+        this.state = 'error';
+        this.errorMsg = 'Could not load project. (' + err.message + ')';
+      }
+    },
+  };
+}
+</script>
+</body>
+</html>

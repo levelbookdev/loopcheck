@@ -1,0 +1,1655 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoopCheck — Tag</title>
+
+<!--
+  LoopCheck tag page — the page a QR label opens.
+
+  The QR encodes a clean, human-readable URL:  {baseUrl}/t/PMP-3101
+  A pb_hooks route (pb_hooks/main.pb.js) serves THIS file for /t/{tag_number},
+  and the code below reads the tag number back out of the URL path. If the page
+  is opened the plain way (tag.html?n=PMP-3101) that works too.
+
+  PocketBase serves this file from pb_public/ at the same origin as its API,
+  so the page talks to window.location.origin — no configuration, and the same
+  file works on localhost, a plant LAN IP, or a real domain. Alpine is vendored
+  locally: zero external requests at runtime.
+-->
+<link rel="stylesheet" href="/app.css">
+<script defer src="/vendor/alpine.min.js"></script>
+</head>
+<body>
+
+<div x-data="tagPage()" x-init="load()">
+
+  <!-- ===== LOTO status (ADR 0007) — above EVERYTHING else, including the
+       page header. Highest-consequence information first: is this equipment
+       locked out, by whom, since when. This is a VISIBILITY layer, not a
+       LOTO program — every state carries the data-freshness time and the
+       verify-physically line, and there is deliberately no green state:
+       absence of locks is a statement about the ledger, never a safety
+       claim. Renders even when the page itself failed to load, from the
+       last-synced cache, marked stale. -->
+  <div>
+    <!-- Queued events on this phone (offline outbox): writes may queue —
+         but the person who just logged an apply in a dead zone must see it
+         counted, not a terrifyingly wrong "no locks recorded". -->
+    <template x-if="lotoQueue.length">
+      <div class="loto stale">
+        <div class="headline" x-text="lotoQueue.length + ' LOTO event' + (lotoQueue.length === 1 ? '' : 's') + ' queued on this phone'"></div>
+        <div class="verify">Not yet synced to the server — will sync automatically when connected.
+          <button class="link" style="color:#fff" @click="flushOutbox().then(() => syncLoto())">Sync now</button>
+        </div>
+      </div>
+    </template>
+
+    <!-- Stale: the fetch failed (showing cache) or the page has sat open
+         past the threshold. Never a confident presentation. -->
+    <template x-if="lotoLoaded && lotoIsStale && lotoSyncedAt">
+      <div class="loto stale">
+        <div class="headline">Status may be stale</div>
+        <div class="verify">Last synced <span x-text="fmtSync()"></span>. Verify physically before any work.</div>
+      </div>
+    </template>
+
+    <!-- Unknown: never synced and no cache — the honest worst case. -->
+    <template x-if="lotoLoaded && !lotoSyncedAt">
+      <div class="loto stale">
+        <div class="headline">LOTO status unknown</div>
+        <div class="verify">Could not reach the server and nothing is cached on this phone. Verify physically before any work.</div>
+      </div>
+    </template>
+
+    <!-- LOCKED OUT: any apply event with no release referencing it. All
+         active locks show (group LOTO); the tag stays locked out until
+         every one is released. -->
+    <template x-if="activeLocks.length">
+      <div class="loto lockout">
+        <div class="headline" x-text="'Locked out — ' + activeLocks.length + ' active lock' + (activeLocks.length === 1 ? '' : 's')"></div>
+        <template x-for="l in activeLocks" :key="l.id">
+          <div class="loto-lock">
+            <div class="who">
+              <span x-text="l.lock_holder_name"></span><span x-show="l.company_or_trade" x-text="' — ' + l.company_or_trade"></span>
+            </div>
+            <div class="line">
+              applied <span x-text="fmtDateTime(l.performed_at || l.created)"></span><span x-show="l.lock_id"> · lock <span class="mono" x-text="l.lock_id"></span></span>
+            </div>
+            <div class="line" x-show="l.reason" x-text="l.reason"></div>
+            <img class="thumb" x-show="l.photo && !l._queued" :src="lotoPhotoUrl(l)" alt="Photo of the hung lock" loading="lazy">
+            <span class="queued" x-show="l._queued">logged on this phone — not yet synced</span>
+            <span class="queued" x-show="l._releaseQueued">release logged on this phone — not yet synced</span>
+          </div>
+        </template>
+        <div class="verify">As of <span x-text="fmtSync()"></span>. Verify physically before any work.</div>
+      </div>
+    </template>
+
+    <!-- No locks recorded: NEVER an affirmative "not locked out". -->
+    <template x-if="lotoLoaded && lotoSyncedAt && !lotoIsStale && !activeLocks.length">
+      <div class="loto none">
+        <div class="headline">No locks recorded as of <span x-text="fmtSync()"></span>.</div>
+        <div class="verify">The app records; it does not authorize. Verify physically before any work.</div>
+      </div>
+    </template>
+  </div>
+
+  <header class="bar">
+    <span class="mark"><a href="/">LoopCheck</a></span>
+    <span class="tag" x-text="tagNumber || '—'"></span>
+  </header>
+
+  <template x-if="state === 'loading'">
+    <p class="loading">Loading tag…</p>
+  </template>
+
+  <template x-if="state === 'error'">
+    <div class="error" x-text="errorMsg"></div>
+  </template>
+
+  <!-- Same tag number in more than one project: let the scanner pick. -->
+  <template x-if="state === 'ambiguous'">
+    <main>
+      <p class="empty">Tag <strong class="mono" x-text="tagNumber"></strong> exists in more than one project. Which one?</p>
+      <template x-for="t in matches" :key="t.id">
+        <a class="card" :href="'/t/' + encodeURIComponent(tagNumber) + '?project=' + t.project">
+          <div class="title" x-text="t.expand?.project?.name || 'Project ' + t.project"></div>
+          <div class="sub" x-text="t.description || ''"></div>
+        </a>
+      </template>
+    </main>
+  </template>
+
+  <template x-if="state === 'ready'">
+    <main>
+      <a class="crumb" x-show="tag.expand?.system"
+         :href="'/system.html?id=' + tag.system"
+         x-text="'← ' + (tag.expand?.system?.number ? 'System ' + tag.expand.system.number : 'System')"></a>
+
+      <h1 x-text="tag.description || tag.tag_number"></h1>
+      <p class="meta">
+        <span x-text="prettyType(tag.tag_type)"></span>
+        <template x-if="tag.pid_reference">
+          <span> · P&amp;ID <span class="mono" x-text="tag.pid_reference"></span></span>
+        </template>
+        <template x-if="tag.location_note">
+          <span> · <span x-text="tag.location_note"></span></span>
+        </template>
+      </p>
+
+      <!-- Nameplate data, when recorded -->
+      <template x-if="tag.manufacturer || tag.model || tag.serial_number">
+        <p class="meta">
+          <span x-show="tag.manufacturer" x-text="tag.manufacturer"></span>
+          <span x-show="tag.model" x-text="' ' + tag.model"></span>
+          <span x-show="tag.serial_number">· S/N <span class="mono" x-text="tag.serial_number"></span></span>
+        </p>
+      </template>
+
+      <!-- witness_required (ADR 0002): read-only notice of which checkout
+           phases the spec requires an owner/EOR witness for. Display only —
+           the workflow arrives with Phases 2–3. -->
+      <template x-if="witnessPhases.length">
+        <p class="meta">
+          Owner/EOR witness required:
+          <strong x-text="witnessPhases.join(', ')"></strong>
+        </p>
+      </template>
+
+      <!-- Instrument calibration (ADR 0016). Only instrument tag_types get a
+           badge. Standing is derived from the latest append-only calibration
+           date + interval; no due date or status is stored on the tag. -->
+      <template x-if="isInstrument">
+        <div>
+          <h2 class="section">Instrument calibration</h2>
+          <div class="card" style="border-left-width:6px"
+               :style="'border-left-color:' + calibrationColor(calibrationStanding.state)">
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:start">
+              <strong>Calibration standing</strong>
+              <span class="chip" :class="'cal-' + calibrationStanding.state"
+                    x-text="calibrationStanding.label"></span>
+            </div>
+            <div class="sub" x-show="latestCalibration">
+              Last calibrated <span x-text="fmtDate(latestCalibration?.performed_at)"></span>
+              · next due <strong x-text="fmtDate(calibrationStanding.nextDue)"></strong>
+            </div>
+            <div class="cal-expired" x-show="latestCalibration?.standard_expired_at_use">
+              Expired standard used
+            </div>
+          </div>
+          <a class="go secondary" style="display:flex;align-items:center;justify-content:center;text-decoration:none"
+             :href="'/calibration.html?tag=' + tag.id">Log calibration</a>
+        </div>
+      </template>
+
+      <!-- ===== Lockout / tagout logging (ADR 0007) ===== -->
+      <h2 class="section">Lockout / tagout</h2>
+      <p class="meta">
+        Visibility only — the physical locks, tags, and the written
+        energy-control procedure are the only authority. The app records who
+        logged what; it never authorizes.
+      </p>
+
+      <template x-if="lotoMode === ''">
+        <div>
+          <button class="go" style="background:var(--sev-a)" @click="startLotoApply()">Log lock applied</button>
+          <button class="go secondary" x-show="releasableLocks.length" @click="startLotoRelease()">Log lock released</button>
+        </div>
+      </template>
+
+      <template x-if="lotoMode === 'apply'">
+        <div>
+          <label class="fl" for="lname">Your name (the lock holder)</label>
+          <input id="lname" type="text" x-model="lotoName" placeholder="Who is hanging this lock">
+          <label class="fl" for="ltrade">Company / trade (optional)</label>
+          <input id="ltrade" type="text" x-model="lotoTrade" placeholder="e.g. Volt Electric">
+          <label class="fl" for="lreason">Reason (optional)</label>
+          <input id="lreason" type="text" x-model="lotoReason" placeholder='e.g. "Pulling motor for alignment"'>
+          <label class="fl" for="llockid">Physical lock / tag number (optional)</label>
+          <input id="llockid" type="text" x-model="lotoLockId" placeholder="The number on the lock or tag">
+          <label class="fl" for="lphoto">Photo of the hung lock/tag on the isolation point — REQUIRED</label>
+          <input id="lphoto" type="file" accept="image/*" capture="environment"
+                 @change="lotoPhoto = $event.target.files[0]">
+          <button class="go" style="background:var(--sev-a)" :disabled="busy || !lotoName || !lotoPhoto"
+                  @click="submitLotoApply()" x-text="busy ? 'Saving…' : 'Log lock APPLIED'"></button>
+          <button class="link" style="margin-top:12px" @click="lotoMode = ''">Cancel</button>
+        </div>
+      </template>
+
+      <template x-if="lotoMode === 'release'">
+        <div>
+          <label class="fl">Which lock is being released?</label>
+          <template x-for="l in releasableLocks" :key="l.id">
+            <label class="lockpick" :class="{on: releasePick === l.id}">
+              <input type="radio" :value="l.id" x-model="releasePick">
+              <strong x-text="l.lock_holder_name"></strong><span x-show="l.company_or_trade" x-text="' — ' + l.company_or_trade"></span>
+              <span class="meta" style="display:block; margin-left:24px">
+                applied <span x-text="fmtDateTime(l.performed_at || l.created)"></span><span x-show="l.lock_id"> · lock <span class="mono" x-text="l.lock_id"></span></span>
+              </span>
+            </label>
+          </template>
+
+          <label class="fl" for="rname">Your name (who is logging this release)</label>
+          <input id="rname" type="text" x-model="lotoName" placeholder="Usually the lock holder">
+
+          <!-- Releasing someone else's lock (supervisor removal) demands the
+               justification — also enforced server-side, so the note rides
+               into the immutable record. -->
+          <label class="fl" for="rnote"
+                 x-text="releaseNeedsNote
+                   ? 'Release note — REQUIRED (your name differs from the lock holder\'s)'
+                   : 'Release note (optional)'"></label>
+          <input id="rnote" type="text" x-model="releaseNote"
+                 placeholder='e.g. "holder released" or "supervisor removal per SOP, J. Smith authorized"'>
+
+          <label class="fl" for="rphoto">Photo (encouraged)</label>
+          <input id="rphoto" type="file" accept="image/*" capture="environment"
+                 @change="lotoPhoto = $event.target.files[0]">
+
+          <button class="go secondary" :disabled="busy || !releasePick || !lotoName || (releaseNeedsNote && !releaseNote)"
+                  @click="submitLotoRelease()" x-text="busy ? 'Saving…' : 'Log lock RELEASED'"></button>
+          <button class="link" style="margin-top:12px" @click="lotoMode = ''">Cancel</button>
+        </div>
+      </template>
+
+      <div class="flash" x-show="lotoFlash" x-text="lotoFlash"></div>
+      <div class="error" x-show="lotoError" x-text="lotoError"></div>
+
+      <!-- ===== Open punch items: what is blocking this equipment ===== -->
+      <h2 class="section">
+        Open punch items
+        <span x-show="openPunch.length" x-text="'(' + openPunch.length + ')'"></span>
+      </h2>
+
+      <template x-if="!openPunch.length">
+        <p class="empty">No open punch items on this tag.</p>
+      </template>
+
+      <template x-for="p in openPunch" :key="p.id">
+        <div class="punch" :class="'sev-' + p.severity">
+          <div style="display:flex; justify-content:space-between; gap:10px; align-items:start">
+            <span class="desc" x-text="p.description"></span>
+            <span class="chip" :class="'sev-' + p.severity" x-text="p.severity"></span>
+          </div>
+          <div class="line">
+            <span x-text="sevLabel(p.severity)"></span>
+            <span x-show="p.assigned_party"> · <span x-text="p.assigned_party"></span></span>
+            <span> · opened <span x-text="fmtDate(p.created)"></span></span>
+            <span x-show="p.created_by"> by <span x-text="p.created_by"></span></span>
+          </div>
+          <template x-for="a in attachmentsFor(p.id)" :key="a.id">
+            <img class="thumb" :src="fileUrl(a)" alt="Punch photo" loading="lazy">
+          </template>
+
+          <!-- Close action (collapsed by default) -->
+          <div style="margin-top:8px">
+            <template x-if="closingId !== p.id">
+              <button class="link" @click="startClose(p.id)">Close this item →</button>
+            </template>
+            <template x-if="closingId === p.id">
+              <div>
+                <input type="text" x-model="closeName" placeholder="Your name">
+                <textarea x-model="closeNote" placeholder="Closure note (what fixed it)"></textarea>
+                <!-- The evidence chain (ADR 0004): if a passing retest
+                     justified this closure, link it. Optional — plenty of
+                     items (paint, labels) close without one. -->
+                <template x-if="passingChecks.length">
+                  <div>
+                    <label class="fl">Cleared by a passing check? (optional)</label>
+                    <select x-model="closeCheckId">
+                      <option value="">— no linked check —</option>
+                      <template x-for="c in passingChecks" :key="c.id">
+                        <option :value="c.id"
+                                x-text="prettyPhase(c.phase) + ' · pass · ' + fmtDate(c.performed_at || c.created)"></option>
+                      </template>
+                    </select>
+                  </div>
+                </template>
+                <button class="go secondary" :disabled="busy || !closeName"
+                        @click="closePunch(p)" x-text="busy ? 'Saving…' : 'Confirm close'"></button>
+                <button class="link" style="margin-top:10px" @click="cancelClose()">Cancel</button>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <p class="meta" x-show="closedCount" style="margin-top:6px">
+        <span x-text="closedCount"></span> closed item<span x-show="closedCount !== 1">s</span> on this tag.
+      </p>
+
+      <!-- ===== Flag a punch item ===== -->
+      <h2 class="section">Flag a punch item</h2>
+      <template x-if="!showFlag">
+        <button class="go" @click="showFlag = true">Flag punch item</button>
+      </template>
+      <template x-if="showFlag">
+        <div>
+          <label class="fl" for="pdesc">What is wrong?</label>
+          <textarea id="pdesc" x-model="flagDesc" placeholder="Describe the defect or open item"></textarea>
+
+          <label class="fl">Severity</label>
+          <div class="sevpick">
+            <label class="a" :class="{on: flagSev === 'A'}">
+              <input type="radio" value="A" x-model="flagSev"> A
+              <small>Blocks startup</small>
+            </label>
+            <label class="b" :class="{on: flagSev === 'B'}">
+              <input type="radio" value="B" x-model="flagSev"> B
+              <small>Blocks completion</small>
+            </label>
+            <label class="c" :class="{on: flagSev === 'C'}">
+              <input type="radio" value="C" x-model="flagSev"> C
+              <small>Cosmetic</small>
+            </label>
+          </div>
+
+          <label class="fl" for="passigned">Assigned to (optional)</label>
+          <select id="passigned" x-model="flagAssigned">
+            <option value="">—</option>
+            <option value="contractor">Contractor</option>
+            <option value="vendor">Vendor</option>
+            <option value="owner">Owner</option>
+            <option value="engineer">Engineer</option>
+          </select>
+
+          <label class="fl" for="pphoto">Photo (optional)</label>
+          <input id="pphoto" type="file" accept="image/*" capture="environment"
+                 @change="flagFile = $event.target.files[0]">
+
+          <label class="fl" for="pby">Your name</label>
+          <input id="pby" type="text" x-model="flagBy" placeholder="Who is flagging this">
+
+          <button class="go" :disabled="busy || !flagDesc || !flagSev"
+                  @click="flag()" x-text="busy ? 'Saving…' : 'Submit punch item'"></button>
+          <button class="link" style="margin-top:12px" @click="showFlag = false">Cancel</button>
+
+          <div class="flash" x-show="flagFlash" x-text="flagFlash"></div>
+          <div class="error" x-show="flagError" x-text="flagError"></div>
+        </div>
+      </template>
+
+      <!-- ===== Checkout standing (Phase 2b) — the tag's answer to the
+           product's first question: what has passed, what remains. DERIVED
+           from the append-only ledger against the required phases (those with
+           a template for this tag_type); each phase reads its most recent
+           check. No stored status. -->
+      <template x-if="requiredPhases.length">
+        <div>
+          <h2 class="section">Checkout standing</h2>
+          <p class="meta">
+            <strong x-text="passedPhaseCount"></strong> of
+            <strong x-text="requiredPhases.length"></strong> phases passed
+            <span x-show="passedPhaseCount === requiredPhases.length"
+                  style="color:var(--go); font-weight:700"> · checkout complete</span>
+          </p>
+          <div style="display:grid; gap:6px; margin-top:8px">
+            <template x-for="s in standing" :key="s.phase">
+              <div style="display:flex; align-items:center; gap:10px; border:2px solid var(--line); padding:8px 10px"
+                   :style="'border-left:5px solid ' + standColor(s.status)">
+                <span style="font-weight:700; flex:1" x-text="s.label"></span>
+                <span :style="'font-weight:800; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:' + standColor(s.status)"
+                      x-text="standLabel(s.status)"></span>
+              </div>
+            </template>
+          </div>
+          <!-- Phases this tag marks Not-Applicable (ADR 0009): excluded from
+               the denominator above, shown so the smaller count explains
+               itself and a mis-entry is visible. -->
+          <p class="meta" x-show="naPhases.length" style="margin-top:6px">
+            Not applicable to this tag:
+            <span x-text="naPhases.map(p => prettyPhase(p)).join(', ')"></span>
+          </p>
+        </div>
+      </template>
+
+      <!-- Every applicable phase already passed but the plate above only
+           renders when at least one phase is required; a tag whose phases are
+           ALL marked N/A shows this instead of an empty section. -->
+      <template x-if="!requiredPhases.length && naPhases.length">
+        <div>
+          <h2 class="section">Checkout standing</h2>
+          <p class="meta">No checkout phases apply to this tag
+            (<span x-text="naPhases.map(p => prettyPhase(p)).join(', ')"></span>
+            marked N/A).</p>
+        </div>
+      </template>
+
+      <!-- Training milestone (ADR 0013): a signed, dated training EVENT,
+           derived and shown BESIDE checkout standing — deliberately not folded
+           into "checkout complete" (the readiness matrix places it as its own
+           column). Only when a training template applies to this tag. -->
+      <template x-if="hasTraining">
+        <div>
+          <h2 class="section">Training</h2>
+          <div style="display:flex; align-items:center; gap:10px; border:2px solid var(--line); padding:8px 10px"
+               :style="'border-left:5px solid ' + standColor(trainingStatus.status)">
+            <span style="font-weight:700; flex:1">Operations &amp; maintenance training</span>
+            <span :style="'font-weight:800; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:' + standColor(trainingStatus.status)">
+              <span x-show="trainingStatus.status === 'pass'" x-text="'Completed ' + fmtDate(trainingStatus.date)"></span>
+              <span x-show="trainingStatus.status !== 'pass'" x-text="standLabel(trainingStatus.status)"></span>
+            </span>
+          </div>
+        </div>
+      </template>
+
+      <!-- ===== Log a check ===== -->
+      <h2 class="section">Log a check</h2>
+      <a class="go secondary" style="display:flex; align-items:center; justify-content:center; text-decoration:none"
+         :href="'/check.html?tag=' + tag.id">Log check</a>
+      <p class="meta" style="margin-top:6px">
+        Runs a checklist for this equipment and writes it to the signed,
+        append-only ledger.
+      </p>
+
+      <!-- Rotation & VFD check (ADR 0008): the dedicated glove-sized capture
+           page with live Hand/Auto guidance, offered only for rotating
+           equipment (pumps and motors). Standard record, specialized UI. -->
+      <template x-if="isRotating">
+        <div>
+          <a class="go secondary" style="display:flex; align-items:center; justify-content:center; text-decoration:none; margin-top:10px"
+             :href="'/rotation_check.html?tag=' + tag.id">Log rotation &amp; VFD check</a>
+          <p class="meta" style="margin-top:6px">
+            Records Hand and Auto rotation together and reads the pair — flagging
+            a software conflict (do NOT swap leads) apart from a hardware fault.
+          </p>
+        </div>
+      </template>
+
+      <!-- ===== Check history (Phase 2b) — the tag's ledger, newest first.
+           Each row opens the printable single-check record; the whole ledger
+           exports free (a crew that can log a check can always get it back
+           out — never paywalled). -->
+      <template x-if="checks.length">
+        <div>
+          <h2 class="section">Check history (<span x-text="checks.length"></span>)</h2>
+          <template x-for="c in checks" :key="c.id">
+            <a class="card" style="display:block" :href="'/check_view.html?id=' + c.id">
+              <div style="display:flex; justify-content:space-between; gap:10px; align-items:baseline">
+                <span style="font-weight:800" x-text="prettyPhase(c.phase)"></span>
+                <span :style="'font-weight:800; font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:' + standColor(c.result)"
+                      x-text="c.result"></span>
+              </div>
+              <div class="sub">
+                <span x-text="fmtDate(c.performed_at || c.created)"></span>
+                <span x-show="c.performed_by"> · <span x-text="c.performed_by"></span></span>
+                <span x-show="c.witnessed_by"> · witnessed by <span x-text="c.witnessed_by"></span></span>
+              </div>
+              <div class="sub" x-show="c.test_equipment_note" x-text="c.test_equipment_note"></div>
+            </a>
+          </template>
+          <button class="link" style="margin-top:8px" @click="exportLedger()">
+            Export this tag's record (CSV)
+          </button>
+        </div>
+      </template>
+
+      <!-- Purpose-built calibration history (ADR 0016): paired as-found and
+           as-left values stay on one row. The expired-at-use warning is a
+           frozen fact and renders red everywhere this record appears. -->
+      <template x-if="isInstrument">
+        <div>
+          <h2 class="section">Calibration history (<span x-text="calibrations.length"></span>)</h2>
+          <p class="empty" x-show="!calibrations.length">No calibration recorded for this instrument.</p>
+          <template x-for="c in calibrations" :key="c.id">
+            <div class="wcard">
+              <div style="display:flex;justify-content:space-between;gap:10px;align-items:start">
+                <div><strong x-text="calibrationResultLabel(c.result)"></strong><div class="line"><span x-text="fmtDate(c.performed_at)"></span> · <span x-text="c.technician"></span><span x-show="c.company"> · <span x-text="c.company"></span></span></div></div>
+                <span class="chip" :class="c.result==='fail'?'cal-overdue':'cal-current'" x-text="c.result.replace('_',' ')"></span>
+              </div>
+              <div class="line">Standard: <strong x-text="c.standard_name"></strong><span x-show="c.standard_model"> · <span x-text="c.standard_model"></span></span> · S/N <span class="mono" x-text="c.standard_serial"></span> · cert due <span x-text="fmtDate(c.standard_cert_due_date)"></span></div>
+              <div class="cal-expired" x-show="c.standard_expired_at_use">Expired standard at time of use</div>
+              <div class="cal-table-wrap">
+                <table class="cal-table"><thead><tr><th>Point</th><th>Expected</th><th>As found</th><th>As left</th><th>Tolerance</th></tr></thead>
+                  <tbody><template x-for="p in calibrationPointsFor(c.id)" :key="p.id"><tr>
+                    <td x-text="p.test_point"></td><td x-text="p.expected_value + ' ' + p.unit"></td><td x-text="p.as_found + ' ' + p.unit"></td><td x-text="p.as_left + ' ' + p.unit"></td><td :style="p.within_tolerance?'color:var(--go);font-weight:700':'color:var(--sev-a);font-weight:800'" x-text="p.within_tolerance?'Within':'OUT'"></td>
+                  </tr></template></tbody>
+                </table>
+              </div>
+              <div class="line" x-show="c.notes" x-text="c.notes"></div>
+              <template x-for="a in calibrationAttachmentsFor(c.id)" :key="a.id"><div class="line"><a :href="fileUrl(a)" target="_blank">Calibration report: <span x-text="a.file"></span></a></div></template>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- ===== Warranty & Closeout (ADR 0005) — the tag's life after
+           startup. Written to stay useful to a plant operator who has never
+           heard of LoopCheck: is it under warranty, who do I call, where
+           are the spares. The end date is DERIVED (clock start + duration),
+           never stored — the basis and trigger date are the provenance a
+           warranty dispute is actually about. -->
+      <h2 class="section">Warranty</h2>
+
+      <template x-if="!warranties.length">
+        <p class="empty">No warranty recorded for this equipment.</p>
+      </template>
+
+      <template x-for="w in warranties" :key="w.id">
+        <div class="wcard">
+          <div style="display:flex; justify-content:space-between; gap:10px; align-items:start">
+            <strong x-text="w.vendor_name || 'Warranty'"></strong>
+            <span class="chip" :class="'w-' + wStatus(w).state" x-text="wStatus(w).label"></span>
+          </div>
+          <div class="line">
+            <span x-text="prettyBasis(w.basis)"></span>
+            <span x-show="w.duration_months"> · <span x-text="w.duration_months"></span> months</span>
+            <template x-if="w.clock_start_date">
+              <span> · clock started <span x-text="fmtDate(w.clock_start_date)"></span><template x-if="wEnd(w)"><span> → ends <strong x-text="fmtDate(wEnd(w))"></strong></span></template></span>
+            </template>
+            <template x-if="!w.clock_start_date">
+              <span> · the triggering event has not occurred yet</span>
+            </template>
+          </div>
+          <div class="line" x-show="w.basis_note" x-text="w.basis_note"></div>
+          <div x-show="w.vendor_contact_name || w.vendor_phone || w.vendor_email">
+            <div class="line" x-show="w.vendor_contact_name" x-text="'Contact: ' + w.vendor_contact_name"></div>
+            <a class="call" x-show="w.vendor_phone" :href="'tel:' + w.vendor_phone"
+               x-text="'📞 ' + w.vendor_phone"></a>
+            <a class="call" x-show="w.vendor_email" :href="'mailto:' + w.vendor_email"
+               x-text="w.vendor_email"></a>
+          </div>
+        </div>
+      </template>
+
+      <template x-if="!showWForm">
+        <button class="link" @click="showWForm = true">Record a warranty →</button>
+      </template>
+      <template x-if="showWForm">
+        <div>
+          <label class="fl">Vendor / manufacturer</label>
+          <input type="text" x-model="wForm.vendor_name" placeholder="Who backs this equipment">
+          <label class="fl">Contact name (optional)</label>
+          <input type="text" x-model="wForm.vendor_contact_name">
+          <label class="fl">Phone (optional)</label>
+          <input type="text" x-model="wForm.vendor_phone" inputmode="tel">
+          <label class="fl">Email (optional)</label>
+          <input type="text" x-model="wForm.vendor_email" inputmode="email">
+
+          <label class="fl">What starts the warranty clock?</label>
+          <select x-model="wForm.basis">
+            <option value="substantial_completion">Substantial completion</option>
+            <option value="beneficial_use">Beneficial use / occupancy</option>
+            <option value="startup">Successful startup</option>
+            <option value="shipment_cap">Shipment cap ("whichever occurs first")</option>
+            <option value="other">Other</option>
+          </select>
+          <label class="fl">Exact spec language (optional)</label>
+          <input type="text" x-model="wForm.basis_note"
+                 placeholder="e.g. 24 mo from SC or 30 mo from shipment, whichever first">
+
+          <label class="fl">Trigger event date — leave blank if it hasn't happened yet</label>
+          <input type="date" x-model="wForm.clock_start">
+          <label class="fl">Duration (months)</label>
+          <input type="number" x-model="wForm.duration" min="1" inputmode="numeric">
+
+          <button class="go secondary" :disabled="busy || !wForm.basis"
+                  @click="saveWarranty()" x-text="busy ? 'Saving…' : 'Save warranty'"></button>
+          <button class="link" style="margin-top:10px" @click="showWForm = false">Cancel</button>
+          <div class="error" x-show="wError" x-text="wError"></div>
+        </div>
+      </template>
+
+      <!-- Closeout deliverables owed for this tag. Read-only here — status
+           advances on the project's closeout dashboard, where every change
+           also lands in the append-only closeout_log. -->
+      <h2 class="section">Closeout deliverables</h2>
+      <template x-if="!reqs.length">
+        <p class="empty">No closeout deliverables recorded for this tag.</p>
+      </template>
+      <template x-for="r in reqs" :key="r.id">
+        <div class="req">
+          <div style="display:flex; justify-content:space-between; gap:10px; align-items:start">
+            <span class="desc">
+              <span x-text="prettyReq(r.req_type)"></span><span x-show="r.description" x-text="' — ' + r.description"></span>
+            </span>
+            <span class="chip" :class="'st-' + r.status" x-text="r.status"></span>
+          </div>
+          <div class="line">
+            <span x-show="r.received_date">received <span x-text="fmtDate(r.received_date)"></span></span>
+            <span x-show="r.accepted_by"> · accepted by <span x-text="r.accepted_by"></span></span>
+            <span x-show="r.storage_location"> · stored: <span x-text="r.storage_location"></span></span>
+          </div>
+        </div>
+      </template>
+      <p class="meta" style="margin-top:8px">
+        <a :href="'/closeout.html?project=' + tag.project">Closeout dashboard →</a>
+      </p>
+
+      <!-- Warranty claims: a close-once ledger (ADR 0005). Open and update
+           while the claim is live; the server freezes it at closure —
+           corrections after that are new claims. -->
+      <h2 class="section">
+        Warranty claims
+        <span x-show="openClaims.length" x-text="'(' + openClaims.length + ' open)'"></span>
+      </h2>
+
+      <template x-for="c in openClaims" :key="c.id">
+        <div class="punch sev-B">
+          <span class="desc" x-text="c.description"></span>
+          <div class="line">
+            <span>opened <span x-text="fmtDate(c.opened_at)"></span></span>
+            <span x-show="c.opened_by"> by <span x-text="c.opened_by"></span></span>
+            <span x-show="c.vendor_notified_date"> · vendor notified <span x-text="fmtDate(c.vendor_notified_date)"></span></span>
+          </div>
+          <div style="margin-top:8px">
+            <template x-if="!c.vendor_notified_date">
+              <button class="link" style="margin-right:14px" :disabled="busy"
+                      @click="notifyClaim(c)">Mark vendor notified today</button>
+            </template>
+            <template x-if="closingClaimId !== c.id">
+              <button class="link" @click="closingClaimId = c.id; claimResolution = ''">Close this claim →</button>
+            </template>
+            <template x-if="closingClaimId === c.id">
+              <div>
+                <input type="text" x-model="claimName" placeholder="Your name">
+                <textarea x-model="claimResolution" placeholder="Resolution (what the vendor did)"></textarea>
+                <button class="go secondary" :disabled="busy || !claimName"
+                        @click="closeClaim(c)" x-text="busy ? 'Saving…' : 'Confirm close'"></button>
+                <button class="link" style="margin-top:10px" @click="closingClaimId = ''">Cancel</button>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <template x-if="!showClaimForm">
+        <button class="link" @click="showClaimForm = true">Open a warranty claim →</button>
+      </template>
+      <template x-if="showClaimForm">
+        <div>
+          <label class="fl">What failed?</label>
+          <textarea x-model="claimDesc" placeholder="Describe the failure"></textarea>
+          <label class="fl">Your name</label>
+          <input type="text" x-model="claimName" placeholder="Who is opening this claim">
+          <button class="go secondary" :disabled="busy || !claimDesc"
+                  @click="openClaim()" x-text="busy ? 'Saving…' : 'Open claim'"></button>
+          <button class="link" style="margin-top:10px" @click="showClaimForm = false">Cancel</button>
+          <div class="error" x-show="claimError" x-text="claimError"></div>
+        </div>
+      </template>
+
+      <template x-if="closedClaims.length">
+        <div style="margin-top:12px">
+          <template x-for="c in closedClaims" :key="c.id">
+            <div class="punch closed">
+              <span class="desc" x-text="c.description"></span>
+              <div class="line">
+                <span>opened <span x-text="fmtDate(c.opened_at)"></span></span>
+                <span> · closed <span x-text="fmtDate(c.closed_at)"></span></span>
+                <span x-show="c.closed_by"> by <span x-text="c.closed_by"></span></span>
+              </div>
+              <div class="line" x-show="c.resolution_note" x-text="c.resolution_note"></div>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- ===== LOTO history: the full append-only ledger (ADR 0007).
+           Below the fold on purpose — the banner answers "now"; this
+           answers "prove it". -->
+      <h2 class="section">LOTO history</h2>
+      <template x-if="!lotoEvents.length && !lotoQueue.length">
+        <p class="empty">No LOTO events recorded for this tag.</p>
+      </template>
+      <template x-for="e in lotoEvents" :key="e.id">
+        <div class="punch" :class="e.action === 'apply' ? 'sev-A' : 'closed'">
+          <span class="desc">
+            <span x-text="e.action === 'apply' ? 'APPLY' : 'RELEASE'"></span>
+            — <span x-text="e.lock_holder_name"></span><span x-show="e.company_or_trade" x-text="' (' + e.company_or_trade + ')'"></span>
+          </span>
+          <div class="line">
+            <span x-text="fmtDateTime(e.performed_at || e.created)"></span>
+            <span x-show="e.lock_id"> · lock <span class="mono" x-text="e.lock_id"></span></span>
+          </div>
+          <div class="line" x-show="e.reason" x-text="e.reason"></div>
+          <div class="line" x-show="e.released_by_note" x-text="'Release note: ' + e.released_by_note"></div>
+          <img class="thumb" x-show="e.photo" :src="lotoPhotoUrl(e)" alt="LOTO photo" loading="lazy">
+        </div>
+      </template>
+    </main>
+  </template>
+
+</div>
+
+<script>
+function tagPage() {
+  // PocketBase serves this page, so the API is same-origin — no host config.
+  const PB = window.location.origin;
+
+  // The tag number can arrive two ways:
+  //   1. Clean route  /t/PMP-3101         (served by the pb_hooks route)
+  //   2. Plain file   /tag.html?n=PMP-3101
+  // Prefer the path form. decodeURIComponent handles any %2D etc.
+  function readTagNumber() {
+    const params = new URLSearchParams(location.search);
+    const m = location.pathname.match(/^\/t\/(.+)$/);
+    if (m) return decodeURIComponent(m[1]);
+    return params.get('n') || '';
+  }
+
+  return {
+    tagNumber: readTagNumber(),
+    // Optional project scope, used only to disambiguate a tag number that
+    // exists in more than one project.
+    projectScope: new URLSearchParams(location.search).get('project') || '',
+    state: 'loading',
+    errorMsg: '',
+    tag: null,
+    matches: [],
+    punchItems: [],
+    attachments: [],
+    witnessPhases: [],   // pretty phase names whose templates require a witness
+    checks: [],          // this tag's check ledger, newest first (Phase 2b)
+    calibrations: [],    // purpose-built calibration ledger (ADR 0016)
+    calibrationPoints: [],
+    calibrationAttachments: [],
+    requiredPhases: [],  // SIX checkout phases with a template, minus phases_na (derived)
+    naPhases: [],        // checkout phases this tag marks Not-Applicable (ADR 0009)
+    hasTraining: false,  // a training template applies to this tag (ADR 0013 milestone)
+
+    // Flag form
+    showFlag: false,
+    flagDesc: '',
+    flagSev: 'B',              // B is the sensible default: blocks completion
+    flagAssigned: '',
+    flagFile: null,
+    flagBy: localStorage.getItem('lc_name') || '',
+    busy: false,
+    flagFlash: '',
+    flagError: '',
+
+    // Close form
+    closingId: '',
+    closeName: localStorage.getItem('lc_name') || '',
+    closeNote: '',
+    closeCheckId: '',      // optional closing_check evidence link (ADR 0004)
+    passingChecks: [],     // passing checks on this tag, offered at close time
+
+    // Warranty & closeout (ADR 0005)
+    warranties: [],
+    reqs: [],              // closeout_requirements for this tag
+    claims: [],            // warranty_claims, open and closed
+    showWForm: false,
+    wForm: { vendor_name: '', vendor_contact_name: '', vendor_phone: '',
+             vendor_email: '', basis: 'substantial_completion', basis_note: '',
+             clock_start: '', duration: '' },
+    wError: '',
+    showClaimForm: false,
+    claimDesc: '',
+    claimName: localStorage.getItem('lc_name') || '',
+    claimError: '',
+    closingClaimId: '',
+    claimResolution: '',
+
+    // LOTO (ADR 0007). The staleness asymmetry: writes may queue (outbox),
+    // displayed status never pretends — see the banner templates above.
+    lotoEvents: [],        // the full ledger for this tag (fresh or cached)
+    lotoSyncedAt: 0,       // ms timestamp of the data on screen; 0 = never
+    lotoLoaded: false,     // first sync attempt finished (stops flicker)
+    now: Date.now(),       // ticks every 30 s so staleness is reactive
+    outbox: [],            // queued-offline events (all tags, localStorage)
+    lotoMode: '',          // '' | 'apply' | 'release'
+    lotoName: localStorage.getItem('lc_name') || '',
+    lotoTrade: '',
+    lotoReason: '',
+    lotoLockId: '',
+    lotoPhoto: null,
+    releasePick: '',
+    releaseNote: '',
+    lotoFlash: '',
+    lotoError: '',
+
+    get openPunch() {
+      return this.punchItems.filter(p => p.status === 'open')
+        .sort((a, b) => a.severity.localeCompare(b.severity)); // A, B, C
+    },
+    get closedCount() {
+      return this.punchItems.filter(p => p.status === 'closed').length;
+    },
+    // An open claim is one with no closed_at — derived, no status field.
+    get openClaims() {
+      return this.claims.filter(c => !c.closed_at);
+    },
+    // Rotating equipment carries a rotation template in the seed library
+    // (ADR 0008). Only these tag_types get the rotation-check entry point.
+    get isRotating() {
+      return this.tag && ['pump_centrifugal', 'motor'].includes(this.tag.tag_type);
+    },
+    get isInstrument() {
+      return this.tag && ['instrument_flow','instrument_level','instrument_pressure'].includes(this.tag.tag_type);
+    },
+    get latestCalibration() {
+      return this.calibrations.length ? this.calibrations[0] : null;
+    },
+    get calibrationStanding() {
+      const c = this.latestCalibration;
+      if (!c) return { state:'never', label:'NEVER CALIBRATED', nextDue:'' };
+      const nextDue = this.addCalendarMonths(c.performed_at, c.interval_months);
+      const days = Math.ceil((new Date(nextDue + 'T23:59:59') - new Date()) / 86400000);
+      if (days < 0) return { state:'overdue', label:'OVERDUE', nextDue };
+      if (days <= 30) return { state:'due', label:'DUE ' + days + 'd', nextDue };
+      return { state:'current', label:'CURRENT', nextDue };
+    },
+    get closedClaims() {
+      return this.claims.filter(c => c.closed_at);
+    },
+
+    // ---- Checkout standing (Phase 2b) -----------------------------------
+    // DERIVED, never stored. Same rule as service cutover standing (ADR 0006),
+    // one model across every subject kind: ANY PASS WINS — a passing re-test
+    // clears an earlier fail, and the fail stays in the ledger; else any fail;
+    // else any record = incomplete/started; else not started. A regression
+    // after a pass is a new punch item (tracked separately), not a downgrade
+    // of whether the phase was ever accepted.
+    get standing() {
+      const byPhase = {};                      // phase -> set of results seen
+      for (const c of this.checks)
+        if (c.phase) (byPhase[c.phase] = byPhase[c.phase] || []).push(c.result);
+      return this.requiredPhases.map(p => {
+        const rs = byPhase[p] || [];
+        const status = rs.includes('pass') ? 'pass'
+                     : rs.includes('fail') ? 'fail'
+                     : rs.length ? 'incomplete' : 'not_started';
+        return { phase: p, label: this.prettyPhase(p), status };
+      });
+    },
+    get passedPhaseCount() {
+      return this.standing.filter(s => s.status === 'pass').length;
+    },
+    // Training milestone status (ADR 0013) — folded from the training checks
+    // with the same any-pass-wins rule, but reported apart from the six-phase
+    // checkout fold. Returns { status, date }.
+    get trainingStatus() {
+      const rows = this.checks.filter(c => c.phase === 'training');
+      if (!rows.length) return { status: 'not_started', date: '' };
+      const passes = rows.filter(c => c.result === 'pass');
+      if (passes.length) {
+        const date = passes.map(c => (c.performed_at || c.created || '').slice(0, 10)).sort().slice(-1)[0];
+        return { status: 'pass', date };
+      }
+      if (rows.some(c => c.result === 'fail')) return { status: 'fail', date: '' };
+      return { status: 'incomplete', date: '' };
+    },
+
+    // ---- LOTO derivations (ADR 0007) ------------------------------------
+    // A tag is LOCKED OUT if any apply event has no release referencing it.
+    // Derived from the ledger on every render — no stored status. Queued
+    // (not-yet-synced) events from this phone are merged in and marked, so
+    // the person who just logged an apply in a dead zone never sees a
+    // wrong "no locks recorded".
+    get lotoQueue() {
+      return this.outbox.filter(q => q.tagNumber === this.tagNumber);
+    },
+    get activeLocks() {
+      const released = new Set(this.lotoEvents
+        .filter(e => e.action === 'release' && e.applies_to)
+        .map(e => e.applies_to));
+      const queuedReleases = new Set(this.lotoQueue
+        .filter(q => q.body.action === 'release' && q.body.applies_to)
+        .map(q => q.body.applies_to));
+      // A queued release MARKS the lock, it never hides it — hiding errs
+      // toward "clear", the one direction this module never errs.
+      const locks = this.lotoEvents
+        .filter(e => e.action === 'apply' && !released.has(e.id))
+        .map(e => ({ ...e, _releaseQueued: queuedReleases.has(e.id) }));
+      for (const q of this.lotoQueue.filter(q => q.body.action === 'apply')) {
+        locks.push({
+          id: 'queued-' + q.queuedAt, _queued: true,
+          lock_holder_name: q.body.lock_holder_name,
+          company_or_trade: q.body.company_or_trade,
+          reason: q.body.reason, lock_id: q.body.lock_id,
+          performed_at: q.body.performed_at, created: q.body.performed_at,
+        });
+      }
+      // Oldest first — the forgotten lock is the story.
+      return locks.sort((a, b) =>
+        new Date(a.performed_at || a.created) - new Date(b.performed_at || b.created));
+    },
+    // Only synced locks can be released (a queued apply has no server id
+    // for applies_to to reference yet).
+    get releasableLocks() {
+      return this.activeLocks.filter(l => !l._queued);
+    },
+    // Releasing a lock whose holder differs from the entered name demands
+    // the justification note. Mirrors the server createRule exactly.
+    get releaseNeedsNote() {
+      const l = this.releasableLocks.find(l => l.id === this.releasePick);
+      return !!l && l.lock_holder_name !== this.lotoName;
+    },
+    // Stale = never synced, or the data on screen is older than 10 minutes
+    // (ADR 0007). `now` ticks so a page left open goes amber by itself.
+    get lotoIsStale() {
+      return !this.lotoSyncedAt || (this.now - this.lotoSyncedAt) > 10 * 60 * 1000;
+    },
+
+    prettyType(t) {
+      if (!t) return 'Equipment';
+      // Seed-library names read backwards when mechanically title-cased
+      // ("Pump Centrifugal"), so the finer types get real labels.
+      const labels = {
+        pump_centrifugal: 'Centrifugal Pump',
+        valve_motor_operated: 'Motor-Operated Valve',
+        instrument_flow: 'Flow Instrument',
+        instrument_level: 'Level Instrument',
+        instrument_pressure: 'Pressure Instrument',
+      };
+      return labels[t] || t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    },
+    sevLabel(s) {
+      return { A: 'A — blocks startup', B: 'B — blocks substantial completion',
+               C: 'C — cosmetic' }[s] || s;
+    },
+    fmtDate(d) {
+      if (!d) return '—';
+      // Date-only facts render at local noon so a UTC-midnight PocketBase
+      // value never appears as the previous day in western timezones.
+      const iso = String(d).slice(0, 10);
+      return new Date(iso + 'T12:00:00').toLocaleDateString(undefined,
+        { month: 'short', day: 'numeric', year: 'numeric' });
+    },
+    addCalendarMonths(value, months) {
+      const d = new Date(String(value).slice(0,10) + 'T12:00:00Z');
+      const day = d.getUTCDate();
+      d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + Number(months));
+      const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+      d.setUTCDate(Math.min(day, last));
+      return d.toISOString().slice(0,10);
+    },
+    calibrationColor(state) {
+      return {current:'var(--go)',due:'var(--sev-b)',overdue:'var(--sev-a)',never:'var(--steel)'}[state] || 'var(--steel)';
+    },
+    calibrationResultLabel(result) {
+      return {pass:'Passed',fail:'Failed',adjusted_pass:'Adjusted — passed'}[result] || result;
+    },
+    calibrationPointsFor(id) {
+      return this.calibrationPoints.filter(p => p.calibration === id).sort((a,b) => a.sequence-b.sequence);
+    },
+    calibrationAttachmentsFor(id) {
+      return this.calibrationAttachments.filter(a => a.parent_id === id);
+    },
+    attachmentsFor(punchId) {
+      return this.attachments.filter(a => a.parent_id === punchId);
+    },
+    fileUrl(a) {
+      // PocketBase file URL: /api/files/{collection}/{recordId}/{filename}
+      return `${PB}/api/files/attachments/${a.id}/${a.file}`;
+    },
+    lotoPhotoUrl(e) {
+      return `${PB}/api/files/loto_events/${e.id}/${e.photo}`;
+    },
+    // Date + time — lock displays care about the hour, not just the day.
+    // PocketBase dates come as "YYYY-MM-DD HH:MM:SS.sssZ"; the space breaks
+    // Date parsing in some engines, hence the T swap.
+    fmtDateTime(d) {
+      const dt = d instanceof Date ? d : new Date(String(d).replace(' ', 'T'));
+      return dt.toLocaleString(undefined,
+        { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    },
+    fmtSync() {
+      return this.lotoSyncedAt ? this.fmtDateTime(new Date(this.lotoSyncedAt)) : 'never';
+    },
+
+    // ---- Warranty derivations (ADR 0005) --------------------------------
+    // The end date is DERIVED: clock_start_date + duration_months, with
+    // day-clamped calendar-month arithmetic in UTC (Jan 31 + 1 mo =
+    // Feb 28/29, never Mar 2). Never stored — hard constraint #4.
+    wEnd(w) {
+      if (!w.clock_start_date || !w.duration_months) return null;
+      const [y, m, d] = w.clock_start_date.slice(0, 10).split('-').map(Number);
+      const t = (m - 1) + w.duration_months;
+      const ny = y + Math.floor(t / 12), nm = t % 12;
+      const last = new Date(Date.UTC(ny, nm + 1, 0)).getUTCDate();
+      return new Date(Date.UTC(ny, nm, Math.min(d, last)));
+    },
+    wStatus(w) {
+      const end = this.wEnd(w);
+      // Terms recorded but the trigger event (SC, startup…) hasn't happened
+      // yet — a first-class state during commissioning, not missing data.
+      if (!end) return { state: 'pending', label: 'Awaiting trigger event' };
+      const now = new Date();
+      const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+      const days = Math.round((end.getTime() - today) / 86400000);
+      if (days < 0)  return { state: 'expired', label: 'Expired ' + this.fmtDate(end) };
+      if (days === 0) return { state: 'expiring', label: 'Expires today' };
+      if (days <= 90) return { state: 'expiring', label: 'Expires in ' + days + ' days' };
+      return { state: 'active', label: 'Active' };
+    },
+    prettyBasis(b) {
+      return { substantial_completion: 'From substantial completion',
+               beneficial_use: 'From beneficial use',
+               startup: 'From successful startup',
+               shipment_cap: 'From shipment (capped)',
+               other: 'Other basis' }[b] || b;
+    },
+    prettyReq(t) {
+      return { om_manual: 'O&M manual', spare_parts: 'Spare parts',
+               special_tools: 'Special tools', training: 'Training',
+               warranty_cert: 'Warranty certificate', test_report: 'Test report',
+               other: 'Other' }[t] || t;
+    },
+
+    async load() {
+      if (!this.tagNumber) {
+        this.state = 'error';
+        this.errorMsg = 'No tag number in the URL. Open this as /t/PMP-3101';
+        return;
+      }
+
+      // LOTO groundwork runs before anything can fail: read the offline
+      // outbox, tick the staleness clock, re-sync when the connection or
+      // the tab comes back. The 4-minute re-fetch keeps a page that sits
+      // open at the equipment inside the 10-minute staleness threshold.
+      this.outbox = this.readOutbox();
+      setInterval(() => { this.now = Date.now(); }, 30000);
+      setInterval(() => { if (this.tag) this.syncLoto(); }, 4 * 60 * 1000);
+      window.addEventListener('online',
+        () => this.flushOutbox().then(() => this.syncLoto()));
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && this.tag) this.syncLoto();
+      });
+      await this.flushOutbox();
+
+      try {
+        // 1. Find the tag(s) by tag_number. tag_number is unique PER PROJECT,
+        //    so a bare number can (rarely) match more than one project. expand
+        //    pulls the system and project in one request.
+        let filter = `tag_number='${this.tagNumber.replace(/'/g, "\\'")}'`;
+        if (this.projectScope) filter += ` && project='${this.projectScope}'`;
+        const res = await fetch(
+          `${PB}/api/collections/tags/records?filter=(${encodeURIComponent(filter)})` +
+          `&expand=system,project&perPage=50`);
+        if (!res.ok) throw new Error(`API error ${res.status}`);
+        const data = await res.json();
+
+        if (!data.items.length) {
+          this.state = 'error';
+          this.errorMsg = `No tag "${this.tagNumber}" found. Check the number, or import it on the CSV import page.`;
+          return;
+        }
+        if (data.items.length > 1) {
+          this.matches = data.items;
+          this.state = 'ambiguous';
+          return;
+        }
+        this.tag = data.items[0];
+
+        // LOTO status first — highest-consequence data on the page, and the
+        // banner renders as soon as it lands (ADR 0007).
+        await this.syncLoto();
+
+        // 2. Punch items on this tag, plus their photos. Two small requests.
+        const pFilter = encodeURIComponent(`tag='${this.tag.id}'`);
+        const pRes = await fetch(
+          `${PB}/api/collections/punch_items/records?filter=(${pFilter})&sort=-created&perPage=200`);
+        this.punchItems = (await pRes.json()).items;
+
+        if (this.punchItems.length) {
+          // Attachments whose parent is any of these punch items.
+          const ors = this.punchItems.map(p => `parent_id='${p.id}'`).join(' || ');
+          const aFilter = encodeURIComponent(`parent_collection='punch_items' && (${ors})`);
+          const aRes = await fetch(
+            `${PB}/api/collections/attachments/records?filter=(${aFilter})&perPage=500`);
+          this.attachments = (await aRes.json()).items;
+        }
+
+        // 3. Which of this tag's checkout phases require an owner/EOR witness
+        //    (ADR 0002): template-level data, read straight off the library.
+        //    Read-only display; the witness workflow arrives with Phases 2–3.
+        if (this.tag.tag_type) {
+          const wFilter = encodeURIComponent(
+            `tag_type='${this.tag.tag_type}' && witness_required=true && phase != ''`);
+          const wRes = await fetch(
+            `${PB}/api/collections/checklist_templates/records?filter=(${wFilter})&fields=phase&sort=phase&perPage=20`);
+          const PHASE_LABELS = {
+            installation: 'Installation', point_to_point: 'Point-to-Point',
+            energization: 'Energization', loop_check: 'Loop Check',
+            functional: 'Functional', performance: 'Performance',
+          };
+          this.witnessPhases = (await wRes.json()).items
+            .map(t => PHASE_LABELS[t.phase] || t.phase);
+        }
+
+        // 4. Warranty & closeout (ADR 0005) — three small parallel reads.
+        //    All filter on the tag relation; project scope is implicit.
+        const tf = encodeURIComponent(`tag='${this.tag.id}'`);
+        const [warRes, reqRes, clmRes] = await Promise.all([
+          fetch(`${PB}/api/collections/warranties/records?filter=(${tf})&sort=created&perPage=50`),
+          fetch(`${PB}/api/collections/closeout_requirements/records?filter=(${tf})&sort=req_type,created&perPage=200`),
+          fetch(`${PB}/api/collections/warranty_claims/records?filter=(${tf})&sort=-opened_at&perPage=200`),
+        ]);
+        this.warranties = (await warRes.json()).items || [];
+        this.reqs = (await reqRes.json()).items || [];
+        this.claims = (await clmRes.json()).items || [];
+
+        // 5. The check ledger (Phase 2b). Required phases are DERIVED from the
+        //    template library (phases with a template for this tag_type — no
+        //    stored map), minus any this tag marks Not-Applicable via
+        //    phases_na (ADR 0009). The checks feed the standing plate and the
+        //    history.
+        if (this.tag.tag_type) {
+          // The SIX checkout-sequence phases. `training` (ADR 0013) is a
+          // template phase too but a MILESTONE — deliberately kept out of this
+          // fold, derived and shown separately below.
+          const CHECKOUT = ['installation','point_to_point','energization','loop_check','functional','performance'];
+          const [rpRes, ckRes] = await Promise.all([
+            fetch(`${PB}/api/collections/checklist_templates/records?filter=(${encodeURIComponent(`tag_type='${this.tag.tag_type}' && phase != ''`)})&fields=phase&perPage=50`),
+            fetch(`${PB}/api/collections/checks/records?filter=(${encodeURIComponent(`tag='${this.tag.id}'`)})&sort=-created&perPage=200`),
+          ]);
+          const templated = [...new Set((await rpRes.json()).items.map(t => t.phase))];
+          // phases_na is forgiving free text (phase keys or friendly labels);
+          // normalize both sides so "Loop Check" / "loopcheck" / "loop_check"
+          // all match the loop_check phase.
+          const na = this.naSet();
+          const checkout = templated.filter(p => CHECKOUT.includes(p))
+            .sort((a, b) => CHECKOUT.indexOf(a) - CHECKOUT.indexOf(b));
+          this.requiredPhases = checkout.filter(p => !na.has(this.norm(p)));
+          this.naPhases = checkout.filter(p => na.has(this.norm(p)));
+          // Training milestone: applicable when the type has a training
+          // template and the tag hasn't marked it N/A (ADR 0009 + 0013).
+          this.hasTraining = templated.includes('training') && !na.has(this.norm('training'));
+          this.checks = (await ckRes.json()).items;
+        }
+
+        // 6. Instrument calibration ledger. Header, point rows, and reports
+        //    were written atomically by /api/calibrations/capture. Read all
+        //    three so the tag page can reproduce the as-found/as-left sheet.
+        if (this.isInstrument) {
+          const cRes = await fetch(`${PB}/api/collections/calibrations/records?filter=(${tf})&sort=-performed_at,-created&perPage=200`);
+          if (cRes.ok) this.calibrations = (await cRes.json()).items;
+          if (this.calibrations.length) {
+            const ors = this.calibrations.map(c => `calibration='${c.id}'`).join(' || ');
+            const ids = this.calibrations.map(c => `parent_id='${c.id}'`).join(' || ');
+            const [ptRes, atRes] = await Promise.all([
+              fetch(`${PB}/api/collections/calibration_points/records?filter=(${encodeURIComponent(ors)})&sort=sequence&perPage=1000`),
+              fetch(`${PB}/api/collections/attachments/records?filter=(${encodeURIComponent(`parent_collection='calibrations' && (${ids})`)})&perPage=500`),
+            ]);
+            if (ptRes.ok) this.calibrationPoints = (await ptRes.json()).items;
+            if (atRes.ok) this.calibrationAttachments = (await atRes.json()).items;
+          }
+        }
+
+        this.state = 'ready';
+      } catch (err) {
+        this.state = 'error';
+        this.errorMsg = 'Could not reach the server. Is PocketBase running? (' + err.message + ')';
+        // The page failed, but the LOTO banner still owes its honest state:
+        // cached-and-marked-stale beats blank (cache is keyed by tag NUMBER,
+        // so no API round-trip is needed to find it).
+        this.loadLotoCache();
+        this.lotoLoaded = true;
+      }
+    },
+
+    // ---- LOTO sync, cache, and offline outbox (ADR 0007) -----------------
+    // Reads are pessimistic: a fetch failure falls back to the localStorage
+    // cache and the banner shows amber-stale — never a confident "clear".
+    async syncLoto() {
+      try {
+        // Paged read of the FULL ledger — active locks derive from every
+        // event, so a truncated read could hide a lock. perPage max is 500.
+        const f = encodeURIComponent(`tag='${this.tag.id}'`);
+        let page = 1, items = [];
+        while (true) {
+          const res = await fetch(
+            `${PB}/api/collections/loto_events/records?filter=(${f})&sort=-created&perPage=500&page=${page}`);
+          if (!res.ok) throw new Error('loto fetch ' + res.status);
+          const data = await res.json();
+          items = items.concat(data.items);
+          if (page >= data.totalPages || page >= 20) break;
+          page++;
+        }
+        this.lotoEvents = items;
+        this.lotoSyncedAt = Date.now();
+        this.saveLotoCache();
+      } catch (err) {
+        this.loadLotoCache(); // stale beats blank; the banner marks it amber
+      } finally {
+        this.lotoLoaded = true;
+      }
+    },
+    saveLotoCache() {
+      // Slim copy — photos are deliberately not cached (their URLs are
+      // useless offline), and the display fields are all the banner needs.
+      const slim = this.lotoEvents.map(e => ({
+        id: e.id, action: e.action, applies_to: e.applies_to,
+        lock_holder_name: e.lock_holder_name, company_or_trade: e.company_or_trade,
+        reason: e.reason, lock_id: e.lock_id, released_by_note: e.released_by_note,
+        performed_at: e.performed_at, created: e.created,
+      }));
+      try {
+        localStorage.setItem('lc_loto_' + this.tagNumber,
+          JSON.stringify({ syncedAt: this.lotoSyncedAt, events: slim }));
+      } catch (e) { /* cache is best-effort; the live fetch is the source */ }
+    },
+    loadLotoCache() {
+      try {
+        const c = JSON.parse(localStorage.getItem('lc_loto_' + this.tagNumber) || 'null');
+        if (c && c.syncedAt) { this.lotoEvents = c.events || []; this.lotoSyncedAt = c.syncedAt; }
+      } catch (e) { /* no cache — the banner shows the unknown state */ }
+    },
+    readOutbox() {
+      try { return JSON.parse(localStorage.getItem('lc_loto_outbox') || '[]'); }
+      catch (e) { return []; }
+    },
+    // Push every queued event to the server. Network failure keeps the
+    // entry for next time; a server REJECTION (rule violation) is dropped
+    // from the queue but reported loudly — retrying it forever would never
+    // succeed, and silently discarding a LOTO event is not an option.
+    async flushOutbox() {
+      const queue = this.readOutbox();
+      if (!queue.length) { this.outbox = queue; return; }
+      const remaining = [];
+      for (const entry of queue) {
+        try {
+          const fd = new FormData();
+          for (const [k, v] of Object.entries(entry.body)) if (v) fd.append(k, v);
+          if (entry.photo) {
+            const blob = await (await fetch(entry.photo.dataUrl)).blob();
+            fd.append('photo', blob, entry.photo.name || 'lock-photo.jpg');
+          }
+          const res = await fetch(`${PB}/api/collections/loto_events/records`, {
+            method: 'POST', body: fd });
+          if (!res.ok) {
+            this.lotoError = 'A queued LOTO event was rejected by the server (' +
+              res.status + ') and was NOT saved: ' + entry.body.action + ' by ' +
+              entry.body.lock_holder_name + '. Please re-log it.';
+          }
+        } catch (err) {
+          remaining.push(entry); // still offline — keep it
+        }
+      }
+      this.outbox = remaining;
+      try { localStorage.setItem('lc_loto_outbox', JSON.stringify(remaining)); }
+      catch (e) { /* queue already in memory; next flush retries */ }
+    },
+    // Queue an event that could not reach the server (writes may wait —
+    // the asymmetry). The photo rides along as a data URL; if it blows the
+    // localStorage quota, the form state stays on screen with an explicit
+    // retry instead of silently dropping the event.
+    async queueLotoEvent(body, photoFile) {
+      const entry = { tagNumber: this.tagNumber, queuedAt: Date.now(), body };
+      if (photoFile) {
+        entry.photo = {
+          name: photoFile.name,
+          dataUrl: await new Promise((resolve, reject) => {
+            const r = new FileReader();
+            r.onload = () => resolve(r.result);
+            r.onerror = reject;
+            r.readAsDataURL(photoFile);
+          }),
+        };
+      }
+      const queue = this.readOutbox();
+      queue.push(entry);
+      try {
+        localStorage.setItem('lc_loto_outbox', JSON.stringify(queue));
+        this.outbox = queue;
+        return true;
+      } catch (e) {
+        return false; // quota — caller keeps the form up for manual retry
+      }
+    },
+
+    startLotoApply() {
+      this.lotoMode = 'apply'; this.lotoFlash = ''; this.lotoError = '';
+      this.lotoPhoto = null;
+    },
+    startLotoRelease() {
+      this.lotoMode = 'release'; this.lotoFlash = ''; this.lotoError = '';
+      this.releasePick = ''; this.releaseNote = ''; this.lotoPhoto = null;
+    },
+
+    async submitLotoApply() {
+      this.busy = true; this.lotoError = ''; this.lotoFlash = '';
+      if (this.lotoName) localStorage.setItem('lc_name', this.lotoName);
+      // performed_at is client-set: the lock was hung when it was hung,
+      // even if this event syncs from the outbox hours later.
+      const body = {
+        project: this.tag.project, tag: this.tag.id, action: 'apply',
+        lock_holder_name: this.lotoName,
+        company_or_trade: this.lotoTrade,
+        reason: this.lotoReason, lock_id: this.lotoLockId,
+        performed_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+      };
+      try {
+        // ONE multipart POST: the event and its required photo are atomic
+        // (ADR 0007 — no create-then-attach window on an append-only record).
+        const fd = new FormData();
+        for (const [k, v] of Object.entries(body)) if (v) fd.append(k, v);
+        fd.append('photo', this.lotoPhoto);
+        const res = await fetch(`${PB}/api/collections/loto_events/records`, {
+          method: 'POST', body: fd });
+        if (!res.ok) {
+          this.lotoError = 'The server rejected this apply (' + res.status +
+            '). Check that the photo is attached and try again.';
+          return;
+        }
+        this.lotoMode = ''; this.lotoReason = ''; this.lotoLockId = ''; this.lotoPhoto = null;
+        this.lotoFlash = '✓ Lock APPLY logged';
+        await this.syncLoto();
+      } catch (err) {
+        // Network failure — queue it (writes may wait; ADR 0007).
+        if (await this.queueLotoEvent(body, this.lotoPhoto)) {
+          this.lotoMode = ''; this.lotoReason = ''; this.lotoLockId = ''; this.lotoPhoto = null;
+          this.lotoFlash = 'No connection — the apply is saved on this phone and will sync automatically.';
+        } else {
+          this.lotoError = 'No connection, and the photo is too large to hold offline. ' +
+            'Keep this page open and press the button again when back in coverage.';
+        }
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    async submitLotoRelease() {
+      this.busy = true; this.lotoError = ''; this.lotoFlash = '';
+      if (this.lotoName) localStorage.setItem('lc_name', this.lotoName);
+      const body = {
+        project: this.tag.project, tag: this.tag.id, action: 'release',
+        applies_to: this.releasePick,
+        lock_holder_name: this.lotoName,
+        released_by_note: this.releaseNote,
+        performed_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+      };
+      try {
+        const fd = new FormData();
+        for (const [k, v] of Object.entries(body)) if (v) fd.append(k, v);
+        if (this.lotoPhoto) fd.append('photo', this.lotoPhoto);
+        const res = await fetch(`${PB}/api/collections/loto_events/records`, {
+          method: 'POST', body: fd });
+        if (!res.ok) {
+          this.lotoError = 'The server rejected this release (' + res.status +
+            '). If you are releasing someone else\'s lock, the release note is required.';
+          return;
+        }
+        this.lotoMode = ''; this.releasePick = ''; this.releaseNote = ''; this.lotoPhoto = null;
+        this.lotoFlash = '✓ Lock RELEASE logged';
+        await this.syncLoto();
+      } catch (err) {
+        if (await this.queueLotoEvent(body, this.lotoPhoto)) {
+          this.lotoMode = ''; this.releasePick = ''; this.releaseNote = ''; this.lotoPhoto = null;
+          this.lotoFlash = 'No connection — the release is saved on this phone and will sync automatically.';
+        } else {
+          this.lotoError = 'No connection, and the photo is too large to hold offline. ' +
+            'Keep this page open and press the button again when back in coverage.';
+        }
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    async flag() {
+      this.busy = true; this.flagFlash = ''; this.flagError = '';
+      if (this.flagBy) localStorage.setItem('lc_name', this.flagBy);
+      try {
+        // 1. Create the punch item. project is inherited from the tag so the
+        //    item also rolls up to the system/project views.
+        const body = {
+          project: this.tag.project,
+          tag: this.tag.id,
+          system: this.tag.system || null,
+          description: this.flagDesc,
+          severity: this.flagSev,
+          status: 'open',
+          assigned_party: this.flagAssigned || null,
+          created_by: this.flagBy || 'unspecified',
+        };
+        const res = await fetch(`${PB}/api/collections/punch_items/records`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) throw new Error('punch item rejected (' + res.status + ')');
+        const punch = await res.json();
+
+        // 2. If a photo was attached, upload it as an attachment record
+        //    pointing back at the punch item (multipart/form-data for the file).
+        if (this.flagFile) {
+          const fd = new FormData();
+          fd.append('file', this.flagFile);
+          fd.append('parent_collection', 'punch_items');
+          fd.append('parent_id', punch.id);
+          fd.append('uploaded_by', this.flagBy || 'unspecified');
+          const aRes = await fetch(`${PB}/api/collections/attachments/records`, {
+            method: 'POST', body: fd });
+          if (!aRes.ok) throw new Error('photo upload failed (' + aRes.status + ')');
+        }
+
+        this.flagFlash = '✓ Punch item logged';
+        this.flagDesc = ''; this.flagFile = null; this.flagAssigned = '';
+        this.showFlag = false;
+        await this.load();
+      } catch (err) {
+        this.flagError = 'Could not save: ' + err.message;
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    async startClose(id) {
+      this.closingId = id; this.closeNote = ''; this.closeCheckId = '';
+      // Offer the evidence link: passing checks on this tag, newest first
+      // (ADR 0004 — closing_check). Fetched lazily; closing is rarer than
+      // viewing.
+      const f = encodeURIComponent(`tag='${this.tag.id}' && result='pass'`);
+      const res = await fetch(
+        `${PB}/api/collections/checks/records?filter=(${f})&sort=-created&perPage=20&fields=id,phase,performed_at,created`);
+      this.passingChecks = (await res.json()).items;
+    },
+    cancelClose() { this.closingId = ''; },
+    prettyPhase(p) {
+      return { installation: 'Installation', point_to_point: 'Point-to-Point',
+               energization: 'Energization', loop_check: 'Loop Check',
+               functional: 'Functional', performance: 'Performance' }[p] || p || 'Check';
+    },
+
+    // ---- Checkout standing / history presentation (Phase 2b) ------------
+    // The fixed status colour language, matching severity: green pass,
+    // red fail, amber incomplete, grey not-started.
+    standColor(status) {
+      return { pass: 'var(--go)', fail: 'var(--sev-a)',
+               incomplete: 'var(--sev-b)' }[status] || 'var(--steel)';
+    },
+    standLabel(status) {
+      return { pass: 'Passed', fail: 'Failed', incomplete: 'Incomplete',
+               not_started: 'Not started' }[status] || status;
+    },
+
+    // phases_na applicability (ADR 0009). Free text is normalized (lowercase,
+    // strip non-alphanumerics) so "Loop Check" / "loopcheck" / "loop_check"
+    // all resolve to the loop_check phase; unrecognized tokens are inert.
+    norm(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); },
+    naSet() {
+      return new Set((this.tag?.phases_na || '')
+        .split(/[,\s]+/).map(t => this.norm(t)).filter(Boolean));
+    },
+
+    // Free per-tag export (Phase 2b): the whole ledger back out as CSV,
+    // built client-side — a crew that can log a check can always get its
+    // record out, no server render, no paid tier. Frozen prompts and
+    // values come straight off the append-only check_items.
+    async exportLedger() {
+      const rows = [['tag','phase','result','performed_by','witnessed_by',
+        'performed_at','test_equipment','prompt','item_result','value','note']];
+      const ids = this.checks.map(c => c.id);
+      let items = [];
+      if (ids.length) {
+        const f = encodeURIComponent('(' + ids.map(id => `check='${id}'`).join(' || ') + ')');
+        const r = await fetch(`${PB}/api/collections/check_items/records?filter=${f}&sort=created&perPage=2000`);
+        items = (await r.json()).items;
+      }
+      const byCheck = {};
+      for (const it of items) (byCheck[it.check] = byCheck[it.check] || []).push(it);
+      for (const c of this.checks) {
+        const at = (c.performed_at || c.created || '').slice(0, 10);
+        const its = byCheck[c.id] || [];
+        if (!its.length) {
+          rows.push([this.tag.tag_number, c.phase, c.result, c.performed_by,
+            c.witnessed_by, at, c.test_equipment_note, '', '', '', c.notes]);
+        }
+        for (const it of its) {
+          rows.push([this.tag.tag_number, c.phase, c.result, c.performed_by,
+            c.witnessed_by, at, c.test_equipment_note, it.prompt, it.result, it.value, it.note]);
+        }
+      }
+      const csv = rows.map(r => r.map(v =>
+        '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"').join(',')).join('\r\n');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+      a.download = this.tag.tag_number + '_checks.csv';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    },
+
+    async closePunch(p) {
+      this.busy = true;
+      if (this.closeName) localStorage.setItem('lc_name', this.closeName);
+      try {
+        // Closing is an update (punch items have an open→closed lifecycle),
+        // and the closure is recorded — who, when, why, and (optionally)
+        // the passing check that proved the fix. The record is never
+        // deleted; that is the immutable trail.
+        const body = {
+          status: 'closed',
+          closed_by: this.closeName || 'unspecified',
+          closed_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+          closure_note: this.closeNote || '',
+        };
+        if (this.closeCheckId) body.closing_check = this.closeCheckId;
+        const res = await fetch(`${PB}/api/collections/punch_items/records/${p.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) throw new Error('close rejected (' + res.status + ')');
+        this.closingId = '';
+        await this.load();
+      } catch (err) {
+        alert('Could not close item: ' + err.message);
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    // ---- Warranty & closeout actions (ADR 0005) --------------------------
+    async saveWarranty() {
+      this.busy = true; this.wError = '';
+      try {
+        const f = this.wForm;
+        // project is denormalized from the tag (same as punch items) so the
+        // timeline and dashboard can filter per-project directly.
+        const body = {
+          project: this.tag.project,
+          tag: this.tag.id,
+          vendor_name: f.vendor_name,
+          vendor_contact_name: f.vendor_contact_name,
+          vendor_phone: f.vendor_phone,
+          vendor_email: f.vendor_email || null,
+          basis: f.basis,
+          basis_note: f.basis_note,
+          // Blank = the trigger event hasn't occurred yet ("Awaiting
+          // trigger event"), which is the honest state, not an error.
+          clock_start_date: f.clock_start ? f.clock_start + ' 00:00:00' : null,
+          duration_months: f.duration ? parseInt(f.duration, 10) : null,
+        };
+        const res = await fetch(`${PB}/api/collections/warranties/records`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) throw new Error('warranty rejected (' + res.status + ')');
+        this.showWForm = false;
+        this.wForm = { vendor_name: '', vendor_contact_name: '', vendor_phone: '',
+                       vendor_email: '', basis: 'substantial_completion',
+                       basis_note: '', clock_start: '', duration: '' };
+        await this.load();
+      } catch (err) {
+        this.wError = 'Could not save: ' + err.message;
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    async openClaim() {
+      this.busy = true; this.claimError = '';
+      if (this.claimName) localStorage.setItem('lc_name', this.claimName);
+      try {
+        // opened_at is client-set (the failure was noticed when it was
+        // noticed); `created` stays the server log stamp — same split as
+        // checks.performed_at.
+        const body = {
+          project: this.tag.project,
+          tag: this.tag.id,
+          opened_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+          opened_by: this.claimName || 'unspecified',
+          description: this.claimDesc,
+        };
+        const res = await fetch(`${PB}/api/collections/warranty_claims/records`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) throw new Error('claim rejected (' + res.status + ')');
+        this.showClaimForm = false; this.claimDesc = '';
+        await this.load();
+      } catch (err) {
+        this.claimError = 'Could not save: ' + err.message;
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    async notifyClaim(c) {
+      this.busy = true;
+      try {
+        // Allowed while the claim is open; the server's close-once rule
+        // (updateRule: closed_at = '') rejects this on a closed claim.
+        const res = await fetch(`${PB}/api/collections/warranty_claims/records/${c.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            vendor_notified_date: new Date().toISOString().replace('T', ' ').slice(0, 19),
+          }),
+        });
+        if (!res.ok) throw new Error('update rejected (' + res.status + ')');
+        await this.load();
+      } catch (err) {
+        alert('Could not update claim: ' + err.message);
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    async closeClaim(c) {
+      this.busy = true;
+      if (this.claimName) localStorage.setItem('lc_name', this.claimName);
+      try {
+        // Closing is the LAST update this record will ever accept: once
+        // closed_at is set, the server freezes the claim (ADR 0005).
+        // Corrections after closure are new claims.
+        const res = await fetch(`${PB}/api/collections/warranty_claims/records/${c.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            resolution_note: this.claimResolution || '',
+            closed_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+            closed_by: this.claimName || 'unspecified',
+          }),
+        });
+        if (!res.ok) throw new Error('close rejected (' + res.status + ')');
+        this.closingClaimId = '';
+        await this.load();
+      } catch (err) {
+        alert('Could not close claim: ' + err.message);
+      } finally {
+        this.busy = false;
+      }
+    },
+  };
+}
+</script>
+</body>
+</html>

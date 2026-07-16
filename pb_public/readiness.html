@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoopCheck — Readiness Matrix</title>
+
+<!--
+  Readiness matrix (forms-library review §3) — one row per tag that folds
+  BOTH worlds the field and the owner actually read together: the checkout
+  phases (from the append-only checks ledger) AND the closeout deliverables
+  (from the closeout module), per tag, with a completion DATE in each cell.
+
+  This is the "Master Equipment Test Log" a commissioning plan uses as its turnover
+  output spec. It is a pure PRESENTATION JOIN — no schema of its own. Every
+  cell is DERIVED at render time from records other pages already write:
+    - a checkout-phase cell folds the tag's checks for that phase (any pass
+      wins, same rule as the tag-page standing plate); the cell shows the
+      passing check's date;
+    - a closeout cell folds the tag's requirements of that type; the cell
+      shows the received date;
+    - phases the tag marks N/A (tags.phases_na, ADR 0009) read "N/A", and a
+      phase the equipment type has no template for reads "—".
+
+  Read-only and print-friendly: this is the FREE deliverable. The compiled,
+  hyperlinked, multi-hundred-tag PDF turnover binder is the paid sidecar's
+  job (ADR 0003). Open as: readiness.html?project={projectId}
+-->
+<link rel="stylesheet" href="/app.css">
+<script defer src="/vendor/alpine.min.js"></script>
+<style>
+  body { max-width: 1100px; }   /* the matrix needs room */
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { border: 1px solid var(--line); padding: 5px 7px; text-align: center; white-space: nowrap; }
+  thead th { background: var(--wash); font-size: 11px; text-transform: uppercase;
+    letter-spacing: .03em; color: var(--steel); position: sticky; top: 0; }
+  th.tagcol, td.tagcol { text-align: left; }
+  th.grp { background: var(--ink); color: #fff; text-align: left; letter-spacing: .06em; }
+  td.tagcol .num { font-family: ui-monospace, Consolas, monospace; font-weight: 800; }
+  td.tagcol .nm { color: var(--steel); font-size: 11px; }
+  /* cell states */
+  .c-pass { color: var(--go); font-weight: 700; }
+  .c-fail { color: var(--sev-a); font-weight: 800; }
+  .c-inc  { color: var(--sev-b); font-weight: 800; }
+  .c-none { color: var(--line); }        /* required, not started */
+  .c-na   { color: var(--steel); font-size: 11px; }   /* N/A or not templated */
+  .sep { border-left: 3px solid var(--ink); }   /* divide checkout | closeout */
+  .legend { font-size: 12px; color: var(--steel); margin: 10px 0 0; }
+  .legend span { margin-right: 14px; white-space: nowrap; }
+  .sum { font-size: 13px; margin: 2px 0 12px; }
+  @media print {
+    .noprint { display: none !important; }
+    body { max-width: none; }
+    thead th { position: static; }
+    tr, .grpblock { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<div x-data="readinessPage()" x-init="load()">
+
+  <header class="bar noprint">
+    <span class="mark"><a href="/">LoopCheck</a></span>
+    <span class="meta">Readiness matrix</span>
+  </header>
+
+  <template x-if="state === 'loading'"><p class="loading">Loading…</p></template>
+  <template x-if="state === 'error'"><div class="error" x-text="errorMsg"></div></template>
+
+  <template x-if="state === 'ready'">
+    <main>
+      <a class="crumb noprint" :href="'/project.html?id=' + projectId"
+         x-text="'← ' + (project.name || 'Project')"></a>
+      <h1>Readiness matrix</h1>
+      <p class="meta" x-text="project.name"></p>
+
+      <button class="go secondary noprint" style="min-height:44px; max-width:260px" @click="window.print()">
+        Print / Save as PDF
+      </button>
+
+      <p class="sum">
+        <strong x-text="passedPhaseCells"></strong> of
+        <strong x-text="applicablePhaseCells"></strong> applicable checkout phases passed
+        · <strong x-text="acceptedReqs"></strong> of
+        <strong x-text="totalReqs"></strong> closeout deliverables accepted
+      </p>
+
+      <template x-if="!tags.length">
+        <p class="empty">No tags in this project yet.</p>
+      </template>
+
+      <template x-for="g in groups" :key="g.id">
+        <div class="grpblock" style="margin-bottom:18px">
+          <div class="scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th class="grp" :colspan="1 + PHASES.length + (anyTraining ? 1 : 0) + reqTypes.length">
+                    System <span x-text="g.number"></span><span x-show="g.name" x-text="' — ' + g.name"></span>
+                  </th>
+                </tr>
+                <tr>
+                  <th class="tagcol">Tag</th>
+                  <template x-for="p in PHASES" :key="p.key"><th x-text="p.short"></th></template>
+                  <!-- Training milestone (ADR 0013) — its own column, between
+                       checkout and closeout, as the readiness matrix places it. -->
+                  <th class="sep" x-show="anyTraining">Training</th>
+                  <template x-for="(rt, i) in reqTypes" :key="rt.key">
+                    <th :class="(i === 0 && !anyTraining) && 'sep'" x-text="rt.short"></th>
+                  </template>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="t in g.tags" :key="t.id">
+                  <tr>
+                    <td class="tagcol">
+                      <a class="num" :href="'/t/' + encodeURIComponent(t.tag_number)" x-text="t.tag_number"></a>
+                      <div class="nm" x-text="t.description || prettyType(t.tag_type)"></div>
+                    </td>
+                    <!-- checkout phase cells -->
+                    <template x-for="p in PHASES" :key="p.key">
+                      <td>
+                        <span :class="'c-' + phaseCell(t, p.key).cls"
+                              x-text="phaseCell(t, p.key).text"></span>
+                      </td>
+                    </template>
+                    <!-- training milestone cell (same fold as a phase cell) -->
+                    <td class="sep" x-show="anyTraining">
+                      <span :class="'c-' + phaseCell(t, 'training').cls"
+                            x-text="phaseCell(t, 'training').text"></span>
+                    </td>
+                    <!-- closeout deliverable cells -->
+                    <template x-for="(rt, i) in reqTypes" :key="rt.key">
+                      <td :class="(i === 0 && !anyTraining) && 'sep'">
+                        <span :class="'c-' + reqCell(t.id, rt.key).cls"
+                              x-text="reqCell(t.id, rt.key).text"></span>
+                      </td>
+                    </template>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </template>
+
+      <p class="legend">
+        <span><span class="c-pass">Jul 9</span> passed (date)</span>
+        <span><span class="c-fail">Fail</span> failed</span>
+        <span><span class="c-inc">•</span> in progress</span>
+        <span><span class="c-none">○</span> not started</span>
+        <span><span class="c-na">N/A</span> not applicable</span>
+        <span><span class="c-na">—</span> no template for type</span>
+      </p>
+      <p class="legend">
+        Checkout phases are derived from the append-only check ledger (any pass
+        wins); closeout deliverables from the closeout module. A cell's date is
+        the completion date — what an owner's schedule and the turnover binder
+        read. This print view is free; the compiled binder is the paid tier.
+      </p>
+    </main>
+  </template>
+
+</div>
+
+<script>
+function readinessPage() {
+  const PB = window.location.origin;
+  return {
+    projectId: new URLSearchParams(location.search).get('project') || '',
+    state: 'loading', errorMsg: '',
+    project: null,
+    systems: [], tags: [], reqs: [],
+    checksByTag: {},         // tagId -> { phase -> [{result, date}] }
+    templatedByType: {},     // tag_type -> Set(phase keys)
+
+    PHASES: [
+      { key: 'installation',   short: 'Install' },
+      { key: 'point_to_point', short: 'P2P' },
+      { key: 'energization',   short: 'Energ' },
+      { key: 'loop_check',     short: 'Loop' },
+      { key: 'functional',     short: 'Func' },
+      { key: 'performance',    short: 'Perf' },
+    ],
+    ALL_REQ: [
+      { key: 'om_manual',     short: 'O&M' },
+      { key: 'spare_parts',   short: 'Spares' },
+      { key: 'special_tools', short: 'Tools' },
+      { key: 'training',      short: 'Training' },
+      { key: 'warranty_cert', short: 'Cert' },
+      { key: 'test_report',   short: 'Test rpt' },
+      { key: 'other',         short: 'Other' },
+    ],
+
+    prettyType(t) {
+      const labels = { pump_centrifugal: 'Centrifugal Pump',
+        valve_motor_operated: 'Motor-Operated Valve', instrument_flow: 'Flow Instrument',
+        instrument_level: 'Level Instrument', instrument_pressure: 'Pressure Instrument' };
+      return labels[t] || (t ? t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '');
+    },
+    fmtDate(d) {
+      return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    },
+    norm(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); },
+    naSet(tag) {
+      return new Set((tag.phases_na || '').split(/[,\s]+/).map(t => this.norm(t)).filter(Boolean));
+    },
+
+    // Only render closeout columns for req_types that actually appear in this
+    // project — an empty grid of all seven helps no one.
+    get reqTypes() {
+      const present = new Set(this.reqs.map(r => r.req_type));
+      return this.ALL_REQ.filter(rt => present.has(rt.key));
+    },
+    // Show the training milestone column (ADR 0013) only when some tag_type in
+    // the project actually has a training template.
+    get anyTraining() {
+      for (const t of this.tags)
+        if ((this.templatedByType[t.tag_type] || new Set()).has('training')) return true;
+      return false;
+    },
+
+    tagsFor(sysId) { return this.tags.filter(t => t.system === sysId); },
+    get groups() {
+      const out = this.systems
+        .map(s => ({ id: s.id, number: s.number, name: s.name, tags: this.tagsFor(s.id) }))
+        .filter(g => g.tags.length);
+      const orphans = this.tags.filter(t => !t.system);
+      if (orphans.length) out.push({ id: '_none', number: '—', name: 'No system', tags: orphans });
+      return out;
+    },
+
+    // A checkout-phase cell. Same "any pass wins" rule as the tag-page
+    // standing plate, plus the not-applicable cases.
+    phaseCell(tag, phase) {
+      const templated = this.templatedByType[tag.tag_type];
+      if (!templated || !templated.has(phase)) return { cls: 'na', text: '—' };  // not for this type
+      if (this.naSet(tag).has(this.norm(phase))) return { cls: 'na', text: 'N/A' };
+      const rows = (this.checksByTag[tag.id] || {})[phase] || [];
+      if (!rows.length) return { cls: 'none', text: '○' };
+      const passes = rows.filter(r => r.result === 'pass');
+      if (passes.length) {
+        const latest = passes.map(r => r.date).sort().slice(-1)[0];
+        return { cls: 'pass', text: latest ? this.fmtDate(latest) : '✓' };
+      }
+      if (rows.some(r => r.result === 'fail')) return { cls: 'fail', text: 'Fail' };
+      return { cls: 'inc', text: '•' };
+    },
+
+    // A closeout-deliverable cell — least-advanced status wins (a tag with one
+    // accepted and one still-owed spare kit is not done). Shows the received
+    // date when there is one.
+    reqCell(tagId, type) {
+      const rs = this.reqs.filter(r => r.tag === tagId && r.req_type === type);
+      if (!rs.length) return { cls: 'na', text: '' };            // nothing owed
+      if (rs.some(r => r.status === 'required')) return { cls: 'none', text: '○' };
+      const withDate = rs.map(r => r.received_date).filter(Boolean).sort();
+      const date = withDate.length ? this.fmtDate(withDate[0]) : '';
+      if (rs.some(r => r.status === 'received')) return { cls: 'inc', text: date || '◐' };
+      return { cls: 'pass', text: date || '✓' };                 // all accepted
+    },
+
+    // Summary counts (applicable = templated and not N/A).
+    get applicablePhaseCells() {
+      let n = 0;
+      for (const t of this.tags) {
+        const templated = this.templatedByType[t.tag_type]; if (!templated) continue;
+        const na = this.naSet(t);
+        for (const p of this.PHASES) if (templated.has(p.key) && !na.has(this.norm(p.key))) n++;
+      }
+      return n;
+    },
+    get passedPhaseCells() {
+      let n = 0;
+      for (const t of this.tags)
+        for (const p of this.PHASES) if (this.phaseCell(t, p.key).cls === 'pass') n++;
+      return n;
+    },
+    get totalReqs() { return this.reqs.length; },
+    get acceptedReqs() { return this.reqs.filter(r => r.status === 'accepted').length; },
+
+    async load() {
+      if (!this.projectId) {
+        this.state = 'error';
+        this.errorMsg = 'No project id in the URL (open as /readiness.html?project=…).';
+        return;
+      }
+      try {
+        const pRes = await fetch(`${PB}/api/collections/projects/records/${this.projectId}`);
+        if (!pRes.ok) throw new Error('project not found (' + pRes.status + ')');
+        this.project = await pRes.json();
+
+        const f = encodeURIComponent(`project='${this.projectId}'`);
+        // checks join the project through their tag relation (checks have no
+        // project field): filter=(tag.project='…'). Templates give the
+        // required-phases map per tag_type.
+        const ckF = encodeURIComponent(`tag.project='${this.projectId}'`);
+        const tplF = encodeURIComponent(`subject_kind='tag' && phase != ''`);
+        const [sRes, tRes, rRes, ckRes, tplRes] = await Promise.all([
+          fetch(`${PB}/api/collections/systems/records?filter=(${f})&sort=startup_sequence,number&perPage=500`),
+          fetch(`${PB}/api/collections/tags/records?filter=(${f})&sort=tag_number&perPage=1000&fields=id,tag_number,system,description,tag_type,phases_na`),
+          fetch(`${PB}/api/collections/closeout_requirements/records?filter=(${f})&perPage=2000`),
+          fetch(`${PB}/api/collections/checks/records?filter=(${ckF})&perPage=2000&fields=tag,phase,result,performed_at,created`),
+          fetch(`${PB}/api/collections/checklist_templates/records?filter=(${tplF})&perPage=200&fields=tag_type,phase`),
+        ]);
+        this.systems = (await sRes.json()).items;
+        this.tags = (await tRes.json()).items;
+        this.reqs = (await rRes.json()).items;
+
+        // group checks by tag then phase
+        const checks = (await ckRes.json()).items;
+        const byTag = {};
+        for (const c of checks) {
+          if (!c.tag || !c.phase) continue;
+          (byTag[c.tag] = byTag[c.tag] || {});
+          (byTag[c.tag][c.phase] = byTag[c.tag][c.phase] || [])
+            .push({ result: c.result, date: (c.performed_at || c.created || '').slice(0, 10) });
+        }
+        this.checksByTag = byTag;
+
+        // required-phases map: tag_type -> Set(phase)
+        const map = {};
+        for (const t of (await tplRes.json()).items)
+          (map[t.tag_type] = map[t.tag_type] || new Set()).add(t.phase);
+        this.templatedByType = map;
+
+        this.state = 'ready';
+      } catch (err) {
+        this.state = 'error';
+        this.errorMsg = 'Could not load readiness data. (' + err.message + ')';
+      }
+    },
+  };
+}
+</script>
+</body>
+</html>

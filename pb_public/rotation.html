@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoopCheck — Rotation Board</title>
+
+<!--
+  Rotation & VFD board (ADR 0008) — every rotating tag on the job, one row each,
+  grouped by system, chipped by its LATEST rotation check. This is the vendor /
+  owner's-rep deliverable and prints cleanly (free tier, like cutover.html); the
+  compiled rotation report is the paid sidecar's job, built on these same reads.
+
+  Everything here is DERIVED live on each load — no stored status. The
+  hardware-vs-software reading (the module's whole value) is derived from the two
+  frozen direction lines of each check's check_items, exactly as the capture page
+  derives it, never from a stored field (hard constraint #4). result='fail'
+  covers both fault classes; the board reads the items to tell them apart.
+
+  Open as:  rotation.html?project={projectId}
+-->
+<link rel="stylesheet" href="/app.css">
+<script defer src="/vendor/alpine.min.js"></script>
+<style>
+  body { max-width: 1060px; }
+
+  .totals { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px;
+    color: var(--steel); font-size: 14px; }
+  .totals strong { color: var(--ink); font-size: 18px; }
+  .totals .hw strong { color: var(--sev-a); }
+  .totals .sw strong { color: var(--sev-b); }
+
+  .filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; margin: 12px 0 4px; }
+  .filters .tog { display: flex; align-items: center; gap: 8px; min-height: 44px;
+    font-size: 14px; font-weight: 700; cursor: pointer; }
+  .filters .tog input { width: 20px; height: 20px; }
+
+  table.board { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  .board th { text-align: left; font-size: 11px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--steel); padding: 6px 8px;
+    border-bottom: 2px solid var(--ink); }
+  .board td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  .board tr.sys th { padding-top: 16px; font-size: 13px; letter-spacing: .04em;
+    color: var(--ink); text-transform: none; border-bottom: 2px solid var(--line); }
+  .board .tagn { font-family: ui-monospace, Consolas, monospace; font-weight: 700; white-space: nowrap; }
+  .board .tagn a { text-decoration: none; }
+  .board .vfd { font-family: ui-monospace, Consolas, monospace; font-size: 11px;
+    font-weight: 800; color: var(--safety); }
+
+  /* Status chip — the reading, colour-coded. */
+  .st { display: inline-block; font-size: 12px; font-weight: 800; letter-spacing: .02em;
+    padding: 3px 9px; border: 2px solid var(--line); color: var(--steel); white-space: nowrap; }
+  .st.pass { border-color: var(--go); background: #e9f5ee; color: var(--go); }
+  .st.hw   { border-color: var(--sev-a); background: #fbe9e7; color: var(--sev-a); }
+  .st.sw   { border-color: var(--sev-b); background: #fdf1de; color: #8a5a00; }
+  .st.inc  { border-color: var(--steel); background: var(--wash); color: var(--steel); }
+  .st.none { border-style: dashed; }
+
+  .dirpair { font-family: ui-monospace, Consolas, monospace; font-size: 12px;
+    color: var(--steel); white-space: nowrap; }
+  .params { font-family: ui-monospace, Consolas, monospace; font-size: 12px;
+    color: var(--steel); }
+
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px;
+    font-size: 12px; color: var(--steel); }
+  .legend span { display: flex; gap: 5px; align-items: center; }
+
+  @media print {
+    @page { size: letter landscape; margin: 0.5in; }
+    body { max-width: none; padding: 0; }
+    .noprint { display: none !important; }
+    .board td, .board th { padding: 4px 6px; font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+
+<div x-data="rotationBoard()" x-init="load()">
+
+  <header class="bar">
+    <span class="mark"><a href="/">LoopCheck</a></span>
+    <span class="meta">Rotation board</span>
+  </header>
+
+  <template x-if="state === 'loading'"><p class="loading">Loading board…</p></template>
+  <template x-if="state === 'error'"><div class="error" x-text="errorMsg"></div></template>
+
+  <template x-if="state === 'ready'">
+    <main>
+      <div class="noprint">
+        <a class="crumb" :href="'/project.html?id=' + projectId">← Project</a>
+      </div>
+      <h1 x-text="(project?.name || 'Project') + ' — rotation &amp; VFD'"></h1>
+
+      <div class="totals">
+        <span><strong x-text="tags.length"></strong> rotating tags</span>
+        <span><strong x-text="counts.pass"></strong> correct</span>
+        <span class="hw"><strong x-text="counts.hardware"></strong> hardware fault</span>
+        <span class="sw"><strong x-text="counts.software"></strong> software conflict</span>
+        <span><strong x-text="counts.incomplete"></strong> incomplete</span>
+        <span><strong x-text="counts.untested"></strong> not tested</span>
+      </div>
+
+      <div class="filters noprint">
+        <label class="tog"><input type="checkbox" x-model="fFaultOnly"> Faults &amp; conflicts only</label>
+        <label class="tog"><input type="checkbox" x-model="fUntested"> Not-yet-tested only</label>
+        <button class="go secondary" style="margin-top:0; min-height:44px" onclick="window.print()">Print board</button>
+        <button class="go secondary" style="margin-top:0; min-height:44px" @click="exportCsv()">Export CSV</button>
+      </div>
+
+      <template x-if="!tags.length">
+        <p class="empty">No rotating equipment (pumps or motors) in this project yet.
+          Import equipment on the <a href="/import.html">CSV import</a> page.</p>
+      </template>
+
+      <template x-if="tags.length">
+        <div>
+          <table class="board">
+            <thead>
+              <tr>
+                <th>Tag</th>
+                <th>Description</th>
+                <th>Status</th>
+                <th>Hand / Auto</th>
+                <th>VFD parameters</th>
+                <th>Tested</th>
+                <th class="noprint"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="grp in groups" :key="grp.systemId">
+                <template x-if="grp.tags.length">
+                  <tbody>
+                    <tr class="sys"><th colspan="7" x-text="grp.label"></th></tr>
+                    <template x-for="t in grp.tags" :key="t.id">
+                      <tr>
+                        <td class="tagn">
+                          <a :href="'/t/' + encodeURIComponent(t.tag_number)" x-text="t.tag_number"></a>
+                          <span x-show="t.has_vfd" class="vfd"> VFD</span>
+                        </td>
+                        <td x-text="t.description || ''"></td>
+                        <td><span class="st" :class="read(t.id).cls" x-text="read(t.id).chip"></span></td>
+                        <td class="dirpair" x-text="dirText(t.id)"></td>
+                        <td class="params" x-text="paramText(t.id)"></td>
+                        <td x-text="testedText(t.id)"></td>
+                        <td class="noprint">
+                          <a :href="'/rotation_check.html?tag=' + t.id"
+                             x-text="latestCheck(t.id) ? 're-test' : 'log'"></a>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </template>
+              </template>
+            </tbody>
+          </table>
+
+          <div class="legend">
+            <span><span class="st pass">CORRECT</span> Hand + Auto forward</span>
+            <span><span class="st hw">HARDWARE</span> both reverse — swap leads (LOTO)</span>
+            <span><span class="st sw">SOFTWARE</span> mismatch — fix VFD param, do NOT swap leads</span>
+            <span><span class="st inc">INCOMPLETE</span> one mode recorded</span>
+            <span><span class="st none">NOT TESTED</span></span>
+          </div>
+        </div>
+      </template>
+    </main>
+  </template>
+
+</div>
+
+<script>
+function rotationBoard() {
+  const PB = window.location.origin;
+
+  // The same four-outcome diagnostic the capture page uses, derived from the
+  // two frozen direction values — hardware vs software is a READING of the
+  // facts in the ledger, never a stored field (ADR 0008, hard constraint #4).
+  function diagnose(hand, auto) {
+    if (!hand || !auto) return { key: 'incomplete', cls: 'inc', chip: 'INCOMPLETE' };
+    if (hand === 'forward' && auto === 'forward') return { key: 'pass', cls: 'pass', chip: 'CORRECT' };
+    if (hand === auto) return { key: 'hardware', cls: 'hw', chip: 'HARDWARE' };
+    return { key: 'software', cls: 'sw', chip: 'SOFTWARE' };
+  }
+
+  // PocketBase pages max at 500; page every list read to the end.
+  async function fetchAll(pathAndQuery) {
+    let page = 1, out = [];
+    for (;;) {
+      const res = await fetch(`${PB}/api/collections/${pathAndQuery}&perPage=500&page=${page}`);
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+      const data = await res.json();
+      out = out.concat(data.items);
+      if (page >= data.totalPages) return out;
+      page++;
+    }
+  }
+
+  return {
+    projectId: new URLSearchParams(location.search).get('project') || '',
+    state: 'loading', errorMsg: '',
+    project: null,
+    tags: [],                 // rotating tags in the project
+    systems: {},              // systemId -> {number, name}
+    latestByTag: {},          // tagId -> latest rotation check
+    itemsByCheck: {},         // checkId -> [check_items]
+    fFaultOnly: false,
+    fUntested: false,
+
+    latestCheck(tagId) { return this.latestByTag[tagId] || null; },
+
+    // Pull the two direction values out of a check's frozen items (matched by
+    // prompt, exactly as they were captured).
+    directions(tagId) {
+      const c = this.latestByTag[tagId];
+      if (!c) return { hand: '', auto: '' };
+      const its = this.itemsByCheck[c.id] || [];
+      const hand = (its.find(i => /\bHAND\b/i.test(i.prompt)) || {}).value || '';
+      const auto = (its.find(i => /\bAUTO\b/i.test(i.prompt)) || {}).value || '';
+      return { hand, auto };
+    },
+    read(tagId) {
+      const c = this.latestByTag[tagId];
+      if (!c) return { key: 'none', cls: 'none', chip: 'NOT TESTED' };
+      const d = this.directions(tagId);
+      // Items present -> derive the fault class; otherwise fall back to the
+      // stored result so a check with no readable items still shows honestly.
+      if (d.hand || d.auto) return diagnose(d.hand, d.auto);
+      if (c.result === 'pass') return { key: 'pass', cls: 'pass', chip: 'CORRECT' };
+      if (c.result === 'fail') return { key: 'fail', cls: 'hw', chip: 'FAIL' };
+      return { key: 'incomplete', cls: 'inc', chip: 'INCOMPLETE' };
+    },
+    dirText(tagId) {
+      if (!this.latestByTag[tagId]) return '';
+      const d = this.directions(tagId);
+      const s = x => x ? x[0].toUpperCase() + x.slice(1) : '—';
+      return s(d.hand) + ' / ' + s(d.auto);
+    },
+    // VFD parameter readings pulled from the frozen items (matched by prompt).
+    paramText(tagId) {
+      const c = this.latestByTag[tagId];
+      if (!c) return '';
+      const its = (this.itemsByCheck[c.id] || []).filter(i => i.value &&
+        /maximum|minimum|acceler|deceler/i.test(i.prompt));
+      if (!its.length) return '';
+      return its.map(i => {
+        const p = /maximum/i.test(i.prompt) ? 'max' : /minimum/i.test(i.prompt) ? 'min'
+                : /acceler/i.test(i.prompt) ? 'accel' : 'decel';
+        const unit = /acceler|deceler/i.test(i.prompt) ? 's' : 'Hz';
+        return `${p} ${i.value}${unit}`;
+      }).join(' · ');
+    },
+    testedText(tagId) {
+      const c = this.latestByTag[tagId];
+      if (!c) return '—';
+      // performed_at is a calendar date stored at UTC midnight — format in UTC
+      // so a negative-offset timezone doesn't render it as the day before.
+      const d = new Date(String(c.performed_at || c.created).replace(' ', 'T'));
+      const day = d.toLocaleDateString(undefined,
+        { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+      return c.performed_by ? day + ' · ' + c.performed_by : day;
+    },
+
+    // Grouped by system, systems in number order, tags by number within.
+    get groups() {
+      const bySys = {};
+      for (const t of this.visibleTags) (bySys[t.system || ''] ||= []).push(t);
+      const ids = Object.keys(bySys).sort((a, b) => {
+        const na = +(this.systems[a]?.number ?? 1e9), nb = +(this.systems[b]?.number ?? 1e9);
+        return (na - nb) || String(a).localeCompare(String(b));
+      });
+      return ids.map(sid => ({
+        systemId: sid || 'none',
+        label: this.systems[sid]
+          ? 'System ' + this.systems[sid].number + (this.systems[sid].name ? ' — ' + this.systems[sid].name : '')
+          : 'Unassigned',
+        tags: bySys[sid].sort((a, b) => a.tag_number.localeCompare(b.tag_number, undefined, { numeric: true })),
+      }));
+    },
+    get visibleTags() {
+      return this.tags.filter(t => {
+        const k = this.read(t.id).key;
+        if (this.fFaultOnly && !(k === 'hardware' || k === 'software' || k === 'fail')) return false;
+        if (this.fUntested && k !== 'none') return false;
+        return true;
+      });
+    },
+    get counts() {
+      const c = { pass: 0, hardware: 0, software: 0, incomplete: 0, untested: 0 };
+      for (const t of this.tags) {
+        const k = this.read(t.id).key;
+        if (k === 'pass') c.pass++;
+        else if (k === 'hardware') c.hardware++;
+        else if (k === 'software') c.software++;
+        else if (k === 'incomplete') c.incomplete++;
+        else if (k === 'none') c.untested++;
+        else if (k === 'fail') c.hardware++;   // unreadable fail — count as fault
+      }
+      return c;
+    },
+
+    async load() {
+      if (!this.projectId) {
+        this.state = 'error';
+        this.errorMsg = 'No project in the URL. Open this from a project page.';
+        return;
+      }
+      try {
+        const pRes = await fetch(`${PB}/api/collections/projects/records/${this.projectId}`);
+        if (!pRes.ok) throw new Error('project not found (' + pRes.status + ')');
+        this.project = await pRes.json();
+
+        // 1. Which tag_types carry a rotation template — DERIVED from the
+        //    library, never hardcoded. Also the rotation template ids, used to
+        //    filter checks down to rotation checks only.
+        const tplF = encodeURIComponent(`template_key ~ 'rotation'`);
+        const tpls = await fetchAll(`checklist_templates/records?filter=(${tplF})&fields=id,template_key,tag_type`);
+        const rotTypes = [...new Set(tpls.map(t => t.tag_type).filter(Boolean))];
+        const rotTplIds = tpls.map(t => t.id);
+        if (!rotTypes.length) { this.tags = []; this.state = 'ready'; return; }
+
+        // 2. Rotating tags in this project.
+        const typeOr = rotTypes.map(t => `tag_type='${t}'`).join(' || ');
+        const tagF = encodeURIComponent(`project='${this.projectId}' && (${typeOr})`);
+        this.tags = await fetchAll(
+          `tags/records?filter=(${tagF})&fields=id,tag_number,description,system,tag_type,has_vfd`);
+
+        // 3. Systems in this project, for the group headers.
+        const sysF = encodeURIComponent(`project='${this.projectId}'`);
+        const systems = await fetchAll(`systems/records?filter=(${sysF})&fields=id,number,name`);
+        this.systems = Object.fromEntries(systems.map(s => [s.id, s]));
+
+        if (!this.tags.length) { this.state = 'ready'; return; }
+
+        // 4. Every rotation check in the project (rotation templates only),
+        //    then keep the LATEST per tag — the board reads the latest, a
+        //    re-test after a fix supersedes it (the failed record stays in the
+        //    ledger; ADR 0008).
+        const tplOr = rotTplIds.map(id => `template='${id}'`).join(' || ');
+        const chkF = encodeURIComponent(`tag.project='${this.projectId}' && (${tplOr})`);
+        const checks = await fetchAll(
+          `checks/records?filter=(${chkF})&fields=id,tag,template,result,performed_by,performed_at,created`);
+        const stamp = c => new Date(String(c.performed_at || c.created).replace(' ', 'T')).getTime();
+        for (const c of checks) {
+          const cur = this.latestByTag[c.tag];
+          if (!cur || stamp(c) >= stamp(cur)) this.latestByTag[c.tag] = c;
+        }
+
+        // 5. The frozen items of just those latest checks — the two direction
+        //    facts the hardware-vs-software reading derives from, plus the VFD
+        //    parameter readings. One paged read over the latest-check ids.
+        const latestIds = Object.values(this.latestByTag).map(c => c.id);
+        if (latestIds.length) {
+          // Chunk the OR filter so a huge job doesn't build an unbounded URL.
+          for (let i = 0; i < latestIds.length; i += 40) {
+            const chunk = latestIds.slice(i, i + 40);
+            const or = chunk.map(id => `check='${id}'`).join(' || ');
+            const f = encodeURIComponent(`(${or})`);
+            const items = await fetchAll(
+              `check_items/records?filter=(${f})&fields=check,prompt,value,result`);
+            for (const it of items) (this.itemsByCheck[it.check] ||= []).push(it);
+          }
+        }
+
+        this.state = 'ready';
+      } catch (err) {
+        this.state = 'error';
+        this.errorMsg = 'Could not load the board. (' + err.message + ')';
+      }
+    },
+
+    exportCsv() {
+      const rows = [['System', 'Tag', 'Description', 'VFD', 'Status',
+        'Hand', 'Auto', 'VFD params', 'Tested', 'By']];
+      for (const grp of this.groups) {
+        for (const t of grp.tags) {
+          const d = this.directions(t.id);
+          const c = this.latestByTag[t.id];
+          rows.push([
+            grp.label, t.tag_number, t.description || '', t.has_vfd ? 'yes' : '',
+            this.read(t.id).chip, d.hand, d.auto, this.paramText(t.id),
+            c ? String(c.performed_at || c.created).slice(0, 10) : '',
+            c ? (c.performed_by || '') : '',
+          ]);
+        }
+      }
+      const csv = rows.map(r => r.map(cell => {
+        const s = String(cell ?? '');
+        return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+      }).join(',')).join('\r\n');
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'rotation_' + (this.project?.name || 'project').replace(/\W+/g, '_') + '.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+  };
+}
+</script>
+</body>
+</html>

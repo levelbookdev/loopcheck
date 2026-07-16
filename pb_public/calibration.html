@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoopCheck — Log calibration</title>
+<link rel="stylesheet" href="/app.css">
+<script defer src="/vendor/alpine.min.js"></script>
+</head>
+<body>
+<div x-data="calibrationPage()" x-init="load()">
+  <header class="bar">
+    <span class="mark"><a href="/">LoopCheck</a></span>
+    <span class="meta">Calibration</span>
+  </header>
+
+  <template x-if="state === 'loading'"><p class="loading">Loading…</p></template>
+  <template x-if="state === 'error'"><div class="error" x-text="error"></div></template>
+
+  <template x-if="state === 'ready'">
+    <main>
+      <a class="crumb" :href="'/t/' + encodeURIComponent(tag.tag_number)">← <span class="mono" x-text="tag.tag_number"></span></a>
+      <h1>Log calibration</h1>
+      <p class="meta" x-text="tag.description || tag.tag_number"></p>
+
+      <div class="flash" x-show="queuedCount" style="background:var(--sev-b)">
+        <span x-text="queuedCount"></span> calibration<span x-show="queuedCount !== 1">s</span>
+        queued on this phone. They will sync when a connection is available.
+      </div>
+
+      <label class="fl" for="standard">Test standard</label>
+      <select id="standard" x-model="form.standard">
+        <option value="">— select the standard used —</option>
+        <template x-for="s in standards" :key="s.id">
+          <option :value="s.id" x-text="standardLabel(s)"></option>
+        </template>
+      </select>
+      <p class="meta" x-show="selectedStandard">
+        Certificate due <strong x-text="dateOnly(selectedStandard?.cert_due_date)"></strong>
+        · S/N <span class="mono" x-text="selectedStandard?.serial"></span>
+      </p>
+      <div class="cal-expired" x-show="standardExpired">
+        EXPIRED STANDARD AT TIME OF USE — submission is allowed, but this
+        calibration will be permanently flagged in red.
+      </div>
+      <p class="meta" x-show="!standards.length">
+        No standards are registered. <a href="/standards.html">Open the standards registry →</a>
+      </p>
+
+      <label class="fl" for="tech">Technician</label>
+      <input id="tech" type="text" x-model="form.technician" placeholder="Name on the calibration sheet">
+      <label class="fl" for="company">Company</label>
+      <input id="company" type="text" x-model="form.company" placeholder="Contractor, integrator, or vendor">
+      <label class="fl" for="performed">Calibration date</label>
+      <input id="performed" type="date" x-model="form.performed_at">
+      <label class="fl" for="interval">Interval (months)</label>
+      <input id="interval" type="number" min="1" max="120" inputmode="numeric" x-model="form.interval_months">
+
+      <h2 class="section">Calibration points</h2>
+      <p class="meta">Always record both readings. A changed as-left value is a normal adjustment, not an edit to as-found.</p>
+      <template x-for="(p, i) in points" :key="p.key">
+        <div class="cal-point">
+          <div style="display:flex; justify-content:space-between; gap:8px; align-items:center">
+            <strong x-text="'Point ' + (i + 1)"></strong>
+            <button class="link" x-show="points.length > 1" @click="points.splice(i, 1)">Remove</button>
+          </div>
+          <label class="fl">Test point</label>
+          <input type="text" x-model="p.test_point" placeholder="e.g. 0% / 4 mA">
+          <div class="cal-grid">
+            <div><label class="fl">Expected</label><input type="number" step="any" inputmode="decimal" x-model="p.expected_value"></div>
+            <div><label class="fl">As found</label><input type="number" step="any" inputmode="decimal" x-model="p.as_found"></div>
+            <div><label class="fl">As left</label><input type="number" step="any" inputmode="decimal" x-model="p.as_left"></div>
+          </div>
+          <label class="fl">Unit</label>
+          <input type="text" x-model="p.unit" placeholder="mA, psi, in., %">
+          <label class="lockpick" :class="{on:p.within_tolerance}" style="margin-top:10px">
+            <input type="checkbox" x-model="p.within_tolerance"> Final reading within tolerance
+          </label>
+        </div>
+      </template>
+      <button class="link" style="margin-top:8px" @click="addPoint()">+ Add point</button>
+
+      <h2 class="section">Record</h2>
+      <p class="meta">Derived result: <strong x-text="resultLabel(derivedResult)"></strong></p>
+      <label class="fl" for="notes">Notes</label>
+      <textarea id="notes" x-model="form.notes" placeholder="Adjustment, tolerance, or method notes"></textarea>
+      <label class="fl" for="report">Calibration certificate / report (optional)</label>
+      <input id="report" type="file" accept="application/pdf,image/*" @change="report = $event.target.files[0] || null">
+
+      <button class="go" :disabled="busy || !canSubmit" @click="submit()"
+              x-text="busy ? 'Saving…' : (navigator.onLine ? 'Save calibration' : 'Queue calibration offline')"></button>
+      <div class="flash" x-show="flash" x-text="flash"></div>
+      <div class="error" x-show="submitError" x-text="submitError"></div>
+    </main>
+  </template>
+</div>
+
+<script>
+function calibrationPage() {
+  const PB = window.location.origin;
+  const OUTBOX = 'lc_calibration_outbox';
+  return {
+    tagId: new URLSearchParams(location.search).get('tag') || '',
+    state: 'loading', error: '', tag: null, standards: [], points: [], report: null,
+    form: { standard:'', technician:localStorage.getItem('lc_name') || '', company:'',
+            performed_at:new Date().toISOString().slice(0,10), interval_months:12, notes:'' },
+    busy:false, flash:'', submitError:'', outbox:[],
+
+    async load() {
+      if (!this.tagId) { this.state='error'; this.error='No tag id in the URL.'; return; }
+      try {
+        const [tRes, sRes] = await Promise.all([
+          fetch(`${PB}/api/collections/tags/records/${this.tagId}?fields=id,tag_number,description,tag_type,project`),
+          fetch(`${PB}/api/collections/test_standards/records?sort=cert_due_date,name&perPage=200`),
+        ]);
+        if (!tRes.ok) throw new Error('Instrument tag not found.');
+        this.tag = await tRes.json();
+        if (!['instrument_flow','instrument_level','instrument_pressure'].includes(this.tag.tag_type))
+          throw new Error('Calibration records are only available for instrument tags.');
+        if (!sRes.ok) throw new Error('Standards registry is unavailable.');
+        this.standards = (await sRes.json()).items;
+        this.points = this.defaultPoints(this.tag.tag_type);
+        this.outbox = this.readOutbox();
+        this.state = 'ready';
+        window.addEventListener('online', () => this.syncOutbox());
+        this.syncOutbox();
+      } catch (err) { this.state='error'; this.error=err.message || 'Could not load calibration form.'; }
+    },
+    defaultPoints(type) {
+      const levels = type === 'instrument_flow' ? [0,25,50,75,100] : [0,50,100];
+      return levels.map((pct, i) => ({ key:Date.now() + '-' + i, test_point:`${pct}% / ${4 + pct * .16} mA`,
+        expected_value:String(4 + pct * .16), as_found:'', as_left:'', unit:'mA', within_tolerance:true }));
+    },
+    addPoint() { this.points.push({key:Date.now()+'-'+Math.random(),test_point:'',expected_value:'',as_found:'',as_left:'',unit:'',within_tolerance:true}); },
+    get selectedStandard() { return this.standards.find(s => s.id === this.form.standard) || null; },
+    get standardExpired() { return !!this.selectedStandard && this.dateOnly(this.selectedStandard.cert_due_date) < this.form.performed_at; },
+    get derivedResult() {
+      if (this.points.some(p => !p.within_tolerance)) return 'fail';
+      if (this.points.some(p => p.as_found !== '' && Number(p.as_found) !== Number(p.as_left))) return 'adjusted_pass';
+      return 'pass';
+    },
+    get canSubmit() {
+      return this.form.standard && this.form.technician.trim() && this.form.performed_at &&
+        Number(this.form.interval_months) > 0 && this.points.length && this.points.every(p =>
+          p.test_point.trim() && p.unit.trim() && p.expected_value !== '' && p.as_found !== '' && p.as_left !== '');
+    },
+    get queuedCount() { return this.outbox.length; },
+    dateOnly(v) { return String(v || '').slice(0,10); },
+    standardLabel(s) { return `${s.name}${s.model ? ' · '+s.model : ''} · S/N ${s.serial} · due ${this.dateOnly(s.cert_due_date)}`; },
+    resultLabel(v) { return {pass:'PASS',fail:'FAIL',adjusted_pass:'ADJUSTED — PASS'}[v] || v; },
+    token() { return crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)+'-'+Math.random().toString(36).slice(2); },
+    readOutbox() { try { return JSON.parse(localStorage.getItem(OUTBOX) || '[]'); } catch (_) { return []; } },
+    saveOutbox(rows) { localStorage.setItem(OUTBOX, JSON.stringify(rows)); this.outbox=rows; },
+    async fileData(file) {
+      if (!file) return null;
+      return await new Promise((resolve, reject) => { const r=new FileReader(); r.onload=()=>resolve({name:file.name,type:file.type,data:r.result}); r.onerror=reject; r.readAsDataURL(file); });
+    },
+    async dataFile(saved) {
+      if (!saved) return null;
+      const blob = await (await fetch(saved.data)).blob();
+      return new File([blob], saved.name, {type:saved.type || blob.type});
+    },
+    payload(token) {
+      return { tag:this.tag.id, standard:this.form.standard, technician:this.form.technician.trim(),
+        company:this.form.company.trim(), performed_at:this.form.performed_at,
+        interval_months:Number(this.form.interval_months), result:this.derivedResult,
+        notes:this.form.notes.trim(), client_token:token,
+        points:this.points.map(p=>({test_point:p.test_point.trim(),expected_value:Number(p.expected_value),
+          as_found:Number(p.as_found),as_left:Number(p.as_left),unit:p.unit.trim(),within_tolerance:!!p.within_tolerance})) };
+    },
+    async post(entry) {
+      const fd = new FormData();
+      for (const k of ['tag','standard','technician','company','performed_at','interval_months','result','notes','client_token']) fd.append(k, entry.payload[k]);
+      fd.append('points_json', JSON.stringify(entry.payload.points));
+      const file = entry.report instanceof File ? entry.report : await this.dataFile(entry.report);
+      if (file) fd.append('report', file);
+      const res = await fetch(`${PB}/api/calibrations/capture`, {method:'POST',body:fd});
+      if (!res.ok) { const d=await res.json().catch(()=>({})); const err=new Error(d.message || `Save failed (${res.status}).`); err.permanent=res.status<500; throw err; }
+      return await res.json();
+    },
+    async submit() {
+      this.busy=true; this.flash=''; this.submitError='';
+      if (this.form.technician) localStorage.setItem('lc_name', this.form.technician);
+      const entry={payload:this.payload(this.token()),report:this.report,queued_at:new Date().toISOString()};
+      try {
+        if (!navigator.onLine) throw new TypeError('offline');
+        const saved=await this.post(entry);
+        this.flash=saved.standard_expired_at_use ? 'Saved — EXPIRED STANDARD FLAGGED.' : 'Calibration saved.';
+        this.busy=false;
+      } catch (err) {
+        if (err.permanent) { this.submitError=err.message; this.busy=false; return; }
+        try {
+          entry.report=await this.fileData(this.report);
+          const rows=this.readOutbox(); rows.push(entry); this.saveOutbox(rows);
+          this.flash='No connection — the complete calibration is queued on this phone.';
+        } catch (_) {
+          this.submitError='No connection, and the attached report is too large to hold offline. Keep this page open and retry with a connection or a smaller file.';
+        }
+        this.busy=false;
+      }
+    },
+    async syncOutbox() {
+      if (!navigator.onLine || !this.readOutbox().length) return;
+      const keep=[];
+      for (const entry of this.readOutbox()) {
+        try { await this.post(entry); }
+        catch (err) { keep.push(entry); if (!err.permanent) break; }
+      }
+      this.saveOutbox(keep);
+      if (!keep.length) this.flash='Queued calibrations synced.';
+    },
+  };
+}
+</script>
+</body>
+</html>

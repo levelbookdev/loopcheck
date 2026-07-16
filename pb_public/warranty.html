@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoopCheck — Warranty timeline</title>
+<!--
+  Warranty timeline (ADR 0005) — every warranty in the project sorted by its
+  DERIVED expiration date, soonest first, with anything inside 90 days
+  highlighted. The end date is computed here from clock_start_date +
+  duration_months and never stored; warranties whose trigger event hasn't
+  happened yet ("Awaiting trigger event") sort to the bottom — there is no
+  deadline to miss until the clock starts.
+
+  There are deliberately NO email alerts here: expiry alerts are derivation,
+  which is the future hosted tier's job (docs/ROADMAP.md). This page is the
+  free answer: open it and look.
+-->
+<link rel="stylesheet" href="/app.css">
+<script defer src="/vendor/alpine.min.js"></script>
+<style>
+  .wrow { border: 2px solid var(--line); border-left-width: 6px; padding: 12px; margin-bottom: 10px; }
+  .wrow.w-expired  { border-left-color: var(--sev-a); }
+  .wrow.w-expiring { border-left-color: var(--sev-b); background: #fdf6e9; }
+  .wrow.w-active   { border-left-color: var(--go); }
+  .wrow.w-pending  { border-left-color: var(--line); }
+  .wrow .line { color: var(--steel); font-size: 13px; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<div x-data="warrantyPage()" x-init="load()">
+  <header class="bar">
+    <span class="mark"><a href="/">LoopCheck</a></span>
+    <span class="meta">Warranty timeline</span>
+  </header>
+
+  <template x-if="state === 'loading'"><p class="loading">Loading…</p></template>
+  <template x-if="state === 'error'"><div class="error" x-text="errorMsg"></div></template>
+
+  <template x-if="state === 'ready'">
+    <main>
+      <a class="crumb" :href="'/project.html?id=' + projectId">← Project</a>
+      <h1 x-text="project.name"></h1>
+      <p class="meta">
+        Warranties by derived expiration, soonest first.
+        Also see the <a :href="'/closeout.html?project=' + projectId">closeout dashboard</a>
+        and the <a :href="'/closeout-package.html?project=' + projectId">printable package</a>.
+      </p>
+
+      <div class="counts" style="margin-top:10px">
+        <span class="count" style="color:var(--sev-a)" :class="{zero: !tally.expired}"  x-text="'expired ' + tally.expired"></span>
+        <span class="count" style="color:var(--sev-b)" :class="{zero: !tally.expiring}" x-text="'≤90 days ' + tally.expiring"></span>
+        <span class="count" style="color:var(--go)"    :class="{zero: !tally.active}"   x-text="'active ' + tally.active"></span>
+        <span class="count" style="color:var(--steel)" :class="{zero: !tally.pending}"  x-text="'clock not started ' + tally.pending"></span>
+      </div>
+
+      <template x-if="!sorted.length">
+        <p class="empty">No warranties recorded on this project yet. Record them on
+          each tag page, or import a closeout spreadsheet on the
+          <a href="/import.html">CSV import page</a>.</p>
+      </template>
+
+      <h2 class="section" x-show="sorted.length">Timeline</h2>
+      <template x-for="w in sorted" :key="w.id">
+        <div class="wrow" :class="'w-' + wStatus(w).state">
+          <div style="display:flex; justify-content:space-between; gap:10px; align-items:start">
+            <span>
+              <a class="mono" style="font-weight:800"
+                 :href="'/t/' + encodeURIComponent(tagNumber(w))" x-text="tagNumber(w)"></a>
+              <span x-show="w.vendor_name" x-text="' · ' + w.vendor_name"></span>
+            </span>
+            <span class="chip" :class="'w-' + wStatus(w).state" x-text="wStatus(w).label"></span>
+          </div>
+          <div class="line" x-text="tagDesc(w)"></div>
+          <div class="line">
+            <span x-text="prettyBasis(w.basis)"></span>
+            <span x-show="w.duration_months"> · <span x-text="w.duration_months"></span> months</span>
+            <template x-if="w.clock_start_date">
+              <span> · started <span x-text="fmtDate(w.clock_start_date)"></span><template x-if="wEnd(w)"><span> → ends <strong x-text="fmtDate(wEnd(w))"></strong></span></template></span>
+            </template>
+          </div>
+          <div class="line" x-show="w.basis_note" x-text="w.basis_note"></div>
+        </div>
+      </template>
+    </main>
+  </template>
+</div>
+
+<script>
+function warrantyPage() {
+  const PB = window.location.origin;
+  return {
+    projectId: new URLSearchParams(location.search).get('project') || '',
+    state: 'loading', errorMsg: '',
+    project: null,
+    warranties: [],
+    tagById: {},   // id -> { tag_number, description }
+
+    // ---- the same derivations as the tag page (ADR 0005) ----
+    wEnd(w) {
+      if (!w.clock_start_date || !w.duration_months) return null;
+      const [y, m, d] = w.clock_start_date.slice(0, 10).split('-').map(Number);
+      const t = (m - 1) + w.duration_months;
+      const ny = y + Math.floor(t / 12), nm = t % 12;
+      const last = new Date(Date.UTC(ny, nm + 1, 0)).getUTCDate();
+      return new Date(Date.UTC(ny, nm, Math.min(d, last)));
+    },
+    wStatus(w) {
+      const end = this.wEnd(w);
+      if (!end) return { state: 'pending', label: 'Awaiting trigger event' };
+      const now = new Date();
+      const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+      const days = Math.round((end.getTime() - today) / 86400000);
+      if (days < 0)  return { state: 'expired', label: 'Expired ' + this.fmtDate(end) };
+      if (days === 0) return { state: 'expiring', label: 'Expires today' };
+      if (days <= 90) return { state: 'expiring', label: 'Expires in ' + days + ' days' };
+      return { state: 'active', label: 'Active' };
+    },
+    prettyBasis(b) {
+      return { substantial_completion: 'From substantial completion',
+               beneficial_use: 'From beneficial use',
+               startup: 'From successful startup',
+               shipment_cap: 'From shipment (capped)',
+               other: 'Other basis' }[b] || b;
+    },
+    fmtDate(d) {
+      return new Date(d).toLocaleDateString(undefined,
+        { month: 'short', day: 'numeric', year: 'numeric' });
+    },
+    tagNumber(w) { return (this.tagById[w.tag] || {}).tag_number || '?'; },
+    tagDesc(w)   { return (this.tagById[w.tag] || {}).description || ''; },
+
+    // Soonest derived end date first; no-clock warranties last (no deadline
+    // to miss until the trigger event happens).
+    get sorted() {
+      return [...this.warranties].sort((a, b) => {
+        const ea = this.wEnd(a), eb = this.wEnd(b);
+        if (ea && eb) return ea - eb;
+        if (ea) return -1;
+        if (eb) return 1;
+        return this.tagNumber(a).localeCompare(this.tagNumber(b));
+      });
+    },
+    get tally() {
+      const t = { expired: 0, expiring: 0, active: 0, pending: 0 };
+      for (const w of this.warranties) t[this.wStatus(w).state]++;
+      return t;
+    },
+
+    async load() {
+      if (!this.projectId) {
+        this.state = 'error'; this.errorMsg = 'No project id in the URL (open as /warranty.html?project=…).'; return;
+      }
+      try {
+        const pRes = await fetch(`${PB}/api/collections/projects/records/${this.projectId}`);
+        if (!pRes.ok) throw new Error('project not found (' + pRes.status + ')');
+        this.project = await pRes.json();
+
+        const f = encodeURIComponent(`project='${this.projectId}'`);
+        const [wRes, tRes] = await Promise.all([
+          fetch(`${PB}/api/collections/warranties/records?filter=(${f})&perPage=500`),
+          fetch(`${PB}/api/collections/tags/records?filter=(${f})&perPage=500&fields=id,tag_number,description`),
+        ]);
+        this.warranties = (await wRes.json()).items;
+        for (const t of (await tRes.json()).items) this.tagById[t.id] = t;
+
+        this.state = 'ready';
+      } catch (err) {
+        this.state = 'error';
+        this.errorMsg = 'Could not load warranties. (' + err.message + ')';
+      }
+    },
+  };
+}
+</script>
+</body>
+</html>

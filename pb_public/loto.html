@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoopCheck — LOTO board</title>
+<!--
+  Project LOTO Status Board (ADR 0007) — every ACTIVE lock across the
+  project, grouped by system, oldest first, with a visible lock age.
+  Old locks are how equipment gets forgotten in a half-state through a
+  commissioning season; age visibility is this board's real job.
+
+  Same safety framing as the tag banner: this is a VISIBILITY layer, not a
+  LOTO program. Every display carries its data-freshness time and the
+  verify-physically line; a tag with no locks is never shown as an
+  affirmative "clear"; there is no green state. If the data on screen goes
+  older than 10 minutes (the page sat open), the header degrades to the
+  amber stale strip.
+-->
+<link rel="stylesheet" href="/app.css">
+<script defer src="/vendor/alpine.min.js"></script>
+</head>
+<body>
+
+<div x-data="lotoBoard()" x-init="load()">
+  <header class="bar">
+    <span class="mark"><a href="/">LoopCheck</a></span>
+    <span class="meta">LOTO board</span>
+  </header>
+
+  <template x-if="state === 'loading'"><p class="loading">Loading…</p></template>
+  <template x-if="state === 'error'">
+    <div>
+      <div class="error" x-text="errorMsg"></div>
+      <div class="loto stale" style="margin-top:14px">
+        <div class="headline">LOTO status unknown</div>
+        <div class="verify">Could not reach the server. Verify physically before any work.</div>
+      </div>
+    </div>
+  </template>
+
+  <template x-if="state === 'ready'">
+    <main>
+      <a class="crumb" :href="'/project.html?id=' + projectId">← Project</a>
+      <h1 x-text="project.name"></h1>
+
+      <!-- Freshness first (ADR 0007): the reader must know how old this
+           picture is before reading it. -->
+      <template x-if="isStale">
+        <div class="loto stale">
+          <div class="headline">Status may be stale</div>
+          <div class="verify">Last synced <span x-text="fmtDateTime(syncedAt)"></span>.
+            Verify physically before any work.
+            <button class="link" style="color:#fff" @click="load()">Refresh</button>
+          </div>
+        </div>
+      </template>
+      <p class="meta">
+        As of <span x-text="fmtDateTime(syncedAt)"></span> ·
+        <strong x-text="allActive.length"></strong> active lock<span x-show="allActive.length !== 1">s</span>
+        on <strong x-text="lockedTagCount"></strong> tag<span x-show="lockedTagCount !== 1">s</span> ·
+        <strong>Verify physically before any work.</strong>
+        <button class="link" @click="load()">Refresh</button>
+      </p>
+
+      <template x-if="!allActive.length">
+        <p class="empty">
+          No active locks recorded on this project as of
+          <span x-text="fmtDateTime(syncedAt)"></span>. This is a statement
+          about the ledger, not a safety claim — the physical locks and the
+          energy-control procedure are the only authority.
+        </p>
+      </template>
+
+      <template x-for="g in bySystem" :key="g.id">
+        <div>
+          <h2 class="section">
+            <span x-text="g.label"></span>
+            <span x-text="'(' + g.locks.length + ')'"></span>
+          </h2>
+          <template x-for="l in g.locks" :key="l.id">
+            <div class="loto-row">
+              <div style="display:flex; justify-content:space-between; gap:10px; align-items:start">
+                <span>
+                  <a class="mono" style="font-weight:800"
+                     :href="'/t/' + encodeURIComponent(l._tag.tag_number)"
+                     x-text="l._tag.tag_number"></a>
+                  <span x-show="l._tag.description" x-text="' · ' + l._tag.description"></span>
+                </span>
+                <!-- The point of the board: how long has this lock hung.
+                     Anything past 7 days flags amber — the forgotten-lock
+                     early warning. -->
+                <span class="age" :class="{old: ageDays(l) >= 7}" x-text="ageLabel(l)"></span>
+              </div>
+              <div class="line">
+                <strong x-text="l.lock_holder_name"></strong><span x-show="l.company_or_trade" x-text="' — ' + l.company_or_trade"></span>
+                <span> · applied <span x-text="fmtDateTime(l.performed_at || l.created)"></span></span>
+                <span x-show="l.lock_id"> · lock <span class="mono" x-text="l.lock_id"></span></span>
+              </div>
+              <div class="line" x-show="l.reason" x-text="l.reason"></div>
+            </div>
+          </template>
+        </div>
+      </template>
+    </main>
+  </template>
+</div>
+
+<script>
+function lotoBoard() {
+  const PB = window.location.origin;
+  return {
+    projectId: new URLSearchParams(location.search).get('project') || '',
+    state: 'loading', errorMsg: '',
+    project: null,
+    events: [],
+    tagById: {},     // id -> { tag_number, description, system }
+    systems: [],
+    syncedAt: 0,
+    now: Date.now(), // ticks so the stale strip appears on a page left open
+
+    // ---- the same derivation as the tag page (ADR 0007) ----
+    // Active = an apply event no release references. Group LOTO means one
+    // tag can appear with several locks; it stays on this board until the
+    // last one is released.
+    get allActive() {
+      const released = new Set(this.events
+        .filter(e => e.action === 'release' && e.applies_to)
+        .map(e => e.applies_to));
+      return this.events
+        .filter(e => e.action === 'apply' && !released.has(e.id))
+        .map(e => ({ ...e, _tag: this.tagById[e.tag] || { tag_number: '?', system: '' } }))
+        .sort((a, b) =>
+          new Date(a.performed_at || a.created) - new Date(b.performed_at || b.created));
+    },
+    get lockedTagCount() {
+      return new Set(this.allActive.map(l => l.tag)).size;
+    },
+    // Grouped by system in startup-sequence order; locks oldest first
+    // within each group (allActive is already sorted).
+    get bySystem() {
+      const groups = {};
+      for (const l of this.allActive) {
+        const sid = l._tag.system || 'none';
+        (groups[sid] = groups[sid] || []).push(l);
+      }
+      const out = [];
+      for (const s of this.systems) {
+        if (groups[s.id]) out.push({
+          id: s.id,
+          label: 'System ' + s.number + (s.name ? ' — ' + s.name : ''),
+          locks: groups[s.id],
+        });
+      }
+      if (groups['none']) out.push({ id: 'none', label: 'No system', locks: groups['none'] });
+      return out;
+    },
+    get isStale() {
+      return !this.syncedAt || (this.now - this.syncedAt) > 10 * 60 * 1000;
+    },
+
+    ageDays(l) {
+      const applied = new Date(String(l.performed_at || l.created).replace(' ', 'T'));
+      return Math.floor((this.now - applied.getTime()) / 86400000);
+    },
+    ageLabel(l) {
+      const d = this.ageDays(l);
+      if (d <= 0) return 'locked today';
+      if (d === 1) return 'locked 1 day';
+      return 'locked ' + d + ' days';
+    },
+    fmtDateTime(d) {
+      const dt = d instanceof Date ? d : (typeof d === 'number' ? new Date(d)
+        : new Date(String(d).replace(' ', 'T')));
+      return dt.toLocaleString(undefined,
+        { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    },
+
+    async load() {
+      if (!this.projectId) {
+        this.state = 'error';
+        this.errorMsg = 'No project id in the URL (open as /loto.html?project=…).';
+        return;
+      }
+      try {
+        const pRes = await fetch(`${PB}/api/collections/projects/records/${this.projectId}`);
+        if (!pRes.ok) throw new Error('project not found (' + pRes.status + ')');
+        this.project = await pRes.json();
+
+        const f = encodeURIComponent(`project='${this.projectId}'`);
+        // Tags and systems: names for the rows and the grouping order.
+        const [tRes, sRes] = await Promise.all([
+          fetch(`${PB}/api/collections/tags/records?filter=(${f})&perPage=500&fields=id,tag_number,description,system`),
+          fetch(`${PB}/api/collections/systems/records?filter=(${f})&sort=startup_sequence,number&perPage=200&fields=id,number,name`),
+        ]);
+        const map = {};
+        for (const t of (await tRes.json()).items) map[t.id] = t;
+        this.tagById = map;
+        this.systems = (await sRes.json()).items;
+
+        // The FULL ledger, paged — active locks derive from every event,
+        // and a truncated read could hide a lock (loto_events denormalizes
+        // `project` exactly so this board filters flat).
+        let page = 1, items = [];
+        while (true) {
+          const res = await fetch(
+            `${PB}/api/collections/loto_events/records?filter=(${f})&sort=-created&perPage=500&page=${page}`);
+          if (!res.ok) throw new Error('loto fetch ' + res.status);
+          const data = await res.json();
+          items = items.concat(data.items);
+          if (page >= data.totalPages || page >= 40) break;
+          page++;
+        }
+        this.events = items;
+        this.syncedAt = Date.now();
+
+        if (!this._ticking) {
+          this._ticking = true;
+          setInterval(() => { this.now = Date.now(); }, 30000);
+          setInterval(() => this.load(), 4 * 60 * 1000);
+        }
+        this.state = 'ready';
+      } catch (err) {
+        this.state = 'error';
+        this.errorMsg = 'Could not load the LOTO board. (' + err.message + ')';
+      }
+    },
+  };
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoopCheck — Service</title>
+
+<!--
+  Service connection page (ADR 0006) — the tag page's sibling for a water
+  main replacement job. One service address: where it stands in the cutover
+  sequence (notice → locate/pothole → new service → meter → tie-over →
+  restoration), what punch items block it, and the buttons to log the next
+  check or flag a problem.
+
+  Opened as /s/{serviceId} (a pb_hooks route serves this file; the id is the
+  PocketBase record id) or as service.html?id={id}. A QR inside the meter box
+  lid may encode the /s/ URL — it is opaque and carries no PII.
+
+  PII RULE (CLAUDE.md): this page is reachable without sign-in, so it NEVER
+  fetches customer_name or customer_phone — the `fields=` list on the service
+  request excludes them deliberately. The address is the public identifier;
+  the person is not.
+
+  Phase standing is DERIVED on every load: required phases = the phases that
+  have a subject_kind='service' template; each phase's state folds over this
+  service's append-only check ledger. No stored status anywhere.
+-->
+<link rel="stylesheet" href="/app.css">
+<script defer src="/vendor/alpine.min.js"></script>
+<style>
+  /* Cutover phase strip — one cell per required phase, colored by derived
+     state. Same fixed color language as everywhere else. */
+  .phases { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
+  .phase {
+    border: 2px solid var(--line); padding: 8px 6px; text-align: center;
+  }
+  .phase .st { font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+  .phase .nm { font-size: 12px; font-weight: 700; margin-top: 2px; }
+  .phase.pass    { border-color: var(--go); color: var(--go); background: #e9f5ee; }
+  .phase.fail    { border-color: var(--sev-a); color: var(--sev-a); background: #fbe9e7; }
+  .phase.partial { border-color: var(--sev-b); color: var(--sev-b); background: #fdf1de; }
+  .phase.pending { color: var(--steel); }
+
+  .ledger { border: 2px solid var(--line); }
+  .ledger .row { display: flex; justify-content: space-between; gap: 8px;
+    padding: 8px 10px; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .ledger .row:last-child { border-bottom: none; }
+  .ledger .res { font-weight: 800; text-transform: uppercase; font-size: 12px; }
+  .ledger .res.pass { color: var(--go); }
+  .ledger .res.fail { color: var(--sev-a); }
+  .ledger .res.incomplete { color: var(--sev-b); }
+</style>
+</head>
+<body>
+
+<div x-data="servicePage()" x-init="load()">
+
+  <header class="bar">
+    <span class="mark"><a href="/">LoopCheck</a></span>
+    <span class="meta">Service</span>
+  </header>
+
+  <template x-if="state === 'loading'">
+    <p class="loading">Loading service…</p>
+  </template>
+
+  <template x-if="state === 'error'">
+    <div class="error" x-text="errorMsg"></div>
+  </template>
+
+  <template x-if="state === 'ready'">
+    <main>
+      <a class="crumb" :href="'/cutover.html?project=' + svc.project">← Cutover board</a>
+
+      <!-- The address is the human-facing identifier — shown where the tag
+           number would be. -->
+      <div class="plate">
+        <div class="eyebrow">Service address</div>
+        <div class="big" x-text="svc.address"></div>
+      </div>
+      <p class="meta" style="margin-top:8px">
+        <span x-show="svc.station">Sta <span class="mono" x-text="svc.station"></span></span>
+        <span x-show="svc.account_or_parcel"> · Acct/parcel <span class="mono" x-text="svc.account_or_parcel"></span></span>
+        <span x-show="svc.service_size"> · <span x-text="svc.service_size"></span></span>
+        <span x-show="svc.service_material"> <span x-text="svc.service_material"></span></span>
+      </p>
+      <p class="meta" x-show="svc.old_meter_number || svc.new_meter_number">
+        <span x-show="svc.old_meter_number">Old meter <span class="mono" x-text="svc.old_meter_number"></span></span>
+        <span x-show="svc.new_meter_number"> · New meter <span class="mono" x-text="svc.new_meter_number"></span></span>
+      </p>
+
+      <!-- ===== Derived cutover standing ===== -->
+      <h2 class="section">Cutover standing</h2>
+      <div class="phases">
+        <template x-for="ph in requiredPhases" :key="ph">
+          <div class="phase" :class="phaseState(ph)">
+            <div class="st" x-text="stateLabel(phaseState(ph))"></div>
+            <div class="nm" x-text="phaseLabel(ph)"></div>
+          </div>
+        </template>
+      </div>
+      <p class="meta" style="margin-top:8px">
+        <template x-if="nextPhase">
+          <span>Next up: <strong x-text="phaseLabel(nextPhase)"></strong></span>
+        </template>
+        <template x-if="!nextPhase && requiredPhases.length">
+          <span style="color:var(--go); font-weight:700">All cutover phases passed.</span>
+        </template>
+      </p>
+
+      <!-- The check ledger for this service — including the timestamped
+           notice record, the one a "we were never told" complaint runs
+           into. Append-only; a correction is a new check. -->
+      <template x-if="checks.length">
+        <div>
+          <h2 class="section">Check ledger (<span x-text="checks.length"></span>)</h2>
+          <div class="ledger">
+            <template x-for="c in checks" :key="c.id">
+              <div class="row">
+                <span>
+                  <strong x-text="phaseLabel(c.phase)"></strong>
+                  <span class="meta" x-show="c.performed_by" x-text="' · ' + c.performed_by"></span>
+                </span>
+                <span style="text-align:right; white-space:nowrap">
+                  <span class="res" :class="c.result" x-text="c.result"></span>
+                  <span class="meta" x-text="' ' + fmtDate(c.performed_at || c.created)"></span>
+                </span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- ===== Open punch items ===== -->
+      <h2 class="section">
+        Open punch items
+        <span x-show="openPunch.length" x-text="'(' + openPunch.length + ')'"></span>
+      </h2>
+
+      <template x-if="!openPunch.length">
+        <p class="empty">No open punch items on this service.</p>
+      </template>
+
+      <template x-for="p in openPunch" :key="p.id">
+        <div class="punch" :class="'sev-' + p.severity">
+          <div style="display:flex; justify-content:space-between; gap:10px; align-items:start">
+            <span class="desc" x-text="p.description"></span>
+            <span class="chip" :class="'sev-' + p.severity" x-text="p.severity"></span>
+          </div>
+          <div class="line">
+            <span x-text="sevLabel(p.severity)"></span>
+            <span x-show="p.assigned_party"> · <span x-text="p.assigned_party"></span></span>
+            <span> · opened <span x-text="fmtDate(p.created)"></span></span>
+            <span x-show="p.created_by"> by <span x-text="p.created_by"></span></span>
+          </div>
+          <template x-for="a in attachmentsFor(p.id)" :key="a.id">
+            <img class="thumb" :src="fileUrl(a)" alt="Punch photo" loading="lazy">
+          </template>
+
+          <div style="margin-top:8px">
+            <template x-if="closingId !== p.id">
+              <button class="link" @click="startClose(p.id)">Close this item →</button>
+            </template>
+            <template x-if="closingId === p.id">
+              <div>
+                <input type="text" x-model="closeName" placeholder="Your name">
+                <textarea x-model="closeNote" placeholder="Closure note (what fixed it)"></textarea>
+                <!-- The evidence chain (ADR 0004), same as tags: offer this
+                     service's passing checks as the closing_check link. -->
+                <template x-if="passingChecks.length">
+                  <div>
+                    <label class="fl">Cleared by a passing check? (optional)</label>
+                    <select x-model="closeCheckId">
+                      <option value="">— no linked check —</option>
+                      <template x-for="c in passingChecks" :key="c.id">
+                        <option :value="c.id"
+                                x-text="phaseLabel(c.phase) + ' · pass · ' + fmtDate(c.performed_at || c.created)"></option>
+                      </template>
+                    </select>
+                  </div>
+                </template>
+                <button class="go secondary" :disabled="busy || !closeName"
+                        @click="closePunch(p)" x-text="busy ? 'Saving…' : 'Confirm close'"></button>
+                <button class="link" style="margin-top:10px" @click="cancelClose()">Cancel</button>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <p class="meta" x-show="closedCount" style="margin-top:6px">
+        <span x-text="closedCount"></span> closed item<span x-show="closedCount !== 1">s</span> on this service.
+      </p>
+
+      <!-- ===== Flag a punch item ===== -->
+      <h2 class="section">Flag a punch item</h2>
+      <template x-if="!showFlag">
+        <button class="go" @click="showFlag = true">Flag punch item</button>
+      </template>
+      <template x-if="showFlag">
+        <div>
+          <label class="fl" for="pdesc">What is wrong?</label>
+          <textarea id="pdesc" x-model="flagDesc" placeholder="Describe the defect or open item"></textarea>
+
+          <label class="fl">Severity</label>
+          <div class="sevpick">
+            <label class="a" :class="{on: flagSev === 'A'}">
+              <input type="radio" value="A" x-model="flagSev"> A
+              <small>Blocks startup</small>
+            </label>
+            <label class="b" :class="{on: flagSev === 'B'}">
+              <input type="radio" value="B" x-model="flagSev"> B
+              <small>Blocks completion</small>
+            </label>
+            <label class="c" :class="{on: flagSev === 'C'}">
+              <input type="radio" value="C" x-model="flagSev"> C
+              <small>Cosmetic</small>
+            </label>
+          </div>
+
+          <label class="fl" for="passigned">Assigned to (optional)</label>
+          <select id="passigned" x-model="flagAssigned">
+            <option value="">—</option>
+            <option value="contractor">Contractor</option>
+            <option value="vendor">Vendor</option>
+            <option value="owner">Owner</option>
+            <option value="engineer">Engineer</option>
+          </select>
+
+          <label class="fl" for="pphoto">Photo (optional)</label>
+          <input id="pphoto" type="file" accept="image/*" capture="environment"
+                 @change="flagFile = $event.target.files[0]">
+
+          <label class="fl" for="pby">Your name</label>
+          <input id="pby" type="text" x-model="flagBy" placeholder="Who is flagging this">
+
+          <button class="go" :disabled="busy || !flagDesc || !flagSev"
+                  @click="flag()" x-text="busy ? 'Saving…' : 'Submit punch item'"></button>
+          <button class="link" style="margin-top:12px" @click="showFlag = false">Cancel</button>
+
+          <div class="flash" x-show="flagFlash" x-text="flagFlash"></div>
+          <div class="error" x-show="flagError" x-text="flagError"></div>
+        </div>
+      </template>
+
+      <!-- ===== Log a check ===== -->
+      <h2 class="section">Log a check</h2>
+      <a class="go secondary" style="display:flex; align-items:center; justify-content:center; text-decoration:none"
+         :href="'/check.html?service=' + svc.id">Log check</a>
+      <p class="meta" style="margin-top:6px">
+        Runs a cutover checklist for this service and writes it to the
+        append-only ledger.
+      </p>
+    </main>
+  </template>
+
+</div>
+
+<script>
+function servicePage() {
+  // PocketBase serves this page, so the API is same-origin — no host config.
+  const PB = window.location.origin;
+
+  // Cutover order — used for display sorting only; the REQUIRED set is
+  // derived from the template library below.
+  const SERVICE_PHASES = ['notice','locate_pothole','new_service','meter','tie_over','restoration'];
+  const PHASE_LABELS = {
+    notice: 'Notice', locate_pothole: 'Locate/Pothole', new_service: 'New Service',
+    meter: 'Meter', tie_over: 'Tie-Over', restoration: 'Restoration',
+  };
+
+  // The id can arrive two ways: the clean route /s/{id} (pb_hooks) or
+  // service.html?id={id}. The id is the record id — never the address, which
+  // stays out of URLs by the PII/identifier rule (ADR 0006).
+  function readId() {
+    const m = location.pathname.match(/^\/s\/(.+)$/);
+    if (m) return decodeURIComponent(m[1]);
+    return new URLSearchParams(location.search).get('id') || '';
+  }
+
+  return {
+    serviceId: readId(),
+    state: 'loading',
+    errorMsg: '',
+    svc: null,
+    requiredPhases: [],  // derived: phases with a subject_kind='service' template
+    checks: [],          // this service's ledger, newest first
+    punchItems: [],
+    attachments: [],
+
+    // Flag form
+    showFlag: false,
+    flagDesc: '',
+    flagSev: 'B',
+    flagAssigned: '',
+    flagFile: null,
+    flagBy: localStorage.getItem('lc_name') || '',
+    busy: false,
+    flagFlash: '',
+    flagError: '',
+
+    // Close form
+    closingId: '',
+    closeName: localStorage.getItem('lc_name') || '',
+    closeNote: '',
+    closeCheckId: '',
+    passingChecks: [],
+
+    get openPunch() {
+      return this.punchItems.filter(p => p.status === 'open')
+        .sort((a, b) => a.severity.localeCompare(b.severity)); // A, B, C
+    },
+    get closedCount() {
+      return this.punchItems.filter(p => p.status === 'closed').length;
+    },
+    // First required phase without a passing check — what the crew does next.
+    get nextPhase() {
+      return this.requiredPhases.find(ph => this.phaseState(ph) !== 'pass') || '';
+    },
+
+    phaseLabel(p) { return PHASE_LABELS[p] || p; },
+    stateLabel(s) {
+      return { pass: 'done', fail: 'failed', partial: 'started', pending: '—' }[s] || s;
+    },
+    // Fold over the ledger for one phase: any pass wins (a passing re-test
+    // clears an earlier fail — the fail stays in the ledger); else any fail;
+    // else any record at all means started-but-incomplete.
+    phaseState(ph) {
+      const of = this.checks.filter(c => c.phase === ph);
+      if (of.some(c => c.result === 'pass')) return 'pass';
+      if (of.some(c => c.result === 'fail')) return 'fail';
+      if (of.length) return 'partial';
+      return 'pending';
+    },
+    sevLabel(s) {
+      return { A: 'A — blocks startup', B: 'B — blocks substantial completion',
+               C: 'C — cosmetic' }[s] || s;
+    },
+    fmtDate(d) {
+      return new Date(d).toLocaleDateString(undefined,
+        { month: 'short', day: 'numeric', year: 'numeric' });
+    },
+    attachmentsFor(punchId) {
+      return this.attachments.filter(a => a.parent_id === punchId);
+    },
+    fileUrl(a) {
+      return `${PB}/api/files/attachments/${a.id}/${a.file}`;
+    },
+
+    async load() {
+      if (!this.serviceId) {
+        this.state = 'error';
+        this.errorMsg = 'No service id in the URL. Open this from the cutover board.';
+        return;
+      }
+      try {
+        // 1. The service. `fields=` DELIBERATELY excludes customer_name and
+        //    customer_phone — this page needs no PII and must never carry it
+        //    (CLAUDE.md PII rule).
+        const fields = 'id,project,address,station,account_or_parcel,' +
+          'old_meter_number,new_meter_number,service_size,service_material,created';
+        const res = await fetch(
+          `${PB}/api/collections/services/records/${this.serviceId}?fields=${fields}`);
+        if (!res.ok) throw new Error(res.status === 404
+          ? 'service not found' : `API error ${res.status}`);
+        this.svc = await res.json();
+
+        // 2. Required phases are DERIVED: the phases that have a
+        //    subject_kind='service' template. Same principle as tags.
+        const tf = encodeURIComponent(`subject_kind='service' && phase != ''`);
+        const tRes = await fetch(
+          `${PB}/api/collections/checklist_templates/records?filter=(${tf})&fields=phase&perPage=50`);
+        const phases = [...new Set((await tRes.json()).items.map(t => t.phase))];
+        this.requiredPhases = SERVICE_PHASES.filter(p => phases.includes(p))
+          .concat(phases.filter(p => !SERVICE_PHASES.includes(p)));
+
+        // 3. This service's check ledger, newest first — standing folds
+        //    from it, and the list itself is the notice proof.
+        const cf = encodeURIComponent(`service='${this.svc.id}'`);
+        const cRes = await fetch(
+          `${PB}/api/collections/checks/records?filter=(${cf})&sort=-created&perPage=200` +
+          `&fields=id,phase,result,performed_by,performed_at,created`);
+        this.checks = (await cRes.json()).items;
+
+        // 4. Punch items on this service, plus their photos.
+        const pf = encodeURIComponent(`service='${this.svc.id}'`);
+        const pRes = await fetch(
+          `${PB}/api/collections/punch_items/records?filter=(${pf})&sort=-created&perPage=200`);
+        this.punchItems = (await pRes.json()).items;
+
+        if (this.punchItems.length) {
+          const ors = this.punchItems.map(p => `parent_id='${p.id}'`).join(' || ');
+          const af = encodeURIComponent(`parent_collection='punch_items' && (${ors})`);
+          const aRes = await fetch(
+            `${PB}/api/collections/attachments/records?filter=(${af})&perPage=500`);
+          this.attachments = (await aRes.json()).items;
+        }
+
+        this.state = 'ready';
+      } catch (err) {
+        this.state = 'error';
+        this.errorMsg = 'Could not load the service. (' + err.message + ')';
+      }
+    },
+
+    async flag() {
+      this.busy = true; this.flagFlash = ''; this.flagError = '';
+      if (this.flagBy) localStorage.setItem('lc_name', this.flagBy);
+      try {
+        // A service punch item sets service (and project for rollups) —
+        // never tag or system; the createRule enforces the shape.
+        const body = {
+          project: this.svc.project,
+          service: this.svc.id,
+          description: this.flagDesc,
+          severity: this.flagSev,
+          status: 'open',
+          assigned_party: this.flagAssigned || null,
+          created_by: this.flagBy || 'unspecified',
+        };
+        const res = await fetch(`${PB}/api/collections/punch_items/records`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) throw new Error('punch item rejected (' + res.status + ')');
+        const punch = await res.json();
+
+        if (this.flagFile) {
+          const fd = new FormData();
+          fd.append('file', this.flagFile);
+          fd.append('parent_collection', 'punch_items');
+          fd.append('parent_id', punch.id);
+          fd.append('uploaded_by', this.flagBy || 'unspecified');
+          const aRes = await fetch(`${PB}/api/collections/attachments/records`, {
+            method: 'POST', body: fd });
+          if (!aRes.ok) throw new Error('photo upload failed (' + aRes.status + ')');
+        }
+
+        this.flagFlash = '✓ Punch item logged';
+        this.flagDesc = ''; this.flagFile = null; this.flagAssigned = '';
+        this.showFlag = false;
+        await this.load();
+      } catch (err) {
+        this.flagError = 'Could not save: ' + err.message;
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    async startClose(id) {
+      this.closingId = id; this.closeNote = ''; this.closeCheckId = '';
+      // Offer the evidence link (ADR 0004): passing checks on this service.
+      const f = encodeURIComponent(`service='${this.svc.id}' && result='pass'`);
+      const res = await fetch(
+        `${PB}/api/collections/checks/records?filter=(${f})&sort=-created&perPage=20&fields=id,phase,performed_at,created`);
+      this.passingChecks = (await res.json()).items;
+    },
+    cancelClose() { this.closingId = ''; },
+
+    async closePunch(p) {
+      this.busy = true;
+      if (this.closeName) localStorage.setItem('lc_name', this.closeName);
+      try {
+        // Same lifecycle as everywhere: closing is a recorded update, never
+        // a delete.
+        const body = {
+          status: 'closed',
+          closed_by: this.closeName || 'unspecified',
+          closed_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+          closure_note: this.closeNote || '',
+        };
+        if (this.closeCheckId) body.closing_check = this.closeCheckId;
+        const res = await fetch(`${PB}/api/collections/punch_items/records/${p.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) throw new Error('close rejected (' + res.status + ')');
+        this.closingId = '';
+        await this.load();
+      } catch (err) {
+        alert('Could not close item: ' + err.message);
+      } finally {
+        this.busy = false;
+      }
+    },
+  };
+}
+</script>
+</body>
+</html>

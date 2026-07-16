@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "notes": "Segment acceptance checklist templates (Phase 6, ADR 0014). A segment's required phases derive from the templates whose subject_kind='segment' and tag_type = the segment's segment_type (tag_type is reused as the subject-type discriminator, ADR 0014 §2). Pressure mains owe hydro -> disinfection -> bac-t; force mains owe hydro only (pressurized wastewater, not potable, so no disinfection/bac-t); gravity sewers owe air test -> mandrel/deflection -> manhole vacuum. Phases are camelCase here and snake_cased by the loader (bacT->bac_t, airTest->air_test). Every value governed by a project spec or referenced standard (AWWA C600 test pressure & allowable makeup water, C651 dose/residual/contact, ASTM air/mandrel/vacuum limits) is flagged confirm_per_spec:true — the template names the check; the project confirms the number. The bac-t template is the OPEN half of an open->resolve pair (ADR 0012): it is the sample-collection record, signed at collection with result 'pending'; the lab result returns later as a separate resolve check that points back via checks.resolves and carries the lab report as an attachment, never mutating this record. DOMAIN REVIEW NEEDED: item wording, which standards to cite, and the force_main test set are the maintainer's call.",
+  "templates": [
+    {
+      "template_key": "segment.pressureMain.hydro",
+      "tag_type": "pressure_main",
+      "phase": "hydro",
+      "name": "Pressure Main — Hydrostatic / Pressure Test (AWWA C600)",
+      "recurrence": null,
+      "subject_kind": "segment",
+      "items": [
+        { "seq": 1, "text": "Test section isolated and restrained; air fully bled from the high points", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Specified test pressure (per project spec / AWWA C600)", "response": "value", "unit": "psi", "confirm_per_spec": true },
+        { "seq": 3, "text": "Test duration held (per project spec; typically 2 hours)", "response": "value", "unit": "hr", "confirm_per_spec": true },
+        { "seq": 4, "text": "Allowable makeup water for this length & diameter per AWWA C600", "response": "value", "unit": "gal", "confirm_per_spec": true },
+        { "seq": 5, "text": "Actual makeup water added over the test period", "response": "value", "unit": "gal", "confirm_per_spec": false },
+        { "seq": 6, "text": "Pressure held for the full duration with no failure; no visible leaks at joints, fittings, or restraints", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 7, "text": "Photo of the test gauge at the held test pressure", "response": "photo_required", "unit": null, "confirm_per_spec": false },
+        { "seq": 8, "text": "Test gauge ID / calibration reference", "response": "text", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "segment.pressureMain.disinfection",
+      "tag_type": "pressure_main",
+      "phase": "disinfection",
+      "name": "Pressure Main — Disinfection (AWWA C651)",
+      "recurrence": null,
+      "subject_kind": "segment",
+      "items": [
+        { "seq": 1, "text": "Disinfection method (tablet / continuous-feed / slug)", "response": "text", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Chlorine dose applied (per project spec / AWWA C651)", "response": "value", "unit": "mg/L", "confirm_per_spec": true },
+        { "seq": 3, "text": "Contact time held (per project spec; typically 24 hours)", "response": "value", "unit": "hr", "confirm_per_spec": true },
+        { "seq": 4, "text": "Chlorine residual at end of contact meets spec minimum (per project spec / C651)", "response": "value", "unit": "mg/L", "confirm_per_spec": true },
+        { "seq": 5, "text": "Main flushed at the flushing velocity required by AWWA C651", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 6, "text": "Flush water dechlorinated and discharged per permit", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 7, "text": "Final residual after flush consistent with the distribution system", "response": "value", "unit": "mg/L", "confirm_per_spec": false },
+        { "seq": 8, "text": "Photo of the chlorine residual test result", "response": "photo_required", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "segment.pressureMain.bacT",
+      "tag_type": "pressure_main",
+      "phase": "bacT",
+      "name": "Pressure Main — Bacteriological Sample (AWWA C651) — collection",
+      "recurrence": null,
+      "subject_kind": "segment",
+      "items": [
+        { "seq": 1, "text": "Sample tap / station where the sample was drawn", "response": "text", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Sample collected after final flush and required standing time per AWWA C651", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 3, "text": "Consecutive passing sample sets required (per project spec / C651)", "response": "value", "unit": "sets", "confirm_per_spec": true },
+        { "seq": 4, "text": "Chlorine residual at the sampling point at time of collection", "response": "value", "unit": "mg/L", "confirm_per_spec": false },
+        { "seq": 5, "text": "Sample ID / lab chain-of-custody number", "response": "text", "unit": null, "confirm_per_spec": false },
+        { "seq": 6, "text": "Photo of the labeled sample and chain-of-custody form", "response": "photo_required", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "segment.forceMain.hydro",
+      "tag_type": "force_main",
+      "phase": "hydro",
+      "name": "Force Main — Hydrostatic / Pressure Test (AWWA C600)",
+      "recurrence": null,
+      "subject_kind": "segment",
+      "items": [
+        { "seq": 1, "text": "Test section isolated and restrained; air fully bled from the high points", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Specified test pressure (per project spec / AWWA C600)", "response": "value", "unit": "psi", "confirm_per_spec": true },
+        { "seq": 3, "text": "Test duration held (per project spec; typically 2 hours)", "response": "value", "unit": "hr", "confirm_per_spec": true },
+        { "seq": 4, "text": "Allowable makeup water for this length & diameter per AWWA C600", "response": "value", "unit": "gal", "confirm_per_spec": true },
+        { "seq": 5, "text": "Actual makeup water added over the test period", "response": "value", "unit": "gal", "confirm_per_spec": false },
+        { "seq": 6, "text": "Pressure held for the full duration with no failure; no visible leaks at joints, fittings, or restraints", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 7, "text": "Photo of the test gauge at the held test pressure", "response": "photo_required", "unit": null, "confirm_per_spec": false },
+        { "seq": 8, "text": "Test gauge ID / calibration reference", "response": "text", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "segment.gravitySewer.airTest",
+      "tag_type": "gravity_sewer",
+      "phase": "airTest",
+      "name": "Gravity Sewer — Low-Pressure Air Test",
+      "recurrence": null,
+      "subject_kind": "segment",
+      "items": [
+        { "seq": 1, "text": "Line and both manholes plugged; test section isolated", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Starting test pressure, adjusted for groundwater (per project spec; typically 3.5 psig above GW)", "response": "value", "unit": "psi", "confirm_per_spec": true },
+        { "seq": 3, "text": "Minimum allowable time for the specified pressure drop, per pipe size & length (per project spec)", "response": "value", "unit": "min", "confirm_per_spec": true },
+        { "seq": 4, "text": "Actual time for the specified pressure drop", "response": "value", "unit": "min", "confirm_per_spec": false },
+        { "seq": 5, "text": "Test held the required time without excess drop — PASS", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 6, "text": "Photo of the gauge and timer at test", "response": "photo_required", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "segment.gravitySewer.deflection",
+      "tag_type": "gravity_sewer",
+      "phase": "deflection",
+      "name": "Gravity Sewer — Mandrel / Deflection Test",
+      "recurrence": null,
+      "subject_kind": "segment",
+      "items": [
+        { "seq": 1, "text": "Test performed no sooner than the spec-required time after backfill (per project spec; typically 30 days)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Mandrel diameter as a percentage of pipe base ID (per project spec; typically 95%)", "response": "value", "unit": "%", "confirm_per_spec": true },
+        { "seq": 3, "text": "Mandrel pulled by hand through the full segment without hangup", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 4, "text": "Deflection within the allowable limit (per project spec; typically 5% max)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true },
+        { "seq": 5, "text": "Photo of the go/no-go mandrel", "response": "photo_required", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "segment.gravitySewer.vacuum",
+      "tag_type": "gravity_sewer",
+      "phase": "vacuum",
+      "name": "Gravity Sewer — Manhole Vacuum Test (ASTM C1244)",
+      "recurrence": null,
+      "subject_kind": "segment",
+      "items": [
+        { "seq": 1, "text": "Manhole ID / station", "response": "text", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Test vacuum drawn (per project spec / ASTM C1244; typically 10 in Hg)", "response": "value", "unit": "inHg", "confirm_per_spec": true },
+        { "seq": 3, "text": "Minimum hold time for the allowable drop, per manhole depth & diameter (per project spec)", "response": "value", "unit": "sec", "confirm_per_spec": true },
+        { "seq": 4, "text": "Actual time for a 1 in Hg drop", "response": "value", "unit": "sec", "confirm_per_spec": false },
+        { "seq": 5, "text": "Test held the required time — PASS", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 6, "text": "Photo of the vacuum gauge and timer", "response": "photo_required", "unit": null, "confirm_per_spec": false }
+      ]
+    }
+  ]
+}

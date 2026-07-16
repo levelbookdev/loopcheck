@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LoopCheck — Calibration due</title><link rel="stylesheet" href="/app.css"><script defer src="/vendor/alpine.min.js"></script></head>
+<body><div x-data="duePage()" x-init="load()">
+<header class="bar"><span class="mark"><a href="/">LoopCheck</a></span><span class="meta">Calibration due</span></header>
+<template x-if="state==='loading'"><p class="loading">Loading…</p></template><template x-if="state==='error'"><div class="error" x-text="error"></div></template>
+<template x-if="state==='ready'"><main>
+  <a class="crumb" :href="'/project.html?id='+project.id">← <span x-text="project.name"></span></a>
+  <h1>Instrument calibration</h1><p class="meta">Next due is derived from the latest calibration date + interval. Overdue instruments sort first.</p>
+  <p class="meta"><a href="/standards.html">Manage test standards →</a></p>
+  <div class="counts"><span class="count cal-overdue" x-text="'OVERDUE '+rows.filter(r=>r.state==='overdue').length"></span><span class="count cal-due" x-text="'DUE ≤30d '+rows.filter(r=>r.state==='due').length"></span><span class="count cal-never" x-text="'NEVER '+rows.filter(r=>r.state==='never').length"></span></div>
+  <h2 class="section">Instruments by next due</h2>
+  <p class="empty" x-show="!rows.length">No instrument tags in this project.</p>
+  <template x-for="r in rows" :key="r.tag.id"><a class="card" :href="'/t/'+encodeURIComponent(r.tag.tag_number)">
+    <div style="display:flex;justify-content:space-between;gap:10px;align-items:start"><div><div class="title mono" x-text="r.tag.tag_number"></div><div class="sub" x-text="r.tag.description"></div></div><span class="chip" :class="'cal-'+r.state" x-text="r.label"></span></div>
+    <div class="sub"><span x-text="r.tag.expand?.system?.number||'No system'"></span><span x-show="r.cal"> · last <span x-text="dateOnly(r.cal.performed_at)"></span> · next <strong x-text="dateOnly(r.nextDue)"></strong></span></div>
+    <div class="cal-expired" x-show="r.cal?.standard_expired_at_use" style="margin-top:8px">EXPIRED STANDARD USED</div>
+  </a></template>
+</main></template></div>
+<script>
+function duePage(){const PB=location.origin;return{projectId:new URLSearchParams(location.search).get('project')||'',project:null,state:'loading',error:'',rows:[],
+dateOnly(v){return String(v||'').slice(0,10);},addMonths(v,n){const d=new Date(this.dateOnly(v)+'T12:00:00Z'),day=d.getUTCDate();d.setUTCDate(1);d.setUTCMonth(d.getUTCMonth()+Number(n));d.setUTCDate(Math.min(day,new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,0)).getUTCDate()));return d.toISOString().slice(0,10);},
+standing(cal){if(!cal)return{state:'never',label:'NEVER CALIBRATED',nextDue:''};const next=this.addMonths(cal.performed_at,cal.interval_months),days=Math.ceil((new Date(next+'T23:59:59')-new Date())/86400000);if(days<0)return{state:'overdue',label:'OVERDUE',nextDue:next};if(days<=30)return{state:'due',label:`DUE ${days}d`,nextDue:next};return{state:'current',label:'CURRENT',nextDue:next};},
+async load(){if(!this.projectId){this.state='error';this.error='No project id in the URL.';return;}try{const f=encodeURIComponent(`project='${this.projectId}' && (tag_type='instrument_flow' || tag_type='instrument_level' || tag_type='instrument_pressure')`);const [p,t,c]=await Promise.all([fetch(`${PB}/api/collections/projects/records/${this.projectId}`),fetch(`${PB}/api/collections/tags/records?filter=(${f})&expand=system&sort=tag_number&perPage=500&fields=id,tag_number,description,tag_type,system,expand.system.number`),fetch(`${PB}/api/collections/calibrations/records?filter=${encodeURIComponent(`tag.project='${this.projectId}'`)}&sort=-performed_at,-created&perPage=1000`)]);if(!p.ok||!t.ok||!c.ok)throw new Error('Calibration due data is unavailable.');this.project=await p.json();const tags=(await t.json()).items,cals=(await c.json()).items,latest={};for(const x of cals)if(!latest[x.tag])latest[x.tag]=x;this.rows=tags.map(tag=>{const cal=latest[tag.id]||null,s=this.standing(cal);return{tag,cal,state:s.state,label:s.label,nextDue:s.nextDue};}).sort((a,b)=>{const rank={overdue:0,due:1,current:2,never:3};return rank[a.state]-rank[b.state]||String(a.nextDue||'9999').localeCompare(String(b.nextDue||'9999'))||a.tag.tag_number.localeCompare(b.tag.tag_number);});this.state='ready';}catch(e){this.state='error';this.error=e.message;}}
+};}
+</script></body></html>

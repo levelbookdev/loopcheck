@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoopCheck — Batch Notice</title>
+
+<!--
+  Batch notice mode (ADR 0006) — the one bulk convenience in the field tier.
+  A crew member walks the block hanging 48-hour notices; this page logs the
+  notice check for a whole run of services in one pass, each with its own
+  door-hanger photo. That photo log is the dispute-proof record: "we were
+  never told" ends against a timestamped photo of the hanger on the door.
+
+  What a batch entry writes, PER SERVICE, is a full, normal notice check —
+  check + frozen-prompt check_items + photo attachment — indistinguishable
+  from one logged on check.html. The delivery line is marked PASS by the act
+  of photographing the hanger at the door; the page says so in plain words
+  above the submit button.
+
+  Connection resilience: selections, photos, and notes all live in the page
+  until submitted. Writes go row by row; a row that fails (dead spot mid-
+  block) stays marked unsent with its photo intact, and Retry re-sends only
+  those rows. Nothing is lost to a dropped connection short of closing the
+  tab. (A true offline queue for the whole field tier is future work —
+  tracked in ROADMAP.md, not silently promised here.)
+
+  PII RULE (CLAUDE.md): reachable without sign-in — services are fetched
+  with a `fields=` list that excludes customer_name/customer_phone.
+-->
+<link rel="stylesheet" href="/app.css">
+<script defer src="/vendor/alpine.min.js"></script>
+<style>
+  .range { display: flex; gap: 8px; }
+  .range input { flex: 1; }
+
+  .svcrow { border: 2px solid var(--line); padding: 10px 12px; margin-bottom: 8px; }
+  .svcrow.on { border-color: var(--ink); }
+  .svcrow.done { border-color: var(--go); background: #e9f5ee; }
+  .svcrow.err { border-color: var(--sev-a); }
+  .svcrow .head { display: flex; align-items: center; gap: 10px; }
+  .svcrow .head input[type=checkbox] { width: 26px; height: 26px; flex: 0 0 auto; }
+  .svcrow .addr { font-weight: 700; font-size: 16px; }
+  .svcrow .sta { font-family: ui-monospace, Consolas, monospace; color: var(--steel);
+    font-size: 13px; margin-left: auto; white-space: nowrap; }
+  .svcrow .already { color: var(--go); font-size: 12px; font-weight: 700; }
+  .svcrow .body { margin-top: 8px; }
+  .svcrow .status { font-size: 13px; font-weight: 700; margin-top: 6px; }
+  .svcrow .status.done { color: var(--go); }
+  .svcrow .status.err { color: var(--sev-a); }
+  .svcrow input[type=text] { min-height: 44px; padding: 8px; font-size: 15px; margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<div x-data="noticeBatch()" x-init="load()">
+
+  <header class="bar">
+    <span class="mark"><a href="/">LoopCheck</a></span>
+    <span class="meta">Batch notice</span>
+  </header>
+
+  <template x-if="state === 'error'"><div class="error" x-text="errorMsg"></div></template>
+  <template x-if="state === 'loading'"><p class="loading">Loading…</p></template>
+
+  <template x-if="state === 'ready'">
+    <main>
+      <a class="crumb" x-show="projectId" :href="'/cutover.html?project=' + projectId">← Cutover board</a>
+      <h1>48-hour notices — walk the block</h1>
+
+      <h2 class="section">Project</h2>
+      <select x-model="projectId" @change="loadServices()">
+        <option value="" disabled>Choose a project…</option>
+        <template x-for="p in projects" :key="p.id">
+          <option :value="p.id" x-text="p.name"></option>
+        </template>
+      </select>
+
+      <template x-if="projectId && !noticeTemplate">
+        <div class="error">No notice checklist template found (subject_kind
+          "service", phase "notice"). Reload the seed library.</div>
+      </template>
+
+      <template x-if="projectId && noticeTemplate">
+        <div>
+          <h2 class="section">Station range (optional)</h2>
+          <div class="range">
+            <input type="text" x-model="staFrom" placeholder="from (e.g. 10+00)" @input="applyRange()">
+            <input type="text" x-model="staTo" placeholder="to (e.g. 18+00)" @input="applyRange()">
+          </div>
+          <p class="meta" style="margin-top:6px">
+            <span x-text="visible.length"></span> services in range ·
+            <button class="link" @click="selectAll(true)">select all unnoticed</button> ·
+            <button class="link" @click="selectAll(false)">clear</button>
+          </p>
+
+          <h2 class="section">Services — <span x-text="selectedCount"></span> selected</h2>
+          <template x-if="!visible.length">
+            <p class="empty">No services match. Import them on the
+              <a :href="'/import_services.html?project=' + projectId">service CSV import</a> page.</p>
+          </template>
+
+          <template x-for="s in visible" :key="s.id">
+            <div class="svcrow" :class="{ on: row(s.id).sel, done: row(s.id).status === 'done', err: row(s.id).status === 'error' }">
+              <label class="head">
+                <input type="checkbox" x-model="row(s.id).sel" :disabled="row(s.id).status === 'done'">
+                <span class="addr" x-text="s.address"></span>
+                <span class="sta" x-text="s.station || ''"></span>
+              </label>
+              <div class="already" x-show="noticedAt(s.id)"
+                   x-text="'✓ already noticed ' + noticedAt(s.id)"></div>
+
+              <div class="body" x-show="row(s.id).sel && row(s.id).status !== 'done'">
+                <label class="fl">Door hanger photo (required — this is the evidence)</label>
+                <input type="file" accept="image/*" capture="environment"
+                       @change="row(s.id).file = $event.target.files[0] || null">
+                <input type="text" x-model="row(s.id).note"
+                       placeholder="Spoke to anyone? (optional, goes in the record)">
+              </div>
+              <div class="status done" x-show="row(s.id).status === 'done'">✓ notice logged</div>
+              <div class="status err" x-show="row(s.id).status === 'error'"
+                   x-text="'✗ failed — kept for retry: ' + row(s.id).errMsg"></div>
+            </div>
+          </template>
+
+          <h2 class="section">Sign-off</h2>
+          <label class="fl" for="pby">Performed by</label>
+          <input id="pby" type="text" x-model="performedBy" placeholder="Your name">
+          <label class="fl" for="pat">Delivered on</label>
+          <input id="pat" type="date" x-model="performedAt">
+
+          <p class="meta" style="margin-top:12px">
+            Each service gets its own append-only notice check: the delivery
+            line marked <strong>PASS</strong>, your photo attached as the
+            evidence, and your note in the record. <span x-text="readyCount"></span>
+            of <span x-text="selectedCount"></span> selected have a photo.
+          </p>
+
+          <button class="go" :disabled="busy || !readyCount || !performedBy.trim()"
+                  @click="submit()"
+                  x-text="busy ? ('Writing… ' + progress + '/' + readyCount)
+                               : ('Log ' + readyCount + ' notice check' + (readyCount === 1 ? '' : 's'))"></button>
+          <p class="meta" x-show="selectedCount > readyCount" style="color:var(--sev-b)">
+            Selected rows without a photo will be skipped — the photo is the notice evidence.</p>
+          <div class="flash" x-show="doneFlash" x-text="doneFlash"></div>
+          <template x-if="failedCount">
+            <button class="go secondary" :disabled="busy" @click="submit()"
+                    x-text="'Retry ' + failedCount + ' failed'"></button>
+          </template>
+        </div>
+      </template>
+    </main>
+  </template>
+
+</div>
+
+<script>
+function noticeBatch() {
+  const PB = window.location.origin;
+
+  function stationValue(s) {
+    const m = (s || '').match(/(\d+)\s*\+\s*(\d+(?:\.\d+)?)/);
+    return m ? parseInt(m[1], 10) * 100 + parseFloat(m[2]) : Infinity;
+  }
+
+  async function fetchAll(pathAndQuery) {
+    let page = 1, out = [];
+    for (;;) {
+      const res = await fetch(`${PB}/api/collections/${pathAndQuery}&perPage=500&page=${page}`);
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+      const data = await res.json();
+      out = out.concat(data.items);
+      if (page >= data.totalPages) return out;
+      page++;
+    }
+  }
+
+  return {
+    state: 'loading', errorMsg: '',
+    projects: [],
+    projectId: new URLSearchParams(location.search).get('project') || '',
+    noticeTemplate: null,
+    noticeItems: [],       // the template's line items, frozen onto each check
+    services: [],
+    noticed: {},           // serviceId -> date string of an existing passing notice
+    rows: {},              // serviceId -> { sel, file, note, status, errMsg }
+    staFrom: '', staTo: '',
+    performedBy: localStorage.getItem('lc_name') || '',
+    performedAt: new Date().toISOString().slice(0, 10),
+    busy: false, progress: 0, doneFlash: '',
+
+    row(id) {
+      // Lazily create the per-service working state (photo, note, send
+      // status). Held client-side until each row's write succeeds.
+      return this.rows[id] ||= { sel: false, file: null, note: '', status: '', errMsg: '' };
+    },
+    noticedAt(id) { return this.noticed[id] || ''; },
+
+    get visible() {
+      const lo = stationValue(this.staFrom), hi = stationValue(this.staTo);
+      return this.services.filter(s => {
+        const v = stationValue(s.station);
+        if (lo !== Infinity && (v === Infinity || v < lo)) return false;
+        if (hi !== Infinity && (v === Infinity || v > hi)) return false;
+        return true;
+      });
+    },
+    get selectedCount() {
+      return this.visible.filter(s => this.row(s.id).sel && this.row(s.id).status !== 'done').length;
+    },
+    get readyCount() {
+      return this.visible.filter(s => {
+        const r = this.row(s.id);
+        return r.sel && r.file && r.status !== 'done';
+      }).length;
+    },
+    get failedCount() {
+      return this.visible.filter(s => this.row(s.id).status === 'error').length;
+    },
+
+    applyRange() { /* getters recompute; hook exists for future needs */ },
+    selectAll(on) {
+      for (const s of this.visible) {
+        const r = this.row(s.id);
+        if (r.status === 'done') continue;
+        // "Select all" targets the UNNOTICED — re-noticing everything by
+        // accident would spam the ledger (it stays legal; a re-notice after
+        // a schedule slip is a new record, selected by hand).
+        r.sel = on && !this.noticed[s.id];
+      }
+    },
+
+    async load() {
+      try {
+        const res = await fetch(`${PB}/api/collections/projects/records?sort=name&perPage=200`);
+        this.projects = (await res.json()).items;
+        this.state = 'ready';
+        if (this.projectId) await this.loadServices();
+      } catch (err) {
+        this.state = 'error';
+        this.errorMsg = 'Could not reach the server. (' + err.message + ')';
+      }
+    },
+
+    async loadServices() {
+      if (!this.projectId) return;
+      try {
+        // The notice template — found by its derived coordinates (service
+        // subject, notice phase), never by parsing template_key.
+        const tf = encodeURIComponent(`subject_kind='service' && phase='notice'`);
+        const tRes = await fetch(
+          `${PB}/api/collections/checklist_templates/records?filter=(${tf})&perPage=1`);
+        this.noticeTemplate = (await tRes.json()).items[0] || null;
+        if (this.noticeTemplate) {
+          const inf = encodeURIComponent(`template='${this.noticeTemplate.id}'`);
+          const iRes = await fetch(
+            `${PB}/api/collections/template_items/records?filter=(${inf})&sort=sequence&perPage=100`);
+          this.noticeItems = (await iRes.json()).items;
+        }
+
+        // Services (no PII in the fields list), walking order by station.
+        const sf = encodeURIComponent(`project='${this.projectId}'`);
+        const svcs = await fetchAll(
+          `services/records?filter=(${sf})&fields=id,address,station&sort=address`);
+        svcs.sort((a, b) =>
+          (stationValue(a.station) - stationValue(b.station)) ||
+          a.address.localeCompare(b.address));
+        this.services = svcs;
+
+        // Which are already noticed (a passing notice check exists) — shown
+        // as a badge so the crew doesn't double-hang the block.
+        const cf = encodeURIComponent(
+          `service.project='${this.projectId}' && phase='notice' && result='pass'`);
+        const checks = await fetchAll(
+          `checks/records?filter=(${cf})&fields=service,performed_at,created`);
+        const n = {};
+        for (const c of checks) {
+          n[c.service] = new Date(c.performed_at || c.created).toLocaleDateString(undefined,
+            { month: 'short', day: 'numeric' });
+        }
+        this.noticed = n;
+      } catch (err) {
+        this.state = 'error';
+        this.errorMsg = 'Could not load services: ' + err.message;
+      }
+    },
+
+    async submit() {
+      this.busy = true; this.progress = 0; this.doneFlash = '';
+      if (this.performedBy) localStorage.setItem('lc_name', this.performedBy);
+
+      const targets = this.visible.filter(s => {
+        const r = this.row(s.id);
+        return r.sel && r.file && r.status !== 'done';
+      });
+
+      let ok = 0;
+      for (const s of targets) {
+        const r = this.row(s.id);
+        r.status = 'sending'; r.errMsg = '';
+        try {
+          // Same write order as check.html: the check first (can never be
+          // lost), then its frozen-prompt lines, then the photo.
+          const cRes = await fetch(`${PB}/api/collections/checks/records`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              service: s.id,
+              template: this.noticeTemplate.id,
+              phase: this.noticeTemplate.phase,
+              result: 'pass',
+              performed_by: this.performedBy,
+              performed_at: this.performedAt + ' 00:00:00',
+              witness_required: !!this.noticeTemplate.witness_required,
+              notes: '',
+            }),
+          });
+          if (!cRes.ok) throw new Error('check rejected (' + cRes.status + ')');
+          const check = await cRes.json();
+
+          for (const it of this.noticeItems) {
+            // The delivery pass/fail line is PASS (hanging + photographing
+            // the hanger IS the delivery); the text line carries the
+            // contact note; the photo line gets the attachment.
+            const body = {
+              check: check.id,
+              template_item: it.id,
+              prompt: it.text,
+              result: it.response_type === 'pass_fail_na' ? 'pass' : '',
+              value: '',
+              note: it.response_type === 'text' ? (r.note || '') : '',
+            };
+            const iRes = await fetch(`${PB}/api/collections/check_items/records`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body) });
+            if (!iRes.ok) throw new Error('line rejected (' + iRes.status + ')');
+            const item = await iRes.json();
+
+            if (it.response_type === 'photo_required') {
+              const fd = new FormData();
+              fd.append('file', r.file);
+              fd.append('parent_collection', 'check_items');
+              fd.append('parent_id', item.id);
+              fd.append('uploaded_by', this.performedBy);
+              const aRes = await fetch(`${PB}/api/collections/attachments/records`, {
+                method: 'POST', body: fd });
+              if (!aRes.ok) throw new Error('photo upload failed (' + aRes.status + ')');
+            }
+          }
+
+          r.status = 'done'; r.sel = false; ok++;
+          this.noticed[s.id] = new Date(this.performedAt).toLocaleDateString(undefined,
+            { month: 'short', day: 'numeric' });
+        } catch (err) {
+          // Kept, not lost: photo and note stay in the row for Retry.
+          r.status = 'error'; r.errMsg = err.message;
+        }
+        this.progress++;
+      }
+
+      this.busy = false;
+      if (ok) this.doneFlash = `✓ ${ok} notice check${ok === 1 ? '' : 's'} in the ledger`;
+    },
+  };
+}
+</script>
+</body>
+</html>

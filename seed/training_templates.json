@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "_note": "Training milestone templates (ADR 0013). subject_kind=tag, phase=training, witness_required=true (the real Training Summary forms are multi-party signed: manufacturer / GC / owner). Training is a MILESTONE, not one of the six checkout phases — it is derived and shown alongside checkout standing, never folded into 'checkout complete'. The closeout 'training' requirement (the deliverable: materials/records handed over) stays separate; this is the EVENT (people were trained, dated, witnessed). Seeded conservatively for the two operator-facing types (pumps and control panels); other equipment marks training N/A via tags.phases_na, and more types can be authored here. Wording is a maintainer domain-review item.",
+  "templates": [
+    {
+      "template_key": "pump_centrifugal.training",
+      "tag_type": "pump_centrifugal",
+      "phase": "training",
+      "name": "Centrifugal Pump — Operations & Maintenance Training",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "witness_required": true,
+      "items": [
+        { "seq": 1, "text": "Operations staff trained on normal start/stop, Hand-Off-Auto operation, and lead/lag/standby control for this pump", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Manufacturer's representative conducted equipment-specific O&M and troubleshooting walkthrough", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 3, "text": "Alarm response and safe-shutdown procedures reviewed (seal fail, high temp, low suction / low wet-well as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 4, "text": "Lubrication, mechanical-seal, and routine-maintenance procedures reviewed per the O&M manual", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 5, "text": "Trainer, trainees, topics covered, and training date recorded", "response": "text", "unit": null, "confirm_per_spec": false },
+        { "seq": 6, "text": "Attendance sign-in sheet attached", "response": "photo_required", "unit": null, "confirm_per_spec": false },
+        { "seq": 7, "text": "Owner / operations acknowledges training complete for this equipment", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "control_panel.training",
+      "tag_type": "control_panel",
+      "phase": "training",
+      "name": "Control Panel — Operations & HMI Training",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "witness_required": true,
+      "items": [
+        { "seq": 1, "text": "Operations staff trained on HMI navigation, screen layout, and normal operating displays", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Alarm acknowledge, silence, and reset procedures demonstrated at the HMI", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 3, "text": "Mode selection (Hand/Off/Auto), setpoint changes, and manual overrides reviewed within the operator access level", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 4, "text": "Trend, historical-data, and report retrieval demonstrated (as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 5, "text": "Loss-of-comms, power-loss, and UPS behavior explained per the control narrative", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 6, "text": "Trainer, trainees, topics covered, and training date recorded", "response": "text", "unit": null, "confirm_per_spec": false },
+        { "seq": 7, "text": "Attendance sign-in sheet attached", "response": "photo_required", "unit": null, "confirm_per_spec": false },
+        { "seq": 8, "text": "Owner / operations acknowledges training complete for this panel", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false }
+      ]
+    }
+  ]
+}

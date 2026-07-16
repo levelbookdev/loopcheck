@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "templates": [
+    {
+      "template_key": "compliance.excavation_competent_person",
+      "tag_type": null,
+      "phase": null,
+      "name": "Excavation — Daily Competent Person Inspection",
+      "recurrence": "daily",
+      "subject_kind": "location",
+      "notes": "Also run per_event after rainstorms or other hazard-increasing occurrences. Reconcile item list against Fed OSHA 1926 Subpart P or Cal/OSHA as applicable, and company HASP.",
+      "items": [
+        { "seq": 1, "text": "Inspection performed prior to start of work and as needed throughout shift", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Soil classification confirmed/re-confirmed for current conditions (record type)", "response": "text", "unit": null, "confirm_per_spec": true },
+        { "seq": 3, "text": "Excavation depth at deepest point (record)", "response": "value", "unit": "ft", "confirm_per_spec": false },
+        { "seq": 4, "text": "Protective system (slope/bench/shield/shoring) appropriate for soil type and depth, and in sound condition", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 5, "text": "Shield/shoring used within tabulated data or manufacturer limits; certification available on site", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 6, "text": "Safe access/egress (ladder/ramp) within required travel distance of all workers", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true },
+        { "seq": 7, "text": "Spoils, materials, and equipment set back from excavation edge per required distance", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true },
+        { "seq": 8, "text": "No water accumulation, or water controls (dewatering) functioning with dedicated monitoring", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 9, "text": "No signs of tension cracks, sloughing, fissures, or surcharge distress", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 10, "text": "Adjacent structures, roadways, and utilities protected/supported; no undermining observed", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 11, "text": "Underground utilities located, marked, and protected; USA/811 ticket current (record ticket no.)", "response": "text", "unit": null, "confirm_per_spec": false },
+        { "seq": 12, "text": "Atmospheric testing performed where hazardous atmosphere could reasonably exist (record readings)", "response": "text", "unit": null, "confirm_per_spec": true },
+        { "seq": 13, "text": "Barricades, covers, and public protection in place", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 14, "text": "Weather since last inspection considered (rain, freeze/thaw); re-inspection triggers noted", "response": "text", "unit": null, "confirm_per_spec": false },
+        { "seq": 15, "text": "Photo of excavation and protective system condition", "response": "photo_required", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "compliance.dewatering_discharge",
+      "tag_type": null,
+      "phase": null,
+      "name": "Dewatering — Discharge Monitoring Log",
+      "recurrence": "per_shift",
+      "subject_kind": "location",
+      "notes": "Reconcile fields and frequencies against the actual discharge permit / WDR / municipal authorization. Permit conditions govern; add value items for any numeric limits it imposes.",
+      "items": [
+        { "seq": 1, "text": "Discharge location matches permitted point of discharge", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true },
+        { "seq": 2, "text": "Treatment/BMPs in place and functioning (weir tank, filter bag, sediment trap as specified)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true },
+        { "seq": 3, "text": "Visual check: discharge clear, no sheen, no odor, no visible sediment plume", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 4, "text": "Estimated discharge flow rate (record)", "response": "value", "unit": "gpm", "confirm_per_spec": false },
+        { "seq": 5, "text": "Turbidity reading, if required by permit (record)", "response": "value", "unit": "NTU", "confirm_per_spec": true },
+        { "seq": 6, "text": "pH reading, if required by permit (record)", "response": "value", "unit": "pH", "confirm_per_spec": true },
+        { "seq": 7, "text": "No erosion or scour at point of discharge; energy dissipation in place", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 8, "text": "Totalized/estimated volume this period (record)", "response": "value", "unit": "gal", "confirm_per_spec": false },
+        { "seq": 9, "text": "Photo of discharge point and BMPs", "response": "photo_required", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "compliance.c651_disinfection",
+      "tag_type": null,
+      "phase": null,
+      "name": "Water Main Disinfection — Chlorination / Flushing / Bac-T (AWWA C651)",
+      "recurrence": "per_event",
+      "subject_kind": "location",
+      "notes": "Subject is the main segment (station-to-station). All numeric acceptance values (initial dose, residual at end of contact period, contact duration, flushing velocity, sample count/spacing) are governed by the AWWA C651 edition referenced in the spec and any project-specific overrides — confirm before first use. Dechlorination of flushing water is typically required before discharge; coordinate with the dewatering/discharge log.",
+      "items": [
+        { "seq": 1, "text": "Segment identification: main size, material, limits (station-to-station) recorded", "response": "text", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Pre-chlorination flush completed to remove debris (record method/duration)", "response": "text", "unit": null, "confirm_per_spec": true },
+        { "seq": 3, "text": "Chlorination method used (continuous feed / slug / tablet) per spec", "response": "text", "unit": null, "confirm_per_spec": true },
+        { "seq": 4, "text": "Initial chlorine residual at far end after fill (record)", "response": "value", "unit": "mg/L", "confirm_per_spec": true },
+        { "seq": 5, "text": "Contact period start date/time recorded", "response": "text", "unit": null, "confirm_per_spec": false },
+        { "seq": 6, "text": "Chlorine residual at end of contact period (record)", "response": "value", "unit": "mg/L", "confirm_per_spec": true },
+        { "seq": 7, "text": "Contact period duration met per spec (record)", "response": "value", "unit": "hr", "confirm_per_spec": true },
+        { "seq": 8, "text": "Valves operated during chlorination to disinfect appurtenances (as required)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 9, "text": "Final flush completed; heavily chlorinated water dechlorinated and disposed per permit", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true },
+        { "seq": 10, "text": "Post-flush chlorine residual comparable to distribution system (record)", "response": "value", "unit": "mg/L", "confirm_per_spec": true },
+        { "seq": 11, "text": "Bacteriological samples collected — count, locations, and collector per district requirements (record)", "response": "text", "unit": null, "confirm_per_spec": true },
+        { "seq": 12, "text": "Lab results received: all samples passing (attach lab report)", "response": "photo_required", "unit": null, "confirm_per_spec": false },
+        { "seq": 13, "text": "District/owner acceptance to place in service received (record name/date)", "response": "text", "unit": null, "confirm_per_spec": false }
+      ]
+    }
+  ]
+}

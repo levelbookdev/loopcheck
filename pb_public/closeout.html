@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoopCheck — Closeout</title>
+<!--
+  Closeout dashboard (ADR 0005) — the "are we ready for final completion"
+  view: a matrix of tags × requirement types, completion % by system.
+
+  closeout_requirements.status is workflow state (required -> received ->
+  accepted) and may be edited — but every change made here is ALSO appended
+  to the immutable closeout_log collection (who / when / from -> to), so the
+  editable state always has an unforgeable trail behind it.
+-->
+<link rel="stylesheet" href="/app.css">
+<script defer src="/vendor/alpine.min.js"></script>
+<style>
+  body { max-width: 960px; }  /* the matrix needs more room than the field pages */
+  table { border-collapse: collapse; font-size: 13px; width: 100%; }
+  th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+  th { color: var(--steel); text-transform: uppercase; letter-spacing: .06em; font-size: 11px; }
+  .scroll { overflow-x: auto; border: 2px solid var(--ink); }
+  td.cell { cursor: pointer; text-align: center; }
+  td.cell:hover { background: var(--wash); }
+  td.cell.sel { outline: 3px solid var(--safety); outline-offset: -3px; }
+  .dot { font-weight: 800; font-size: 12px; }
+  .dot.required { color: var(--sev-b); }
+  .dot.received { color: var(--sev-b); }
+  .dot.accepted { color: var(--go); }
+  .dot.none { color: var(--line); }
+  .sysrow td { background: var(--wash); font-weight: 800; }
+  .pct { font-family: ui-monospace, Consolas, monospace; font-weight: 800; }
+  .editor { border: 2px solid var(--ink); padding: 14px; margin-top: 14px; }
+</style>
+</head>
+<body>
+
+<div x-data="closeoutPage()" x-init="load()">
+  <header class="bar">
+    <span class="mark"><a href="/">LoopCheck</a></span>
+    <span class="meta">Closeout</span>
+  </header>
+
+  <template x-if="state === 'loading'"><p class="loading">Loading…</p></template>
+  <template x-if="state === 'error'"><div class="error" x-text="errorMsg"></div></template>
+
+  <template x-if="state === 'ready'">
+    <main>
+      <a class="crumb" :href="'/project.html?id=' + projectId">← Project</a>
+      <h1 x-text="project.name"></h1>
+      <p class="meta">
+        Closeout deliverables — <span class="pct" x-text="overallPct + '%'"></span> accepted
+        (<span x-text="counts.accepted"></span> of <span x-text="counts.total"></span>).
+        Also see the <a :href="'/warranty.html?project=' + projectId">warranty timeline</a>
+        and the <a :href="'/closeout-package.html?project=' + projectId">printable package</a>.
+      </p>
+
+      <label class="fl" for="who">Your name (recorded with every status change)</label>
+      <input id="who" type="text" x-model="who" placeholder="Who is updating closeout status">
+
+      <h2 class="section">Completion by system</h2>
+      <template x-for="s in systems" :key="s.id">
+        <div style="display:flex; justify-content:space-between; gap:10px; padding:6px 0; border-bottom:1px solid var(--line)">
+          <span><span class="mono" x-text="s.number"></span><span x-show="s.name" x-text="' — ' + s.name"></span></span>
+          <span class="pct" x-text="sysCounts(s.id).total ? sysPct(s.id) + '% (' + sysCounts(s.id).accepted + '/' + sysCounts(s.id).total + ')' : '—'"></span>
+        </div>
+      </template>
+
+      <h2 class="section">Tags × deliverables — tap a cell to update or add</h2>
+      <p class="meta" style="margin-bottom:8px">
+        <span class="dot required">●</span> required ·
+        <span class="dot received">◐</span> received ·
+        <span class="dot accepted">✓</span> accepted ·
+        <span class="dot none">—</span> none recorded
+      </p>
+      <template x-for="g in groups" :key="g.id">
+        <div style="margin-bottom:18px">
+          <div style="font-weight:800; margin-bottom:6px">
+            <span class="mono" x-text="g.number"></span><span x-show="g.name" x-text="' — ' + g.name"></span>
+          </div>
+          <div class="scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tag</th>
+                  <template x-for="t in TYPES" :key="t.key"><th x-text="t.short"></th></template>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="tg in g.tags" :key="tg.id">
+                  <tr>
+                    <td><a class="mono" :href="'/t/' + encodeURIComponent(tg.tag_number)" x-text="tg.tag_number"></a></td>
+                    <template x-for="t in TYPES" :key="t.key">
+                      <td class="cell" :class="{sel: sel && sel.tagId === tg.id && sel.type === t.key}"
+                          @click="select(tg, t.key)">
+                        <span class="dot" :class="cellState(tg.id, t.key)"
+                              x-text="{required:'●', received:'◐', accepted:'✓', none:'—'}[cellState(tg.id, t.key)]"></span>
+                      </td>
+                    </template>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </template>
+
+      <!-- Cell editor: the requirements behind the selected tag × type,
+           with the advance actions and the add form. -->
+      <template x-if="sel">
+        <div class="editor">
+          <strong><span class="mono" x-text="sel.tagNumber"></span> · <span x-text="prettyReq(sel.type)"></span></strong>
+
+          <template x-for="r in reqsFor(sel.tagId, sel.type)" :key="r.id">
+            <div class="req">
+              <div style="display:flex; justify-content:space-between; gap:10px">
+                <span class="desc" x-text="r.description || prettyReq(r.req_type)"></span>
+                <span class="chip" :class="'st-' + r.status" x-text="r.status"></span>
+              </div>
+              <div class="line">
+                <span x-show="r.received_date">received <span x-text="fmtDate(r.received_date)"></span></span>
+                <span x-show="r.accepted_by"> · accepted by <span x-text="r.accepted_by"></span></span>
+                <span x-show="r.storage_location"> · stored: <span x-text="r.storage_location"></span></span>
+              </div>
+              <div style="margin-top:8px">
+                <template x-if="r.status === 'required'">
+                  <span>
+                    <button class="link" style="margin-right:14px" :disabled="busy || !who"
+                            @click="advance(r, 'received')">Mark received →</button>
+                    <input type="text" x-model="storageDraft" placeholder="Storage location (optional, e.g. Owner's warehouse shelf B3)"
+                           style="margin-top:8px">
+                  </span>
+                </template>
+                <template x-if="r.status === 'received'">
+                  <button class="link" :disabled="busy || !who"
+                          @click="advance(r, 'accepted')">Mark accepted →</button>
+                </template>
+                <p class="meta" x-show="!who" style="margin-top:6px">Enter your name above to update status.</p>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="!reqsFor(sel.tagId, sel.type).length">
+            <p class="empty">Nothing recorded for this tag and type yet.</p>
+          </template>
+
+          <label class="fl">Add a deliverable of this type</label>
+          <input type="text" x-model="addDesc" placeholder='e.g. "2 spare mechanical seals per spec 11310-2.05"'>
+          <button class="go secondary" :disabled="busy || !who"
+                  @click="addReq()" x-text="busy ? 'Saving…' : 'Add requirement'"></button>
+          <p class="meta" x-show="!who" style="margin-top:6px">Enter your name above first.</p>
+          <div class="error" x-show="err" x-text="err"></div>
+        </div>
+      </template>
+    </main>
+  </template>
+</div>
+
+<script>
+function closeoutPage() {
+  const PB = window.location.origin;
+  return {
+    projectId: new URLSearchParams(location.search).get('project') || '',
+    state: 'loading', errorMsg: '',
+    project: null,
+    systems: [],
+    tags: [],
+    reqs: [],
+    who: localStorage.getItem('lc_name') || '',
+    sel: null,          // { tagId, tagNumber, type }
+    addDesc: '',
+    storageDraft: '',
+    busy: false, err: '',
+
+    TYPES: [
+      { key: 'om_manual',     short: 'Manual' },
+      { key: 'spare_parts',   short: 'Spares' },
+      { key: 'special_tools', short: 'Tools' },
+      { key: 'training',      short: 'Training' },
+      { key: 'warranty_cert', short: 'Cert' },
+      { key: 'test_report',   short: 'Test rpt' },
+      { key: 'other',         short: 'Other' },
+    ],
+
+    prettyReq(t) {
+      return { om_manual: 'O&M manual', spare_parts: 'Spare parts',
+               special_tools: 'Special tools', training: 'Training',
+               warranty_cert: 'Warranty certificate', test_report: 'Test report',
+               other: 'Other' }[t] || t;
+    },
+    fmtDate(d) {
+      return new Date(d).toLocaleDateString(undefined,
+        { month: 'short', day: 'numeric', year: 'numeric' });
+    },
+
+    tagsFor(sysId) { return this.tags.filter(t => t.system === sysId); },
+    // One matrix per system, plus a group for tags with no system.
+    get groups() {
+      const out = this.systems
+        .map(s => ({ id: s.id, number: s.number, name: s.name, tags: this.tagsFor(s.id) }))
+        .filter(g => g.tags.length);
+      const orphans = this.tags.filter(t => !t.system);
+      if (orphans.length) out.push({ id: '_none', number: '—', name: 'No system', tags: orphans });
+      return out;
+    },
+    reqsFor(tagId, type) {
+      return this.reqs.filter(r => r.tag === tagId && r.req_type === type);
+    },
+    // The cell shows the LEAST-advanced status of its requirements: a tag
+    // with one accepted and one still-required spare kit is not done.
+    cellState(tagId, type) {
+      const rs = this.reqsFor(tagId, type);
+      if (!rs.length) return 'none';
+      if (rs.some(r => r.status === 'required')) return 'required';
+      if (rs.some(r => r.status === 'received')) return 'received';
+      return 'accepted';
+    },
+    get counts() {
+      const total = this.reqs.length;
+      const accepted = this.reqs.filter(r => r.status === 'accepted').length;
+      return { total, accepted };
+    },
+    get overallPct() {
+      return this.counts.total ? Math.round(100 * this.counts.accepted / this.counts.total) : 0;
+    },
+    sysCounts(sysId) {
+      const ids = new Set(this.tagsFor(sysId).map(t => t.id));
+      const rs = this.reqs.filter(r => ids.has(r.tag));
+      return { total: rs.length, accepted: rs.filter(r => r.status === 'accepted').length };
+    },
+    sysPct(sysId) {
+      const c = this.sysCounts(sysId);
+      return c.total ? Math.round(100 * c.accepted / c.total) : 0;
+    },
+
+    select(tg, type) {
+      this.sel = { tagId: tg.id, tagNumber: tg.tag_number, type };
+      this.addDesc = ''; this.storageDraft = ''; this.err = '';
+    },
+
+    async load() {
+      if (!this.projectId) {
+        this.state = 'error'; this.errorMsg = 'No project id in the URL (open as /closeout.html?project=…).'; return;
+      }
+      try {
+        const pRes = await fetch(`${PB}/api/collections/projects/records/${this.projectId}`);
+        if (!pRes.ok) throw new Error('project not found (' + pRes.status + ')');
+        this.project = await pRes.json();
+
+        const f = encodeURIComponent(`project='${this.projectId}'`);
+        // Systems, tags, and the project's requirements, in parallel.
+        const [sRes, tRes, rRes] = await Promise.all([
+          fetch(`${PB}/api/collections/systems/records?filter=(${f})&sort=startup_sequence,number&perPage=500`),
+          fetch(`${PB}/api/collections/tags/records?filter=(${f})&sort=tag_number&perPage=500&fields=id,tag_number,system,description`),
+          fetch(`${PB}/api/collections/closeout_requirements/records?filter=(${f})&perPage=1000`),
+        ]);
+        this.systems = (await sRes.json()).items;
+        this.tags = (await tRes.json()).items;
+        this.reqs = (await rRes.json()).items;
+
+        this.state = 'ready';
+      } catch (err) {
+        this.state = 'error';
+        this.errorMsg = 'Could not load closeout data. (' + err.message + ')';
+      }
+    },
+
+    // Append the trail entry behind a status change. The log collection is
+    // append-only in the schema (updateRule/deleteRule null) — this write
+    // is what makes the editable status trustworthy.
+    async logChange(reqId, from, to, note) {
+      await fetch(`${PB}/api/collections/closeout_log/records`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requirement: reqId, from_status: from, to_status: to,
+          changed_by: this.who || 'unspecified', note: note || '',
+        }),
+      });
+    },
+
+    async advance(r, to) {
+      this.busy = true; this.err = '';
+      if (this.who) localStorage.setItem('lc_name', this.who);
+      try {
+        const body = { status: to };
+        if (to === 'received') {
+          body.received_date = new Date().toISOString().replace('T', ' ').slice(0, 19);
+          if (this.storageDraft) body.storage_location = this.storageDraft;
+        }
+        if (to === 'accepted') body.accepted_by = this.who || 'unspecified';
+        const res = await fetch(`${PB}/api/collections/closeout_requirements/records/${r.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) throw new Error('update rejected (' + res.status + ')');
+        await this.logChange(r.id, r.status, to, this.storageDraft ? 'stored: ' + this.storageDraft : '');
+        this.storageDraft = '';
+        await this.reload();
+      } catch (err) {
+        this.err = 'Could not update: ' + err.message;
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    async addReq() {
+      this.busy = true; this.err = '';
+      if (this.who) localStorage.setItem('lc_name', this.who);
+      try {
+        const res = await fetch(`${PB}/api/collections/closeout_requirements/records`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project: this.projectId, tag: this.sel.tagId,
+            req_type: this.sel.type, description: this.addDesc,
+            status: 'required',
+          }),
+        });
+        if (!res.ok) throw new Error('create rejected (' + res.status + ')');
+        const created = await res.json();
+        // Creation is also a log event: "" -> required.
+        await this.logChange(created.id, '', 'required', this.addDesc);
+        this.addDesc = '';
+        await this.reload();
+      } catch (err) {
+        this.err = 'Could not add: ' + err.message;
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    // Refresh just the requirements; keep the selection in place.
+    async reload() {
+      const f = encodeURIComponent(`project='${this.projectId}'`);
+      const rRes = await fetch(`${PB}/api/collections/closeout_requirements/records?filter=(${f})&perPage=1000`);
+      this.reqs = (await rRes.json()).items;
+    },
+  };
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,49 @@
+# The PocketBase binary is downloaded per-machine by scripts/setup.sh —
+# never commit it. (Different OS/arch per machine, and it's ~12 MB.)
+pocketbase
+pocketbase.exe
+pocketbase_*.zip
+pb.log
+
+# Scratch verification instances — a renamed binary + its own data dir some
+# sessions spin up to test migrations without touching the real pb_data/.
+# Never source; the ~30 MB binary especially must never land in a commit.
+pb_core
+pb_core.exe
+pb_core.log
+pb_data_scratch/
+
+# The combined smoke test (scripts/smoke_test.sh) boots a throwaway instance
+# here and deletes it on exit; a crash mid-run must never leave it committable.
+pb_data_smoke/
+
+# Live database, uploaded files, and logs. This is the operator's data,
+# not source code. The schema lives in pb_migrations/ (which IS committed) and
+# re-seeds itself on first run.
+pb_data/
+
+# Admin-UI automigrate artifacts. When PocketBase runs with automigrate and a
+# collection is edited in the admin UI, it writes `{ts}_created_/updated_/
+# deleted_{collection}.js` into the --migrationsDir. Those reference collections
+# by opaque internal id (pbc_…) and break a from-scratch rebuild — exactly the
+# admin-UI-built schema CLAUDE.md forbids. The hand-written schema uses the
+# imperative `_create_` / `_migration_` / `_seed_` (no trailing "d"), so these
+# past-tense patterns catch only the strays.
+pb_migrations/*_created_*.js
+pb_migrations/*_updated_*.js
+pb_migrations/*_deleted_*.js
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Local editor/agent tooling config — except the shared project settings,
+# which carry the no-AI-attribution rule to every Claude Code session
+# (including web sessions, which don't see local machine config).
+.claude/*
+!.claude/settings.json
+
+# Scratch calibration/verification instance (test DB) — never source.
+# Covers pb_data_caltest/ and any other pb_data_<suffix>/ test instances.
+pb_data_caltest/
+pb_data_*/

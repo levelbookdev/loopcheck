@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoopCheck — System</title>
+<!--
+  System page — the tags in one system, each with its open punch-item counts by
+  severity (derived from the punch ledger). Tap a tag to open its scan page.
+-->
+<link rel="stylesheet" href="/app.css">
+<script defer src="/vendor/alpine.min.js"></script>
+</head>
+<body>
+
+<div x-data="systemPage()" x-init="load()">
+  <header class="bar">
+    <span class="mark"><a href="/">LoopCheck</a></span>
+    <span class="meta">System</span>
+  </header>
+
+  <template x-if="state === 'loading'"><p class="loading">Loading…</p></template>
+  <template x-if="state === 'error'"><div class="error" x-text="errorMsg"></div></template>
+
+  <template x-if="state === 'ready'">
+    <main>
+      <a class="crumb" :href="'/project.html?id=' + system.project"
+         x-text="'← ' + (project?.name || 'Project')"></a>
+      <h1>
+        <span class="mono" x-text="system.number"></span>
+        <span x-show="system.name" x-text="' — ' + system.name"></span>
+      </h1>
+      <p class="meta" x-show="system.startup_sequence !== null && system.startup_sequence !== ''"
+         x-text="'Startup sequence: ' + system.startup_sequence"></p>
+      <!-- planned_startup (ADR 0002): read-only calendar context next to the
+           sequence. Date-only at UTC midnight, so format in UTC or western
+           timezones would show the previous day. -->
+      <p class="meta" x-show="system.planned_startup"
+         x-text="'Planned startup: ' + fmtDate(system.planned_startup)"></p>
+
+      <!-- System-wide open punch totals -->
+      <h2 class="section">Open punch items</h2>
+      <div class="counts">
+        <span class="count sev-A" :class="{zero: !totals.A}" x-text="'A ' + totals.A"></span>
+        <span class="count sev-B" :class="{zero: !totals.B}" x-text="'B ' + totals.B"></span>
+        <span class="count sev-C" :class="{zero: !totals.C}" x-text="'C ' + totals.C"></span>
+        <span class="count" style="color:var(--go)" x-show="!totals.A && !totals.B && !totals.C">clear</span>
+      </div>
+      <p class="meta" x-show="totals.A" style="color:var(--sev-a)">
+        <strong x-text="totals.A"></strong> A-item<span x-show="totals.A !== 1">s</span> blocking startup.
+      </p>
+
+      <h2 class="section">Tags <span x-show="tags.length" x-text="'(' + tags.length + ')'"></span></h2>
+      <template x-if="!tags.length">
+        <p class="empty">No tags in this system yet.</p>
+      </template>
+
+      <template x-for="t in tags" :key="t.id">
+        <a class="card" :href="'/t/' + encodeURIComponent(t.tag_number)">
+          <div style="display:flex; justify-content:space-between; gap:10px; align-items:baseline">
+            <span class="title mono" x-text="t.tag_number"></span>
+            <span class="meta" x-text="prettyType(t.tag_type)"></span>
+          </div>
+          <div class="sub" x-text="t.description || ''"></div>
+          <div class="counts" x-show="tagCounts(t.id).total">
+            <span class="count sev-A" x-show="tagCounts(t.id).A" x-text="'A ' + tagCounts(t.id).A"></span>
+            <span class="count sev-B" x-show="tagCounts(t.id).B" x-text="'B ' + tagCounts(t.id).B"></span>
+            <span class="count sev-C" x-show="tagCounts(t.id).C" x-text="'C ' + tagCounts(t.id).C"></span>
+          </div>
+        </a>
+      </template>
+    </main>
+  </template>
+</div>
+
+<script>
+function systemPage() {
+  const PB = window.location.origin;
+  return {
+    systemId: new URLSearchParams(location.search).get('id') || '',
+    state: 'loading', errorMsg: '',
+    system: null, project: null,
+    tags: [],
+    punchByTag: {},        // tagId -> {A,B,C,total}
+    totals: { A: 0, B: 0, C: 0 },
+
+    tagCounts(tid) { return this.punchByTag[tid] || { A: 0, B: 0, C: 0, total: 0 }; },
+    fmtDate(pbDate) {
+      // planned_startup is date-only at UTC midnight — format in UTC too,
+      // or western timezones show the day before.
+      return new Date(pbDate).toLocaleDateString(undefined,
+        { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+    },
+    prettyType(t) {
+      if (!t) return '';
+      // Same label map as tag.html — seed-library names read backwards when
+      // mechanically title-cased ("Pump Centrifugal").
+      const labels = {
+        pump_centrifugal: 'Centrifugal Pump',
+        valve_motor_operated: 'Motor-Operated Valve',
+        instrument_flow: 'Flow Instrument',
+        instrument_level: 'Level Instrument',
+        instrument_pressure: 'Pressure Instrument',
+      };
+      return labels[t] || t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    },
+
+    async load() {
+      if (!this.systemId) {
+        this.state = 'error'; this.errorMsg = 'No system id in the URL.'; return;
+      }
+      try {
+        const sRes = await fetch(`${PB}/api/collections/systems/records/${this.systemId}`);
+        if (!sRes.ok) throw new Error('system not found (' + sRes.status + ')');
+        this.system = await sRes.json();
+
+        // Project (for the breadcrumb) — non-fatal if it fails.
+        try {
+          const pRes = await fetch(`${PB}/api/collections/projects/records/${this.system.project}`);
+          if (pRes.ok) this.project = await pRes.json();
+        } catch (_) {}
+
+        // Tags in this system.
+        const tFilter = encodeURIComponent(`system='${this.systemId}'`);
+        const tRes = await fetch(
+          `${PB}/api/collections/tags/records?filter=(${tFilter})&sort=tag_number&perPage=1000`);
+        this.tags = (await tRes.json()).items;
+
+        // Open punch items on this system, grouped per tag + system totals.
+        const puFilter = encodeURIComponent(`system='${this.systemId}' && status='open'`);
+        const puRes = await fetch(
+          `${PB}/api/collections/punch_items/records?filter=(${puFilter})&perPage=1000&fields=id,severity,tag`);
+        for (const p of (await puRes.json()).items) {
+          this.totals[p.severity]++;
+          if (p.tag) {
+            (this.punchByTag[p.tag] ||= { A: 0, B: 0, C: 0, total: 0 });
+            this.punchByTag[p.tag][p.severity]++;
+            this.punchByTag[p.tag].total++;
+          }
+        }
+
+        this.state = 'ready';
+      } catch (err) {
+        this.state = 'error';
+        this.errorMsg = 'Could not load system. (' + err.message + ')';
+      }
+    },
+  };
+}
+</script>
+</body>
+</html>

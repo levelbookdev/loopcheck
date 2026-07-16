@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "runbook_template": {
+    "template_key": "runbook.pressurized_main_tie_in",
+    "name": "Pressurized Main Tie-In — Generic Shutdown Runbook",
+    "notes": "Generic sequence for a cut-in tie-in to an existing pressurized water main during a negotiated shutdown window. T+0 = start of shutdown window (window_start). Durations are placeholders — the whole point of the planning view is that the team edits these against the negotiated window and the district reviews the total. Assumes district operations personnel operate district-owned valves; confirm and adjust responsible_party per district. For sewer force main or gravity tie-ins, swap disinfection steps for bypass/plugging steps.",
+    "pre_window_steps": [
+      { "seq": 1, "offset_label": "T-14d", "description": "Shutdown request submitted to district with plan, sequence, and materials list; window negotiated", "responsible_party": "contractor_pm", "hold_point": true, "tag_ref": null },
+      { "seq": 2, "offset_label": "T-7d", "description": "Pothole/expose existing main; verify OD, material, and condition against fittings on hand", "responsible_party": "contractor_super", "hold_point": true, "tag_ref": null },
+      { "seq": 3, "offset_label": "T-7d", "description": "All fittings, couplings, restraint hardware, and spare parts on site and verified against potholed dimensions", "responsible_party": "contractor_super", "hold_point": true, "tag_ref": null },
+      { "seq": 4, "offset_label": "T-72h", "description": "District confirms isolation valves have been exercised and hold (or provides plan for valves that don't)", "responsible_party": "district_operations", "hold_point": true, "tag_ref": null },
+      { "seq": 5, "offset_label": "T-48h", "description": "Customer/public notifications issued per district requirements", "responsible_party": "district_operations", "hold_point": false, "tag_ref": null },
+      { "seq": 6, "offset_label": "T-24h", "description": "Pre-shutdown meeting: sequence walked step-by-step with district ops, inspector, crew; contingency triggers and abort criteria agreed", "responsible_party": "contractor_super", "hold_point": true, "tag_ref": null },
+      { "seq": 7, "offset_label": "T-24h", "description": "Disinfection materials ready (hypochlorite solution for swabbing/spraying per C651 tie-in method); dechlorination and dewatering BMPs staged", "responsible_party": "contractor_super", "hold_point": false, "tag_ref": null },
+      { "seq": 8, "offset_label": "T-2h", "description": "Excavation dewatered, shored, competent-person inspection logged; work area lit (night work) and access clear", "responsible_party": "contractor_super", "hold_point": true, "tag_ref": null }
+    ],
+    "window_steps": [
+      { "seq": 10, "planned_offset_min": 0, "planned_duration_min": 15, "description": "Window opens — all parties on site confirmed (district operator, inspector, crew, standby). Go/no-go decision.", "responsible_party": "contractor_super", "hold_point": true, "tag_ref": null },
+      { "seq": 11, "planned_offset_min": 15, "planned_duration_min": 30, "description": "District operates isolation valves per agreed sequence (record each valve and closure time)", "responsible_party": "district_operations", "hold_point": false, "tag_ref": "OPTIONAL: reference isolation valve tags here" },
+      { "seq": 12, "planned_offset_min": 45, "planned_duration_min": 30, "description": "Verify zero pressure at work point; open drain-down/blowoff; confirm main depressurized and draining", "responsible_party": "contractor_super", "hold_point": true, "tag_ref": null },
+      { "seq": 13, "planned_offset_min": 75, "planned_duration_min": 45, "description": "Drain-down complete at cut location; residual water managed to dewatering BMPs", "responsible_party": "contractor_super", "hold_point": false, "tag_ref": null },
+      { "seq": 14, "planned_offset_min": 120, "planned_duration_min": 60, "description": "Cut existing main; remove spool section; clean and inspect pipe ends", "responsible_party": "contractor_super", "hold_point": false, "tag_ref": null },
+      { "seq": 15, "planned_offset_min": 180, "planned_duration_min": 15, "description": "Swab/spray interior of new fittings, pipe ends, and appurtenances with hypochlorite solution per C651 tie-in method", "responsible_party": "contractor_super", "hold_point": true, "tag_ref": null },
+      { "seq": 16, "planned_offset_min": 195, "planned_duration_min": 90, "description": "Install tie-in assembly (new fitting/valve/spool); torque couplings and flanges per spec", "responsible_party": "contractor_super", "hold_point": false, "tag_ref": "OPTIONAL: reference new valve tag here" },
+      { "seq": 17, "planned_offset_min": 285, "planned_duration_min": 45, "description": "Install joint restraint and thrust protection per drawings; inspector verification before backfill/charge", "responsible_party": "inspector", "hold_point": true, "tag_ref": null },
+      { "seq": 18, "planned_offset_min": 330, "planned_duration_min": 30, "description": "District re-opens isolation valves slowly per agreed sequence; charge line; bleed air at high points", "responsible_party": "district_operations", "hold_point": false, "tag_ref": null },
+      { "seq": 19, "planned_offset_min": 360, "planned_duration_min": 30, "description": "Visual leak check at all new joints under full pressure", "responsible_party": "contractor_super", "hold_point": true, "tag_ref": null },
+      { "seq": 20, "planned_offset_min": 390, "planned_duration_min": 30, "description": "Flush downstream per district direction; verify chlorine residual restored (record reading)", "responsible_party": "district_operations", "hold_point": true, "tag_ref": null },
+      { "seq": 21, "planned_offset_min": 420, "planned_duration_min": 15, "description": "District confirms system restored to normal operation — window formally closed (record time vs. window_end)", "responsible_party": "district_operations", "hold_point": true, "tag_ref": null }
+    ],
+    "post_window_steps": [
+      { "seq": 30, "offset_label": "T+24h", "description": "Post-shutdown report generated (planned vs. actual, step timestamps, problems logged) and distributed", "responsible_party": "contractor_pm", "hold_point": false, "tag_ref": null },
+      { "seq": 31, "offset_label": "T+24h", "description": "Any follow-up items (paving, permanent restoration, punch items) logged against the system", "responsible_party": "contractor_pm", "hold_point": false, "tag_ref": null }
+    ],
+    "contingencies": [
+      { "trigger": "Isolation valve fails to hold (main won't depressurize)", "action": "Stop before cutting. Options per pre-agreed plan: secondary valve isolation, line stop, or abort and restore. Abort decision by super + district operator jointly; record decision and time." },
+      { "trigger": "Existing main dimension/material differs from pothole data", "action": "Assess adaptability of on-hand fittings within window time budget. If cut has not been made, abort is available; if cut is made, execute fallback coupling plan." },
+      { "trigger": "Window overrun projected (any step exceeds planned duration by agreed threshold)", "action": "Notify district operator immediately with revised restore estimate; district decides on window extension vs. temporary restore." },
+      { "trigger": "Weather/site emergency", "action": "Make excavation and public safe first; restore isolation to stable state; reschedule." }
+    ],
+    "roles": [
+      { "role_key": "district_operations", "title": "District Operations (valve operator)", "notify_on": ["approval", "t_minus_24h", "execution_start", "each_hold_point", "restored"] },
+      { "role_key": "inspector", "title": "District/Owner Inspector", "notify_on": ["approval", "t_minus_24h", "execution_start", "restored"] },
+      { "role_key": "contractor_super", "title": "Contractor Superintendent", "notify_on": ["approval", "t_minus_24h", "execution_start", "problem_flagged", "restored"] },
+      { "role_key": "contractor_pm", "title": "Contractor PM / Project Engineer", "notify_on": ["approval", "problem_flagged", "restored"] },
+      { "role_key": "standby_crew", "title": "Standby Crew / On-Call", "notify_on": ["execution_start", "problem_flagged"] },
+      { "role_key": "emergency", "title": "Emergency Contacts (district after-hours, utility emergency lines)", "notify_on": ["problem_flagged"] }
+    ]
+  }
+}

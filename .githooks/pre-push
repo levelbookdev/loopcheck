@@ -1,0 +1,48 @@
+#!/bin/sh
+# LoopCheck pre-push gate -- run the combined smoke test before anything
+# reaches the remote.
+#
+# WHY: the integration-drift class of bug this catches -- a module's seed
+# block silently skipping, an append-only rule loosened by a later migration,
+# a migration-number collision -- has reached pushed main before. The gate
+# (scripts/smoke_test.sh) boots a fresh database, applies every migration,
+# runs the full seed, and asserts the combined stack is healthy. This hook
+# makes passing it the price of a push.
+#
+# BYPASS a doc-only or emergency push:   SKIP_SMOKE=1 git push
+# ENABLE (scripts/setup.sh does this):   git config core.hooksPath .githooks
+#
+# POSIX sh: must run under Git Bash, dash, and a Raspberry Pi's /bin/sh.
+# git passes the remote name ($1) and URL ($2) plus the refs on stdin; the
+# gate checks the whole stack, so none of that is needed here.
+
+set -eu
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+# Escape hatch -- a doc-only change or a hotfix that can't wait.
+if [ "${SKIP_SMOKE:-}" = "1" ]; then
+  echo "pre-push: SKIP_SMOKE=1 -- skipping the combined smoke test." >&2
+  exit 0
+fi
+
+# Fresh clone that hasn't run setup yet: don't block the push, just say why.
+# (A push of docs before downloading a 40 MB binary shouldn't be held hostage.)
+if [ ! -f "$ROOT/pocketbase" ] && [ ! -f "$ROOT/pocketbase.exe" ]; then
+  echo "pre-push: no pocketbase binary -- smoke test skipped." >&2
+  echo "          run scripts/setup.sh to enable the pre-push gate." >&2
+  exit 0
+fi
+
+echo "pre-push: running the combined smoke test (SKIP_SMOKE=1 to bypass)..." >&2
+# Invoke via sh so a lost executable bit on a fresh Windows clone can't
+# break the gate. A less-common default port keeps a running dev server
+# from failing it; override with LC_TEST_PORT if it ever collides.
+if LC_TEST_PORT="${LC_TEST_PORT:-8477}" sh "$ROOT/scripts/smoke_test.sh"; then
+  exit 0
+fi
+
+echo "" >&2
+echo "pre-push: smoke test FAILED -- push blocked." >&2
+echo "          fix the regression, or bypass with:  SKIP_SMOKE=1 git push" >&2
+exit 1

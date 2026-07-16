@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoopCheck — Test standards</title>
+<link rel="stylesheet" href="/app.css">
+<script defer src="/lc-auth.js"></script>
+<script defer src="/vendor/alpine.min.js"></script>
+</head>
+<body>
+<div x-data="standardsPage()" x-init="load()">
+  <header class="bar"><span class="mark"><a href="/">LoopCheck</a></span><span class="meta">Standards registry</span></header>
+  <main>
+    <a class="crumb" href="/">← Projects</a>
+    <h1>Test standards</h1>
+    <p class="meta">Calibration equipment and its traceable certificate. Due-soon means 14 days; that window is fixed.</p>
+    <button class="go" @click="startNew()">Add test standard</button>
+    <div class="error" x-show="error" x-text="error"></div>
+
+    <template x-if="showForm"><div class="wcard" style="margin-top:14px">
+      <h2 x-text="form.id ? 'Update standard' : 'New standard'"></h2>
+      <label class="fl">Name</label><input type="text" x-model="form.name" placeholder="Fluke documenting process calibrator">
+      <label class="fl">Model</label><input type="text" x-model="form.model">
+      <label class="fl">Serial number</label><input type="text" x-model="form.serial">
+      <label class="fl">Owner (company or rental)</label><input type="text" x-model="form.owner">
+      <label class="fl">Certificate date</label><input type="date" x-model="form.cert_date">
+      <label class="fl">Certificate due date</label><input type="date" x-model="form.cert_due_date">
+      <label class="fl">Certificate attachment (PDF or image)</label><input type="file" accept="application/pdf,image/*" @change="cert=$event.target.files[0]||null">
+      <button class="go secondary" :disabled="busy || !valid" @click="save()" x-text="busy?'Saving…':'Save standard'"></button>
+      <button class="link" style="margin-top:10px" @click="showForm=false">Cancel</button>
+    </div></template>
+
+    <h2 class="section">Registry</h2>
+    <p class="empty" x-show="!standards.length">No standards registered.</p>
+    <template x-for="s in standards" :key="s.id"><div class="card" :style="status(s).state==='expired'?'border-left:6px solid var(--sev-a)':status(s).state==='soon'?'border-left:6px solid var(--sev-b)':''">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:start">
+        <div><div class="title" x-text="s.name"></div><div class="sub"><span x-text="s.model"></span> · S/N <span class="mono" x-text="s.serial"></span></div></div>
+        <span class="chip" :class="status(s).state==='expired'?'cal-overdue':status(s).state==='soon'?'cal-due':'cal-current'" x-text="status(s).label"></span>
+      </div>
+      <div class="sub">Owner: <span x-text="s.owner||'—'"></span> · cert <span x-text="dateOnly(s.cert_date)"></span> → <strong x-text="dateOnly(s.cert_due_date)"></strong></div>
+      <template x-for="a in attachmentsFor(s.id)" :key="a.id"><div class="sub"><a :href="fileUrl(a)" target="_blank">Certificate: <span x-text="a.file"></span></a></div></template>
+      <button class="link" style="margin-top:8px" @click="edit(s)">Update registry record →</button>
+    </div></template>
+  </main>
+</div>
+<script>
+function standardsPage(){const PB=location.origin;return{
+  standards:[],attachments:[],showForm:false,busy:false,error:'',cert:null,
+  form:{id:'',name:'',model:'',serial:'',owner:'',cert_date:'',cert_due_date:''},
+  async load(){await lcAuth.refresh();if(!lcAuth.requireAuth())return;await this.reload();},
+  async reload(){try{const [s,a]=await Promise.all([fetch(`${PB}/api/collections/test_standards/records?sort=cert_due_date,name&perPage=200`),fetch(`${PB}/api/collections/attachments/records?filter=${encodeURIComponent("parent_collection='test_standards'")}&perPage=500`)]);if(!s.ok)throw new Error('Could not load standards.');this.standards=(await s.json()).items;this.attachments=a.ok?(await a.json()).items:[];}catch(e){this.error=e.message;}},
+  startNew(){this.form={id:'',name:'',model:'',serial:'',owner:'',cert_date:'',cert_due_date:''};this.cert=null;this.showForm=true;},
+  edit(s){this.form={id:s.id,name:s.name,model:s.model,serial:s.serial,owner:s.owner,cert_date:this.dateOnly(s.cert_date),cert_due_date:this.dateOnly(s.cert_due_date)};this.cert=null;this.showForm=true;scrollTo({top:0,behavior:'smooth'});},
+  get valid(){return this.form.name.trim()&&this.form.serial.trim()&&this.form.cert_date&&this.form.cert_due_date;},
+  dateOnly(v){return String(v||'').slice(0,10);},attachmentsFor(id){return this.attachments.filter(a=>a.parent_id===id);},fileUrl(a){return `${PB}/api/files/attachments/${a.id}/${a.file}`;},
+  status(s){const due=new Date(this.dateOnly(s.cert_due_date)+'T23:59:59');const days=Math.ceil((due-new Date())/86400000);if(days<0)return{state:'expired',label:'EXPIRED'};if(days<=14)return{state:'soon',label:`DUE ${days}d`};return{state:'current',label:'CURRENT'};},
+  async save(){this.busy=true;this.error='';try{const id=this.form.id;const res=await fetch(`${PB}/api/collections/test_standards/records${id?'/'+id:''}`,{method:id?'PATCH':'POST',headers:{'Content-Type':'application/json',...lcAuth.header()},body:JSON.stringify(this.form)});if(!res.ok)throw new Error(`Standard save failed (${res.status}).`);const saved=await res.json();if(this.cert){const fd=new FormData();fd.append('file',this.cert);fd.append('parent_collection','test_standards');fd.append('parent_id',saved.id);fd.append('caption','Calibration standard certificate');fd.append('uploaded_by',lcAuth.displayName());const ar=await fetch(`${PB}/api/collections/attachments/records`,{method:'POST',headers:{...lcAuth.header()},body:fd});if(!ar.ok)throw new Error(`Standard saved, but certificate upload failed (${ar.status}).`);}this.showForm=false;await this.reload();}catch(e){this.error=e.message;}this.busy=false;}
+};}
+</script>
+</body></html>

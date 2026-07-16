@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="LoopCheck — a self-hostable startup & commissioning checkout tracker for water/wastewater construction. Scan the QR on a P&ID tag, see its checkout standing, flag a punch item.">
+<title>LoopCheck — commissioning checkout tracker</title>
+
+<!--
+  Project landing page, served by GitHub Pages from /docs.
+  This is NOT the app — the app is self-hosted (see Quickstart).
+  Self-contained on purpose, same as TrenchNote's: inline CSS, no JS, no
+  webfonts, no external requests. The only external hrefs point at GitHub.
+-->
+
+<style>
+  /* Same field-utility tokens as the app (pb_public/app.css) — one visual
+     identity — plus the severity color language, which is load-bearing. */
+  :root {
+    --ink:    #14161a;
+    --paper:  #ffffff;
+    --steel:  #5b6470;
+    --line:   #d8dce1;
+    --wash:   #f4f6f8;
+    --safety: #ff5a1f;
+    --sev-a:  #c0281f;
+    --sev-b:  #b8760a;
+    --sev-c:  #5b6470;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--paper); color: var(--ink);
+    line-height: 1.5;
+    max-width: 680px; margin: 0 auto;
+    padding: 24px 20px 64px;
+  }
+  header.top {
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-bottom: 3px solid var(--ink);
+    padding-bottom: 12px; margin-bottom: 28px;
+  }
+  .mark { font-weight: 800; letter-spacing: .04em; font-size: 15px; text-transform: uppercase; }
+  a { color: var(--safety); font-weight: 700; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.01em; line-height: 1.15; }
+  .sub { color: var(--steel); font-size: 17px; margin: 10px 0 0; }
+
+  h2 {
+    font-size: 13px; font-weight: 700; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--steel);
+    margin: 40px 0 12px;
+    border-bottom: 1px solid var(--line); padding-bottom: 6px;
+  }
+  h3 { font-size: 17px; font-weight: 800; margin: 18px 0 4px; }
+  p { margin: 8px 0; }
+  .not { color: var(--steel); }
+
+  /* The nameplate chip — LoopCheck's signature: a P&ID tag number stamped
+     like the equipment nameplate it lives next to. */
+  .tag {
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-weight: 700; font-size: 15px;
+    border: 2px solid var(--ink); padding: 0 6px;
+    white-space: nowrap;
+  }
+
+  ol.questions { padding-left: 20px; margin: 8px 0; }
+  ol.questions li { margin: 10px 0; }
+  ol.questions strong { display: block; }
+
+  /* Severity legend — the fixed color language, shown once. */
+  ul.sev { list-style: none; padding: 0; margin: 10px 0; }
+  ul.sev li { margin: 6px 0; padding-left: 26px; position: relative; }
+  ul.sev li::before {
+    content: ""; position: absolute; left: 0; top: 4px;
+    width: 14px; height: 14px;
+  }
+  ul.sev li.a::before { background: var(--sev-a); }
+  ul.sev li.b::before { background: var(--sev-b); }
+  ul.sev li.c::before { background: var(--sev-c); }
+
+  figure {
+    border: 3px solid var(--ink);
+    margin: 18px 0; padding: 0;
+  }
+  figure img { display: block; width: 100%; height: auto; }
+  figcaption {
+    font-size: 13px; color: var(--steel);
+    padding: 8px 12px; border-top: 1px solid var(--line);
+  }
+
+  pre {
+    background: var(--ink); color: #f3f4f6;
+    padding: 16px; overflow-x: auto;
+    font-size: 14px; line-height: 1.6;
+    margin: 12px 0;
+  }
+  code { font-family: ui-monospace, "SF Mono", Consolas, monospace; }
+  p code, li code {
+    background: var(--wash); padding: 1px 5px;
+    font-size: 14px; color: var(--ink);
+  }
+
+  footer {
+    margin-top: 48px; padding-top: 14px;
+    border-top: 3px solid var(--ink);
+    font-size: 14px; color: var(--steel);
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <span class="mark">LoopCheck</span>
+  <a href="https://github.com/mds08011/loopcheck">GitHub</a>
+</header>
+
+<main>
+  <h1>A startup &amp; commissioning checkout tracker for treatment plants.</h1>
+  <p class="sub">
+    Every piece of equipment already wears a P&amp;ID tag number —
+    <span class="tag">PMP-3101</span>, <span class="tag">FIT-2205</span>,
+    <span class="tag">MOV-4410</span>. LoopCheck puts a QR code on that tag.
+    Scan it with a stock phone camera and you're looking at that
+    equipment's status — and can flag a punch item from right where you
+    stand. No app, no account, no training.
+  </p>
+
+  <p>
+    LoopCheck is a minimalist, self-hostable web app built by a project
+    engineer at a water/wastewater general contractor. It answers three
+    questions and refuses to be anything else:
+  </p>
+  <ol class="questions">
+    <li>
+      <strong>What checks has this equipment passed, and what remains before startup?</strong>
+      Installation, point-to-point, energization, loop check, functional,
+      performance — status derived from the record, never typed in.
+    </li>
+    <li>
+      <strong>What punch items are blocking this system?</strong>
+      Flagged at the equipment, with a photo, sorted by a fixed severity
+      language:
+      <ul class="sev">
+        <li class="a"><strong>A</strong> — blocks startup</li>
+        <li class="b"><strong>B</strong> — blocks substantial completion</li>
+        <li class="c"><strong>C</strong> — cosmetic, does not block</li>
+      </ul>
+    </li>
+    <li>
+      <strong>Can we prove it?</strong>
+      To the engineer of record, the owner, or in a dispute — with
+      timestamped, append-only records that nobody can quietly rewrite.
+    </li>
+  </ol>
+  <p class="not">
+    It is not a forms designer, not a scheduling tool, and not a document
+    control system.
+  </p>
+
+  <h2>How it works</h2>
+
+  <h3>The tag number is the URL</h3>
+  <p>
+    Each QR label encodes <code>/t/PMP-3101</code> — the project's own
+    language, readable by a human and openable by any stock camera app.
+    The plain-text tag number under the QR is the fallback for what the
+    plant does to labels.
+  </p>
+
+  <h3>The checkout record is append-only</h3>
+  <p>
+    Completed checks are never edited or deleted — a correction is a new
+    record. Status is always derived from that ledger, never stored where
+    it can drift. That immutability is what makes the eventual turnover
+    package trustworthy.
+  </p>
+
+  <h3>Your instrument index is the setup</h3>
+  <p>
+    Onboarding is a CSV import of the equipment schedule you already have.
+    Messy headers, extra columns, and blank rows are tolerated; systems are
+    created on the fly; you preview before anything is written. Then print
+    QR labels on standard Avery stock and stick them on.
+  </p>
+
+  <h3>One binary, your hardware</h3>
+  <p>
+    The backend is <a href="https://github.com/pocketbase/pocketbase">PocketBase</a>:
+    a single executable with an embedded database. A Raspberry Pi in the
+    commissioning trailer is enough. The frontend is plain HTML and CSS
+    with a little vendored JavaScript — pages measured in kilobytes, no
+    build step, no CDN.
+  </p>
+
+  <h2>What it looks like</h2>
+
+  <figure>
+    <img src="img/landing-tag.png" loading="lazy" width="520" height="840"
+         alt="The tag page on a phone for flow instrument FIT-1020. A calibration panel shows CURRENT, last calibrated May 13, 2026 and next due May 13, 2027, followed by a full-width Log Calibration button. The LOTO visibility controls and an open B punch item remain immediately below.">
+    <figcaption>The QR tag now carries both truths: checkout standing proves the signal path, while the separate calibration ledger proves the instrument reads true.</figcaption>
+  </figure>
+  <figure>
+    <img src="img/landing-system.png" loading="lazy" width="760" height="1000"
+         alt="A system readiness view: Influent Pump Station with startup sequence, a planned startup date, punch counts reading A 3 and B 2, the line '3 A-items blocking startup', and equipment tag cards carrying red and amber severity chips.">
+    <figcaption>System readiness, derived live: which tags are clean, which are blocked, and by what.</figcaption>
+  </figure>
+  <figure>
+    <img src="img/landing-labels.png" loading="lazy" width="920" height="450"
+         alt="A printable sheet of QR labels on Avery 5160 stock, each QR with its tag number printed alongside.">
+    <figcaption>Print-your-own labels on Avery 5160; the tag number survives what the plant does to the QR.</figcaption>
+  </figure>
+
+  <h2>Half-live plants: LOTO visibility</h2>
+  <p>
+    During commissioning some systems are energized and some are locked
+    out, with multiple trades working around each other. Scan the thing
+    before you touch the thing: if anyone has a lock on that equipment, a
+    red banner tops the tag page before anything else — every active lock,
+    who hung it, since when, why, and a photo of the lock on the isolation
+    point. Locks and releases are permanent, append-only records (a
+    supervisor removal carries its justification forever), and a project
+    board lists every active lock oldest-first, so the forgotten lock on a
+    forgotten valve is the first thing everyone sees. It is a visibility
+    layer, never an authority: every display carries its sync time and the
+    line <em>"Verify physically before any work,"</em> goes amber rather
+    than confident when data is stale, and never shows an affirmative
+    "not locked out." The physical locks and the written energy-control
+    procedure remain the only authority — and safety visibility is free
+    tier, permanently.
+  </p>
+
+  <figure>
+    <img src="img/landing-loto.png" loading="lazy" width="520" height="840"
+         alt="The tag page for PMP-1002 opening with a full-width red 'LOCKED OUT — 2 ACTIVE LOCKS' banner: two locks (V. Ellison, Volt Electric; T. Braddock, Precision Millwrights), each with a photo of the hung padlock on its isolation point, above the line 'As of Jul 10, 2:48 PM. Verify physically before any work.' The equipment nameplate 'Influent Pump No. 2' sits below the banner.">
+    <figcaption>Locked out: the red banner tops the page before anything else — every active lock, who hung it and since when, with a photo of the lock. It always says <em>verify physically</em>, and it never shows an all-clear.</figcaption>
+  </figure>
+
+  <h2>Backward in Hand: rotation &amp; VFD</h2>
+  <p>
+    A motor that runs backward is not necessarily wired backward. On a
+    VFD, a drive parameter can reverse one control mode in software while
+    the copper is fine — and a crew that "fixes" it by swapping leads at
+    the MCC creates a real hardware fault on top of a settings mistake.
+    So LoopCheck reads the <em>pair</em>: rotation in Hand and rotation in
+    Auto. Both forward is a pass. Both reverse is hardware — swap two leads
+    at the MCC (LOTO first). But a mismatch between the two modes is
+    software, and the page says so <em>while the tech is at the drive</em>:
+    <em>do not swap leads — fix the VFD reference parameter.</em> The
+    loaded VFD parameters (max/min speed, accel and decel ramps) are
+    recorded for the vendor's file, the whole thing is one more
+    append-only check underneath, and a per-project rotation board prints
+    and exports CSV for the vendor and the owner's rep. Free tier.
+  </p>
+
+  <h2>Calibration proves the instrument reads true</h2>
+  <p>
+    A loop check proves the signal path; an instrument calibration proves the
+    transmitter itself reads true. LoopCheck keeps those records distinct and
+    preserves every expected, as-found, and as-left value together. The test
+    standard is traceable too: its model, serial number, certificate due date,
+    and certificate attachment travel with the record. If that certificate was
+    expired when the work was performed, capture is never blocked â€” the record
+    is saved and permanently flagged red. Instrument tags show a due badge
+    derived from the latest calibration and interval, and the project view puts
+    overdue instruments first. Phone capture queues offline. All field capture,
+    history, badges, and the standards registry are free core features.
+  </p>
+
+  <h2>After startup: warranty &amp; closeout</h2>
+  <p>
+    Equipment lives on after commissioning — with a warranty clock, a
+    vendor to call, and spare parts somewhere. The same QR answers those
+    questions for the life of the plant. Because the industry's biggest
+    warranty fight is <em>when the clock started</em>, LoopCheck records
+    the basis (substantial completion, beneficial use, startup, or
+    "X&nbsp;months from shipment, whichever first") and the trigger date —
+    the expiration is always derived from them, never typed in. Closeout
+    deliverables (O&amp;M manuals, spares, training) are tracked per tag
+    with an append-only status trail, warranty claims are frozen at
+    closure, and a project dashboard shows what's still owed before final
+    completion. Your existing closeout spreadsheet imports as CSV.
+  </p>
+
+  <h2>Water main jobs: service cutover</h2>
+  <p>
+    On a main replacement, the pipe is the easy part — the schedule and
+    the angry phone calls live in the hundreds of service connections.
+    LoopCheck tracks every address through the whole sequence: 48-hour
+    notice, locate &amp; pothole, new service, meter swap, tie-over
+    (outage times recorded — the number the district asks for), and
+    restoration. A station-ordered cutover board replaces the highlighter
+    on the plan sheet, with every phase chip derived live from the record
+    and a built-in early warning for services noticed but not yet tied
+    over. Notices are logged in batch as the crew walks the block — one
+    timestamped door-hanger photo per address, written to the same
+    append-only ledger — so "we were never told" ends with a photograph.
+    Customer names and phone numbers never appear on a public page, in a
+    URL, or in a QR code; the address is the identifier, the person is
+    not.
+  </p>
+
+  <h2>Where it's headed</h2>
+  <p>
+    Built today: projects, systems, tags, punch items with photos, CSV
+    import, the tag and readiness pages, printable labels, a seeded
+    checklist library for the whole checkout sequence, check execution
+    writing the append-only ledger — with derived checkout standing, check
+    history, a printable single-check record, and a free per-tag export —
+    the LOTO status board, instrument calibration records, the warranty &amp;
+    closeout tracker, the service cutover tracker for main replacements, and a
+    signed turnover package — build a frozen, sealed record of a system's
+    checkout, collect signatures against it, and print it free (the two
+    collections are still settling under a proposed contract decision). Next:
+    the compiled, bookmarked turnover <em>binder</em> as the paid deliverable,
+    then shutdown runbooks. The sequence — and
+    where the free/paid line sits — is in the
+    <a href="https://github.com/mds08011/loopcheck/blob/main/docs/ROADMAP.md">roadmap</a>.
+  </p>
+
+  <h2>Run it yourself</h2>
+  <pre><code>git clone https://github.com/levelbookdev/loopcheck.git
+cd loopcheck
+./scripts/setup.sh     # downloads the PocketBase binary for your OS
+./pocketbase serve     # schema + checklist library auto-apply</code></pre>
+  <p>
+    Then create a project, import your instrument index (a messy sample
+    lives in <code>examples/</code>), print labels, and stick them on. The
+    <a href="https://github.com/mds08011/loopcheck/blob/main/README.md">README</a>
+    has the full quickstart;
+    <a href="https://github.com/mds08011/loopcheck/blob/main/ARCHITECTURE.md">ARCHITECTURE.md</a>
+    explains the schema and the decisions behind it.
+  </p>
+
+  <h2>License</h2>
+  <p>
+    LoopCheck is
+    <a href="https://github.com/mds08011/loopcheck/blob/main/LICENSE">AGPLv3</a>.
+    Self-host it, modify it, and run it for your company or your utility,
+    free, forever. The one condition: if you offer a modified LoopCheck to
+    others as a network service, you must publish your modifications.
+    Office deliverables (compiled turnover packages, notifications,
+    dashboards) are a planned paid tier run by the maintainer — the field
+    tier is never crippled, and self-hosting remains the first-class path.
+  </p>
+</main>
+
+<footer>
+  <p>
+    <a href="https://github.com/mds08011/loopcheck">Source on GitHub</a> ·
+    <a href="https://github.com/mds08011/loopcheck/blob/main/LICENSE">AGPLv3</a> ·
+    Sibling project: <a href="https://mds08011.github.io/trenchnote/">TrenchNote</a>
+  </p>
+  <p>This page has no analytics, no trackers, no cookies, and loads nothing from anywhere.</p>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoopCheck — QR Labels</title>
+<!--
+  QR label sheet, formatted for Avery 5160 (3 across × 10 down, 2.625" × 1"
+  labels on US Letter). Each QR encodes the full tag URL:
+
+      {Base URL}/t/{tag_number}
+
+  IMPORTANT: set the Base URL box to the address phones will actually reach —
+  the plant LAN IP for testing (http://192.168.x.x:8090) or the real domain
+  later. A QR pointing at 127.0.0.1 only works on the machine it was printed on.
+
+  qrcodejs is vendored locally — no CDN.
+-->
+<link rel="stylesheet" href="/app.css">
+<script src="/vendor/qrcode.min.js"></script>
+<style>
+  .controls { display: grid; gap: 10px; margin-bottom: 16px; }
+  .controls .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .controls .row > * { flex: 1; min-width: 160px; }
+
+  /* ---- Avery 5160 sheet geometry ---- */
+  .sheet {
+    width: 8.5in;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(3, 2.625in);
+    grid-auto-rows: 1in;
+    column-gap: 0.125in;
+    justify-content: center;
+  }
+  .label {
+    width: 2.625in; height: 1in;
+    display: flex; align-items: center; gap: 0.08in;
+    padding: 0.06in 0.10in;
+    overflow: hidden;
+    break-inside: avoid;
+  }
+  .label .qr { flex: 0 0 auto; }
+  .label .qr img, .label .qr canvas { display: block; width: 0.85in; height: 0.85in; }
+  .label .txt { min-width: 0; }
+  .label .code {
+    font-family: ui-monospace, Consolas, monospace;
+    font-weight: 800; font-size: 15px; line-height: 1.1;
+    word-break: break-all;
+  }
+  .label .desc { font-size: 10px; color: #333; margin-top: 2px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+  @media print {
+    @page { size: letter; margin: 0.5in 0.1875in; }
+    body { max-width: none; padding: 0; }
+    .noprint { display: none !important; }
+    .sheet { width: auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="noprint">
+  <header class="bar">
+    <span class="mark"><a href="/">LoopCheck</a></span>
+    <span class="meta">QR Labels · Avery 5160</span>
+  </header>
+
+  <div class="controls">
+    <div class="row">
+      <select id="project"></select>
+      <select id="system"></select>
+    </div>
+    <input id="baseUrl" type="text" placeholder="Base URL phones will reach (e.g. http://192.168.1.20:8090)">
+    <div class="row">
+      <button class="go secondary" onclick="generate()">Generate</button>
+      <button class="go" onclick="window.print()">Print</button>
+    </div>
+  </div>
+  <p class="meta" id="hint">Pick a project and a system, set the Base URL, then Generate → Print.
+    The human-readable tag number prints beside each QR as the mud-proof fallback.</p>
+</div>
+
+<div id="sheet" class="sheet"></div>
+
+<script>
+  const PB = window.location.origin;
+  const projectSel = document.getElementById('project');
+  const systemSel  = document.getElementById('system');
+  const baseInput  = document.getElementById('baseUrl');
+  const hint       = document.getElementById('hint');
+  baseInput.value = PB; // sensible default; edit before printing for field use
+
+  const qs = new URLSearchParams(location.search);
+
+  async function loadProjects() {
+    const res = await fetch(`${PB}/api/collections/projects/records?sort=name&perPage=200`);
+    const projects = (await res.json()).items;
+    projectSel.innerHTML = '<option value="" disabled selected>Choose project…</option>' +
+      projects.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+    // Deep-link support: ?project=ID preselects and loads its systems;
+    // ?system=ID (or __all) preselects the system; and when a project is
+    // given the sheet generates itself — a bookmarkable label sheet.
+    const pre = qs.get('project');
+    if (pre && projects.some(p => p.id === pre)) {
+      projectSel.value = pre;
+      await loadSystems();
+      const sysPre = qs.get('system');
+      if (sysPre && [...systemSel.options].some(o => o.value === sysPre)) {
+        systemSel.value = sysPre;
+      }
+      await generate();
+    }
+  }
+
+  async function loadSystems() {
+    const pid = projectSel.value;
+    systemSel.innerHTML = '';
+    if (!pid) return;
+    const f = encodeURIComponent(`project='${pid}'`);
+    const res = await fetch(`${PB}/api/collections/systems/records?filter=(${f})&sort=startup_sequence,number&perPage=500`);
+    const systems = (await res.json()).items;
+    systemSel.innerHTML =
+      '<option value="__all">All tags in project</option>' +
+      // Service meter-box labels (ADR 0006) — optional per deployment: a QR
+      // inside the meter box lid earns its keep at the meter phase, but the
+      // primary navigation for services is the cutover board list.
+      '<option value="__services">Service connections (meter box labels)</option>' +
+      systems.map(s => `<option value="${s.id}">System ${escapeHtml(s.number)}${s.name ? ' — ' + escapeHtml(s.name) : ''}</option>`).join('');
+  }
+
+  async function generate() {
+    const pid = projectSel.value;
+    const sid = systemSel.value;
+    const sheet = document.getElementById('sheet');
+    if (!pid) { hint.textContent = 'Choose a project first.'; return; }
+
+    const base = baseInput.value.replace(/\/+$/, '');
+
+    // Service meter-box labels: address as the human-readable text, QR to
+    // /s/{record id} — opaque, and never PII (customer fields are not even
+    // fetched here; CLAUDE.md PII rule).
+    if (sid === '__services') {
+      const sf = encodeURIComponent(`project='${pid}'`);
+      const res = await fetch(
+        `${PB}/api/collections/services/records?filter=(${sf})&fields=id,address,station&sort=address&perPage=500`);
+      const services = (await res.json()).items;
+
+      sheet.innerHTML = '';
+      if (!services.length) { hint.textContent = 'No services found in that project.'; return; }
+      hint.textContent = `${services.length} labels. Review, then Print.`;
+
+      for (const s of services) {
+        const cell = document.createElement('div');
+        cell.className = 'label';
+        cell.innerHTML = '<div class="qr"></div><div class="txt"><div class="code"></div><div class="desc"></div></div>';
+        cell.querySelector('.code').textContent = s.address;
+        cell.querySelector('.desc').textContent = s.station ? 'Sta ' + s.station : '';
+        sheet.appendChild(cell);
+        new QRCode(cell.querySelector('.qr'), {
+          text: base + '/s/' + s.id,
+          width: 96, height: 96,
+          correctLevel: QRCode.CorrectLevel.H,
+        });
+      }
+      return;
+    }
+
+    // Build the tag filter: one system, or every tag in the project.
+    let filter = `project='${pid}'`;
+    if (sid && sid !== '__all') filter += ` && system='${sid}'`;
+    const res = await fetch(
+      `${PB}/api/collections/tags/records?filter=(${encodeURIComponent(filter)})&sort=tag_number&perPage=1000`);
+    const tags = (await res.json()).items;
+
+    sheet.innerHTML = '';
+    if (!tags.length) { hint.textContent = 'No tags found for that selection.'; return; }
+    hint.textContent = `${tags.length} labels. Review, then Print.`;
+
+    for (const t of tags) {
+      const cell = document.createElement('div');
+      cell.className = 'label';
+      cell.innerHTML = '<div class="qr"></div><div class="txt"><div class="code"></div><div class="desc"></div></div>';
+      cell.querySelector('.code').textContent = t.tag_number;
+      cell.querySelector('.desc').textContent = t.description || '';
+      sheet.appendChild(cell);
+      new QRCode(cell.querySelector('.qr'), {
+        // Clean, human-readable URL — the pb_hooks route resolves /t/{tag}.
+        text: base + '/t/' + encodeURIComponent(t.tag_number),
+        width: 96, height: 96,
+        // Level H = ~30% damage tolerance; tags are short so density stays low.
+        correctLevel: QRCode.CorrectLevel.H,
+      });
+    }
+  }
+
+  function escapeHtml(s) {
+    return (s || '').replace(/[&<>"']/g, c =>
+      ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  }
+
+  projectSel.addEventListener('change', loadSystems);
+  loadProjects().catch(err => { hint.textContent = 'Could not load projects: ' + err.message; });
+</script>
+</body>
+</html>

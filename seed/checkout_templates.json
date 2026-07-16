@@ -1,0 +1,529 @@
+{
+  "schema_version": 1,
+  "templates": [
+    {
+      "template_key": "pump_centrifugal.installation",
+      "tag_type": "pump_centrifugal",
+      "phase": "installation",
+      "name": "Centrifugal Pump — Installation Verification",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Nameplate data recorded (manufacturer, model, serial, HP, RPM, FLA) — photo of nameplate attached", "response": "photo_required", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Equipment matches approved submittal (model, materials, arrangement)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 3, "text": "Base/soleplate level and anchor bolts torqued", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true },
+        { "seq": 4, "text": "Grout placed and cured per spec; no voids (sound test)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 5, "text": "Coupling alignment complete — record final TIR", "response": "value", "unit": "mils TIR", "confirm_per_spec": true },
+        { "seq": 6, "text": "Piping connected without strain (verify alignment holds with piping bolted up)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 7, "text": "Rotation arrow visible; coupling guard installed", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 8, "text": "Lubrication completed per manufacturer (bearings, coupling as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 9, "text": "Seal water / flush piping installed and operational (as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 10, "text": "Suction/discharge isolation valves and gauges installed per P&ID", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 11, "text": "Drain and vent piping routed and terminated per drawings", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 12, "text": "Anchor/restraint and vibration isolation per drawings", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "pump_centrifugal.pointToPoint",
+      "tag_type": "pump_centrifugal",
+      "phase": "pointToPoint",
+      "name": "Centrifugal Pump — Point-to-Point / Wire Verification",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Power conductors terminated and torqued per spec; torque marks applied", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true },
+        { "seq": 2, "text": "Wire and cable labels match conduit/cable schedule and loop drawings", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 3, "text": "Insulation resistance test, motor leads — record lowest phase reading and test voltage", "response": "value", "unit": "megohm", "confirm_per_spec": true },
+        { "seq": 4, "text": "Continuity verified from motor terminals to MCC/starter", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 5, "text": "Equipment grounding conductor landed and continuity verified", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 6, "text": "Each hardwired I/O point rung out and verified to PLC/RTU termination per loop drawing", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 7, "text": "Shielded cable shields grounded at one end only, per drawings", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 8, "text": "Spare conductors labeled and terminated/isolated per spec", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 9, "text": "Conduit seals installed where required by area classification", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true }
+      ]
+    },
+    {
+      "template_key": "pump_centrifugal.energization",
+      "tag_type": "pump_centrifugal",
+      "phase": "energization",
+      "name": "Centrifugal Pump — Initial Energization",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Energization performed under approved plan / joint LOTO procedure; permits in place", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true },
+        { "seq": 2, "text": "Breaker/starter/protective settings match coordination study and approved submittal", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true },
+        { "seq": 3, "text": "Overload setting matches motor nameplate FLA (record setting)", "response": "value", "unit": "A", "confirm_per_spec": false },
+        { "seq": 4, "text": "Voltage measured at motor terminals, all phases L-L (record lowest)", "response": "value", "unit": "V", "confirm_per_spec": false },
+        { "seq": 5, "text": "Rotation bump performed (uncoupled if required by manufacturer) — rotation matches arrow", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 6, "text": "Running current measured, all phases (record highest phase)", "response": "value", "unit": "A", "confirm_per_spec": false },
+        { "seq": 7, "text": "Phase current balance within acceptable range", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true },
+        { "seq": 8, "text": "VFD parameters loaded per approved submittal; parameter file archived (as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 9, "text": "No abnormal noise, vibration, or heating during bump", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "pump_centrifugal.loopCheck",
+      "tag_type": "pump_centrifugal",
+      "phase": "loopCheck",
+      "name": "Centrifugal Pump — Loop Check (Field to HMI)",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Run status feedback (DI) displays correctly at the PLC and central SCADA", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Run status also correct at the local OIT / panel HMI (as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 3, "text": "Remote start/stop (DO) from SCADA operates the starter/VFD (command through PLC logic)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 4, "text": "Fault/alarm signals (overload, VFD fault, seal fail, high temp as applicable) verified at the PLC and SCADA", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 5, "text": "Local/Off/Remote selector states report correctly at the PLC and SCADA", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 6, "text": "Speed command (AO) at 0/25/50/75/100% — VFD output tracks; command correct at SCADA and PLC (as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 7, "text": "Speed feedback (AI) at 0/25/50/75/100% verified at the PLC and SCADA (as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 8, "text": "Elapsed run time / start count registers at SCADA (as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 9, "text": "Tag name, description, and engineering units match the instrument index at OIT and SCADA", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "pump_centrifugal.functional",
+      "tag_type": "pump_centrifugal",
+      "phase": "functional",
+      "name": "Centrifugal Pump — Functional Test (Control Narrative)",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Automatic operation follows control narrative (start/stop setpoints, lead/lag/standby)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Pump alternation verified (as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 3, "text": "Low level / low suction pressure cutoff interlock verified", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 4, "text": "High discharge pressure / high temp / seal fail interlocks verified (as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 5, "text": "Fail response on loss of control signal verified per narrative", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 6, "text": "Response on power loss/restoration verified (restart behavior per narrative)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 7, "text": "E-stop stops pump and requires reset per narrative", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 8, "text": "Alarms annunciate, log, and reset correctly at HMI", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 9, "text": "Control narrative section reference tested against (record section)", "response": "text", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "pump_centrifugal.performance",
+      "tag_type": "pump_centrifugal",
+      "phase": "performance",
+      "name": "Centrifugal Pump — Performance Test",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Flow at rated condition (record)", "response": "value", "unit": "gpm", "confirm_per_spec": true },
+        { "seq": 2, "text": "Discharge pressure / TDH at rated flow (record)", "response": "value", "unit": "psi", "confirm_per_spec": true },
+        { "seq": 3, "text": "Operating point falls on certified pump curve within tolerance", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true },
+        { "seq": 4, "text": "Amp draw at rated condition (record highest phase)", "response": "value", "unit": "A", "confirm_per_spec": false },
+        { "seq": 5, "text": "Amp draw does not exceed nameplate FLA at any tested condition", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 6, "text": "Vibration within acceptance (record reading and location)", "response": "value", "unit": "in/s", "confirm_per_spec": true },
+        { "seq": 7, "text": "No excessive noise, cavitation, or seal leakage over test duration", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 8, "text": "Test duration met per spec (record duration)", "response": "value", "unit": "min", "confirm_per_spec": true }
+      ]
+    },
+
+    {
+      "template_key": "valve_motor_operated.installation",
+      "tag_type": "valve_motor_operated",
+      "phase": "installation",
+      "name": "Motor-Operated Valve — Installation Verification",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Nameplate data recorded (valve and actuator) — photo attached", "response": "photo_required", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Valve and actuator match approved submittal; orientation per drawings", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 3, "text": "Flow direction arrow matches P&ID flow direction", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 4, "text": "Flange bolting torqued per spec; gaskets per submittal", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true },
+        { "seq": 5, "text": "Actuator mounted, supported, and accessible; handwheel operable through full travel", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 6, "text": "Stem lubricated; stem protection installed (as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 7, "text": "Limit and torque switches set per manufacturer (open and closed positions)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 8, "text": "Manual full-stroke completed without binding; seating verified by handwheel", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "valve_motor_operated.pointToPoint",
+      "tag_type": "valve_motor_operated",
+      "phase": "pointToPoint",
+      "name": "Motor-Operated Valve — Point-to-Point / Wire Verification",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Power and control conductors terminated and torqued; labels match loop drawings", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Insulation resistance test on actuator motor leads (record reading)", "response": "value", "unit": "megohm", "confirm_per_spec": true },
+        { "seq": 3, "text": "Open/closed limit signals rung out to PLC termination", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 4, "text": "Position feedback (4-20 mA) wiring verified to PLC analog input (as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 5, "text": "Torque/fault signal wiring verified (as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 6, "text": "Grounding conductor landed; shields grounded one end only", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "valve_motor_operated.energization",
+      "tag_type": "valve_motor_operated",
+      "phase": "energization",
+      "name": "Motor-Operated Valve — Initial Energization",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Energization under approved plan / joint LOTO; permits in place", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true },
+        { "seq": 2, "text": "Supply voltage measured at actuator (record)", "response": "value", "unit": "V", "confirm_per_spec": false },
+        { "seq": 3, "text": "Electric stroke in OPEN direction — travel stops on limit, not torque", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 4, "text": "Electric stroke in CLOSE direction — seating mode (limit vs torque) per manufacturer", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true },
+        { "seq": 5, "text": "Actuator phase rotation correct (no phase-reversal fault)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 6, "text": "Full-stroke travel time recorded, open-to-close", "response": "value", "unit": "s", "confirm_per_spec": true },
+        { "seq": 7, "text": "Seat leakage within acceptance under test/line pressure — for gate/seating service, ≤ 0.1 gpm per foot of seating perimeter; N/A for non-seating (e.g. butterfly) service", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true, "spec_reference": "AWWA gate seat-leakage / spec" }
+      ]
+    },
+    {
+      "template_key": "valve_motor_operated.loopCheck",
+      "tag_type": "valve_motor_operated",
+      "phase": "loopCheck",
+      "name": "Motor-Operated Valve — Loop Check (Field to HMI)",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Open/close commands (DO) from SCADA drive the valve correctly (through PLC logic)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Open and closed limit indications (DI) display correctly at the PLC and SCADA", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 3, "text": "Position feedback (AI) at 0/25/50/75/100% verified at the PLC and SCADA (as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 4, "text": "Modulating position command (AO) tracks setpoint at SCADA (as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 5, "text": "Torque/fault alarm verified at the PLC and SCADA", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 6, "text": "Local/Off/Remote selector states report correctly at the PLC and SCADA", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 7, "text": "Indications also correct at the local OIT / panel HMI (as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 8, "text": "Tag name, description, and units match the instrument index at every display", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "valve_motor_operated.functional",
+      "tag_type": "valve_motor_operated",
+      "phase": "functional",
+      "name": "Motor-Operated Valve — Functional Test (Control Narrative)",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Valve responds correctly in automatic sequences per control narrative", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Fail position on loss of power verified per narrative (stay-put / fail-open / fail-closed)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 3, "text": "Fail position on loss of control signal verified per narrative", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 4, "text": "Interlocks with associated equipment verified (e.g., pump permissives)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 5, "text": "Local open/close/stop controls function; local control inhibits remote per narrative", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 6, "text": "Control narrative section reference tested against (record section)", "response": "text", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+
+    {
+      "template_key": "instrument_flow.installation",
+      "tag_type": "instrument_flow",
+      "phase": "installation",
+      "name": "Flow Instrument — Installation Verification",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Nameplate/model data recorded; matches instrument index and approved submittal — photo attached", "response": "photo_required", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Upstream/downstream straight-run requirements met per manufacturer", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 3, "text": "Orientation ensures full pipe at meter under operating conditions", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 4, "text": "Grounding rings/electrodes installed and bonded per manufacturer (magmeter)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 5, "text": "Transmitter mounted accessible and readable; sun/weather protection as required", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 6, "text": "Factory calibration certificate received and attached", "response": "photo_required", "unit": null, "confirm_per_spec": false },
+        { "seq": 7, "text": "Configured range matches instrument index (record range)", "response": "text", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "instrument_flow.pointToPoint",
+      "tag_type": "instrument_flow",
+      "phase": "pointToPoint",
+      "name": "Flow Instrument — Point-to-Point / Wire Verification",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Signal cable type per spec; terminations correct at transmitter and PLC per loop drawing", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Shield grounded at one end only, per drawings", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 3, "text": "Loop power verified at transmitter (record voltage)", "response": "value", "unit": "VDC", "confirm_per_spec": false },
+        { "seq": 4, "text": "Wire labels match loop drawing at both ends", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 5, "text": "Sensor-to-transmitter cable (remote mount) is manufacturer-supplied/approved and within length limit", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "instrument_flow.loopCheck",
+      "tag_type": "instrument_flow",
+      "phase": "loopCheck",
+      "name": "Flow Instrument — Loop Check (Field to HMI)",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Simulated output at 0% (4 mA) — value reads 0% of range at the PLC", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Simulated output at 25% — value tracks correctly at the PLC", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 3, "text": "Simulated output at 50% — value tracks correctly at the PLC", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 4, "text": "Simulated output at 75% — value tracks correctly at the PLC", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 5, "text": "Simulated output at 100% (20 mA) — value reads full scale at the PLC", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 6, "text": "Signal reads correctly at central SCADA/HMI (scaling and engineering units applied independently of the PLC — verify 0/50/100%)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 7, "text": "Signal displays correctly at the local OIT / panel HMI (as applicable — verify 0/50/100%)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 8, "text": "Tag, description, engineering units, and range match the instrument index at every display (PLC, OIT, SCADA)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 9, "text": "Alarm setpoints configured and annunciate at SCADA per instrument index / narrative", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 10, "text": "Totalizer registers and units verified at SCADA (as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 11, "text": "Fail response on loss of signal (out-of-range) behaves per narrative at SCADA", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "instrument_flow.functional",
+      "tag_type": "instrument_flow",
+      "phase": "functional",
+      "name": "Flow Instrument — Functional / In-Service Verification",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Reading under actual flow is plausible and stable (compare against pump curve / redundant meter where available)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Zero verified with line full and no flow", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 3, "text": "Field calibration/verification performed and record attached (if required by spec)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true },
+        { "seq": 4, "text": "Control loops using this signal respond correctly (as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+
+    {
+      "template_key": "instrument_level.installation",
+      "tag_type": "instrument_level",
+      "phase": "installation",
+      "name": "Level Instrument — Installation Verification",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Nameplate/model data recorded; matches instrument index and submittal — photo attached", "response": "photo_required", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Mounting location per drawings; clear of obstructions, turbulence, and beam-path interference (ultrasonic/radar)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 3, "text": "Blocking distance / dead band respected at max level (ultrasonic/radar)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 4, "text": "Submersible/pressure sensor elevation set and recorded; cable protected and vented per manufacturer (as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 5, "text": "Float switches set at elevations per drawings and free-swinging (as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 6, "text": "Configured range and reference datum match instrument index (record)", "response": "text", "unit": null, "confirm_per_spec": false },
+        { "seq": 7, "text": "Calibration certificate received and attached", "response": "photo_required", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "instrument_level.pointToPoint",
+      "tag_type": "instrument_level",
+      "phase": "pointToPoint",
+      "name": "Level Instrument — Point-to-Point / Wire Verification",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Signal wiring terminated per loop drawing; labels match both ends", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Shield grounded at one end only", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 3, "text": "Loop power verified at transmitter (record voltage)", "response": "value", "unit": "VDC", "confirm_per_spec": false },
+        { "seq": 4, "text": "Intrinsic safety barriers installed and wired per drawings (as applicable to area classification)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true },
+        { "seq": 5, "text": "Discrete level switch contacts rung out to PLC inputs (as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "instrument_level.loopCheck",
+      "tag_type": "instrument_level",
+      "phase": "loopCheck",
+      "name": "Level Instrument — Loop Check (Field to HMI)",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Simulated signal at 0/25/50/75/100% — value tracks correctly at the PLC", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Signal reads correctly at central SCADA/HMI (scaling and engineering units applied — verify 0/50/100%)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 3, "text": "Signal displays correctly at the local OIT / panel HMI (as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 4, "text": "Tag, description, engineering units, range, and datum match the instrument index at every display", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 5, "text": "High/low level alarm setpoints configured and annunciate correctly at SCADA", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 6, "text": "Discrete float/switch states display correctly at the PLC and SCADA (as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 7, "text": "Fail response on loss of signal behaves per narrative", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "instrument_level.functional",
+      "tag_type": "instrument_level",
+      "phase": "functional",
+      "name": "Level Instrument — Functional / In-Service Verification",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Reading verified against physical measurement (tape-down / staff gauge) at one or more actual levels — record comparison", "response": "text", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Level-based control actions verified per narrative (pump start/stop setpoints, alarms)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 3, "text": "Backup float / redundant level device overrides verified per narrative (as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+
+    {
+      "template_key": "control_panel.installation",
+      "tag_type": "control_panel",
+      "phase": "installation",
+      "name": "Control Panel — Installation Verification",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Panel nameplate/UL label data recorded — photo attached", "response": "photo_required", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Enclosure NEMA rating suits location and area classification per drawings", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true },
+        { "seq": 3, "text": "Panel mounted plumb, anchored, with working clearances per NEC and drawings", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 4, "text": "Conduit entries sealed/fitted to maintain enclosure rating; unused openings plugged", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 5, "text": "Device and wire labeling inside panel matches approved panel drawings", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 6, "text": "Arc flash and identification labels installed per spec", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true },
+        { "seq": 7, "text": "As-built panel drawings present in drawing pocket", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 8, "text": "Panel interior clean; no shipping debris, knockout slugs, or moisture", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "control_panel.pointToPoint",
+      "tag_type": "control_panel",
+      "phase": "pointToPoint",
+      "name": "Control Panel — Point-to-Point / Wire Verification",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "All field terminations rung out point-to-point per loop and panel drawings", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Termination torque verified; torque marks applied (power terminations)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true },
+        { "seq": 3, "text": "Panel ground bus bonded to ground system; verified", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 4, "text": "Shield terminations landed on isolated shield bus per drawings", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 5, "text": "Analog and discrete wiring separated per spec; segregation maintained in wireways", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 6, "text": "Spare I/O and spare terminals labeled per spec", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "control_panel.energization",
+      "tag_type": "control_panel",
+      "phase": "energization",
+      "name": "Control Panel — Initial Energization",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Energization under approved plan / joint LOTO; permits in place", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true },
+        { "seq": 2, "text": "Incoming voltage measured (record)", "response": "value", "unit": "V", "confirm_per_spec": false },
+        { "seq": 3, "text": "Control power transformer / power supply output voltages verified (record 24VDC reading)", "response": "value", "unit": "VDC", "confirm_per_spec": false },
+        { "seq": 4, "text": "UPS operational; transfers on simulated power loss and carries load (record runtime if tested)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true },
+        { "seq": 5, "text": "PLC boots, program loaded, correct version recorded; program file archived", "response": "text", "unit": null, "confirm_per_spec": false },
+        { "seq": 6, "text": "Network/communication links up (SCADA, remote I/O, radio/fiber as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 7, "text": "Panel heater/thermostat and cooling (fan/AC) operational (as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "control_panel.functional",
+      "tag_type": "control_panel",
+      "phase": "functional",
+      "name": "Control Panel — Functional Test",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "All pilot devices (pushbuttons, selectors, indicating lights) function per panel drawings — lamp test performed", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Local HMI/OIT screens navigate and display correctly (as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 3, "text": "Alarm horn and beacon operate; silence/acknowledge/reset per narrative", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 4, "text": "Intrusion/door switch and panel alarms report to SCADA (as applicable)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 5, "text": "Loss-of-communication behavior verified per narrative", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 6, "text": "Power loss/restoration behavior verified (PLC retentive states, restart per narrative)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "pump_centrifugal.rotation",
+      "tag_type": "pump_centrifugal",
+      "phase": "energization",
+      "name": "Centrifugal Pump — Rotation Verification (Hand & Auto)",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Rotation direction in HAND (local bump) — record forward or reverse", "response": "value", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Rotation direction in AUTO (remote/SCADA start) — record forward or reverse", "response": "value", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "pump_centrifugal.rotationVfd",
+      "tag_type": "pump_centrifugal",
+      "phase": "energization",
+      "name": "Centrifugal Pump — Rotation & VFD Parameter Verification",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Rotation direction in HAND (local bump) — record forward or reverse", "response": "value", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Rotation direction in AUTO (remote/SCADA start) — record forward or reverse", "response": "value", "unit": null, "confirm_per_spec": false },
+        { "seq": 3, "text": "VFD maximum speed parameter — record setting", "response": "value", "unit": "Hz", "confirm_per_spec": false },
+        { "seq": 4, "text": "VFD minimum speed parameter — record setting", "response": "value", "unit": "Hz", "confirm_per_spec": false },
+        { "seq": 5, "text": "VFD acceleration (ramp up) time — record setting", "response": "value", "unit": "s", "confirm_per_spec": false },
+        { "seq": 6, "text": "VFD deceleration (ramp down) time — record setting", "response": "value", "unit": "s", "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "motor.rotation",
+      "tag_type": "motor",
+      "phase": "energization",
+      "name": "Motor (General) — Rotation Verification (Hand & Auto)",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Rotation direction in HAND (local bump) — record forward or reverse", "response": "value", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Rotation direction in AUTO (remote/SCADA start) — record forward or reverse", "response": "value", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "motor.rotationVfd",
+      "tag_type": "motor",
+      "phase": "energization",
+      "name": "Motor (General) — Rotation & VFD Parameter Verification",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Rotation direction in HAND (local bump) — record forward or reverse", "response": "value", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Rotation direction in AUTO (remote/SCADA start) — record forward or reverse", "response": "value", "unit": null, "confirm_per_spec": false },
+        { "seq": 3, "text": "VFD maximum speed parameter — record setting", "response": "value", "unit": "Hz", "confirm_per_spec": false },
+        { "seq": 4, "text": "VFD minimum speed parameter — record setting", "response": "value", "unit": "Hz", "confirm_per_spec": false },
+        { "seq": 5, "text": "VFD acceleration (ramp up) time — record setting", "response": "value", "unit": "s", "confirm_per_spec": false },
+        { "seq": 6, "text": "VFD deceleration (ramp down) time — record setting", "response": "value", "unit": "s", "confirm_per_spec": false }
+      ]
+    },
+
+    {
+      "template_key": "pump_centrifugal.mechAlignment",
+      "tag_type": "pump_centrifugal",
+      "phase": "installation",
+      "name": "Centrifugal Pump — Mechanical Alignment Report",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Soft foot checked and corrected at each motor foot (record max soft foot)", "response": "value", "unit": "mils", "confirm_per_spec": false },
+        { "seq": 2, "text": "Coupling gap / end float set per manufacturer", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true, "spec_reference": "manufacturer coupling gap" },
+        { "seq": 3, "text": "Parallelism — record final total indicator runout (TIR)", "response": "value", "unit": "in. TIR", "confirm_per_spec": false },
+        { "seq": 4, "text": "Concentricity — record final total indicator runout (TIR)", "response": "value", "unit": "in. TIR", "confirm_per_spec": false },
+        { "seq": 5, "text": "Final alignment within tolerance — TIR ≤ .005 in. in any direction and DP ≤ .002 in., or tighter per governing criteria", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true, "spec_reference": "equipment spec / manufacturer alignment tolerance" },
+        { "seq": 6, "text": "Shim worksheet — record add/remove correction and final shim thickness at each front/rear foot", "response": "text", "unit": null, "confirm_per_spec": false },
+        { "seq": 7, "text": "Alignment re-verified with piping bolted up (no pipe-strain shift)", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 8, "text": "Dial-indicator / laser method and target values recorded — worksheet attached", "response": "photo_required", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "pump_centrifugal.uncoupledRun",
+      "tag_type": "pump_centrifugal",
+      "phase": "energization",
+      "name": "Centrifugal Pump — Uncoupled Motor Run Test",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Driven-equipment nameplate recorded (manufacturer, model, serial) — photo attached", "response": "photo_required", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Motor nameplate recorded (manufacturer, model, serial, HP, RPM, voltage, phase, frame) — photo attached", "response": "photo_required", "unit": null, "confirm_per_spec": false },
+        { "seq": 3, "text": "Motor uncoupled from driven equipment; coupling guard status noted before run", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 4, "text": "Rotation direction correct (matches arrow) before extended run", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 5, "text": "No-load running speed recorded", "response": "value", "unit": "rpm", "confirm_per_spec": false },
+        { "seq": 6, "text": "Bearing temperature at start of run", "response": "value", "unit": "°C", "confirm_per_spec": false },
+        { "seq": 7, "text": "Run duration completed — 2 hr for >100 hp, 30 min for 20–100 hp (record actual)", "response": "value", "unit": "min", "confirm_per_spec": true, "spec_reference": "equipment spec / manufacturer (HP-based run duration)" },
+        { "seq": 8, "text": "Bearing temperature at end of run", "response": "value", "unit": "°C", "confirm_per_spec": false },
+        { "seq": 9, "text": "Bearing temperature rise within allowable", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true, "spec_reference": "equipment spec / manufacturer allowable temperature rise" },
+        { "seq": 10, "text": "Shaft vibration (deflection, peak-to-peak) at operating speed", "response": "value", "unit": "mils", "confirm_per_spec": false },
+        { "seq": 11, "text": "Deflection within speed-table limit — 3600 rpm: 1.0 mil; 1800: 1.5; 1200: 2.0; 900: 2.5; 600: 3.0; 300: 3.5", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true, "spec_reference": "equipment spec / manufacturer speed-deflection limits" },
+        { "seq": 12, "text": "Shaft vibration velocity at operating speed", "response": "value", "unit": "in/s", "confirm_per_spec": false },
+        { "seq": 13, "text": "Vibration velocity within allowable", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true, "spec_reference": "equipment spec / manufacturer vibration velocity limit" },
+        { "seq": 14, "text": "Noise acceptable by observation", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false }
+      ]
+    },
+    {
+      "template_key": "motor.uncoupledRun",
+      "tag_type": "motor",
+      "phase": "energization",
+      "name": "Motor (General) — Uncoupled Run Test",
+      "recurrence": null,
+      "subject_kind": "tag",
+      "items": [
+        { "seq": 1, "text": "Driven-equipment nameplate recorded (manufacturer, model, serial) — photo attached", "response": "photo_required", "unit": null, "confirm_per_spec": false },
+        { "seq": 2, "text": "Motor nameplate recorded (manufacturer, model, serial, HP, RPM, voltage, phase, frame) — photo attached", "response": "photo_required", "unit": null, "confirm_per_spec": false },
+        { "seq": 3, "text": "Motor uncoupled from driven equipment; coupling guard status noted before run", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 4, "text": "Rotation direction correct (matches arrow) before extended run", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false },
+        { "seq": 5, "text": "No-load running speed recorded", "response": "value", "unit": "rpm", "confirm_per_spec": false },
+        { "seq": 6, "text": "Bearing temperature at start of run", "response": "value", "unit": "°C", "confirm_per_spec": false },
+        { "seq": 7, "text": "Run duration completed — 2 hr for >100 hp, 30 min for 20–100 hp (record actual)", "response": "value", "unit": "min", "confirm_per_spec": true, "spec_reference": "equipment spec / manufacturer (HP-based run duration)" },
+        { "seq": 8, "text": "Bearing temperature at end of run", "response": "value", "unit": "°C", "confirm_per_spec": false },
+        { "seq": 9, "text": "Bearing temperature rise within allowable", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true, "spec_reference": "equipment spec / manufacturer allowable temperature rise" },
+        { "seq": 10, "text": "Shaft vibration (deflection, peak-to-peak) at operating speed", "response": "value", "unit": "mils", "confirm_per_spec": false },
+        { "seq": 11, "text": "Deflection within speed-table limit — 3600 rpm: 1.0 mil; 1800: 1.5; 1200: 2.0; 900: 2.5; 600: 3.0; 300: 3.5", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true, "spec_reference": "equipment spec / manufacturer speed-deflection limits" },
+        { "seq": 12, "text": "Shaft vibration velocity at operating speed", "response": "value", "unit": "in/s", "confirm_per_spec": false },
+        { "seq": 13, "text": "Vibration velocity within allowable", "response": "pass_fail_na", "unit": null, "confirm_per_spec": true, "spec_reference": "equipment spec / manufacturer vibration velocity limit" },
+        { "seq": 14, "text": "Noise acceptable by observation", "response": "pass_fail_na", "unit": null, "confirm_per_spec": false }
+      ]
+    }
+  ]
+}
