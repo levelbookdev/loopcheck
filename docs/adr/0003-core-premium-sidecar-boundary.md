@@ -2,7 +2,7 @@
 
 **Status:** accepted · **Date:** 2026-07-09
 **Provenance:** ported from the sibling TrenchNote repo's
-[ADR 0011](https://github.com/mds08011/trenchnote/blob/main/docs/adr/0011-core-premium-extension-boundary.md),
+[ADR 0011](https://github.com/levelbookdev/trenchnote/blob/main/docs/adr/0011-core-premium-extension-boundary.md),
 adapted for LoopCheck's collections, invariants, and — critically — its
 different, still-unsolved auth problem.
 

@@ -7,7 +7,7 @@ Project context for Codex sessions. Read this first, every session.
 An open-source **startup & commissioning checkout tracker** for heavy civil /
 water / wastewater construction. Built by a project engineer at a
 water/wastewater general contractor. Sibling product to
-[TrenchNote](https://github.com/mds08011/trenchnote) — same philosophy,
+[TrenchNote](https://github.com/levelbookdev/trenchnote) — same philosophy,
 same architecture (PocketBase + static HTML + Alpine.js, no build step), new
 problem domain.
 

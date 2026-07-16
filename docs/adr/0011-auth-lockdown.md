@@ -31,7 +31,7 @@ selective rules that have since landed and the reconciliation still required.
 
 The `TODO(auth)` comments all say the same thing: *change every `""` rule to
 `@request.auth.id != ""`*. That is exactly what the sibling TrenchNote did
-([TrenchNote ADR 0004](https://github.com/mds08011/trenchnote): everything
+([TrenchNote ADR 0004](https://github.com/levelbookdev/trenchnote): everything
 locked, one shared field account, no public read at all). **LoopCheck cannot
 copy it**, and the reason is the whole difficulty of this ADR:
 
