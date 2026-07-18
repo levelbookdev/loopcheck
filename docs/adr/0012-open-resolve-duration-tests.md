@@ -2,7 +2,7 @@
 
 **Status:** accepted · **Date:** 2026-07-10 (accepted 2026-07-11)
 Acts on the forms-library review
-([docs/notes/forms-library-review.md](../notes/forms-library-review.md) §2.2)
+(§2.2 — source note retained in the private Bindery repo)
 and the Phase-6 bac-t note in [CLAUDE.md](../../CLAUDE.md). **Design capture
 only — no migration, no UI in this ADR.** It fixes the shape so Phase 6 and
 reliability-run templates inherit one pattern rather than two.

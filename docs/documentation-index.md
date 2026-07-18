@@ -28,9 +28,7 @@ the document's role, not whether every sentence is current.
 | [`seed/README.md`](../seed/README.md) | Normative data specification | Authoritative built-in template JSON format and domain-review list. |
 | [`docs/adr/`](adr/) | Normative + historical + proposed | One decision per file; the status inside each ADR controls. Accepted ADRs are normative, Proposed ADRs are not authorization to implement. |
 | [`docs/adr/README.md`](adr/README.md) | Descriptive index | ADR navigation; must be kept synchronized with the directory and statuses. |
-| [`docs/notes/forms-library-review.md`](notes/forms-library-review.md) | Historical working note | Form review input and follow-up observations, not shipped behavior. |
 | [`docs/notes/lookahead-sidecar-scope.md`](notes/lookahead-sidecar-scope.md) | Proposed working note | Sidecar scope ideas subordinate to ADR 0003 and the public API contract. |
-| [`docs/notes/nextstepsprompts.md`](notes/nextstepsprompts.md) | Historical working note | Session/task prompts; not product documentation. |
 | [`docs/index.html`](index.html) | Descriptive public page | Self-contained GitHub Pages landing page. User-visible claims must match shipped code; screenshots under `docs/img/` are illustrative assets. |
 
 ## Evidence precedence

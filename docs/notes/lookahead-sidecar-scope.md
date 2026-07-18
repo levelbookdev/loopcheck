@@ -1,7 +1,7 @@
 # Scoping LoopCheck-Lookahead — a constraint-driven startup lookahead sidecar
 
-*Design note, 2026-07-10. Acts on §4 of
-[forms-library-review.md](forms-library-review.md). Proposes the shape of the
+*Design note, 2026-07-10. Acts on §4 of the forms-library
+review (source note retained in the private Bindery repo). Proposes the shape of the
 `loopcheck-lookahead` repo (today an empty `.git` shell) before any code is
 written. Checked against the shipped core schema, ADR 0003 (the core/premium
 boundary), and `DATA_MODEL_PLAN.md`, which parks scheduling/lookaheads as

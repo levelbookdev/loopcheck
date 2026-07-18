@@ -2,7 +2,7 @@
 
 **Status:** accepted · **Date:** 2026-07-10
 Acts on the forms-library review
-([docs/notes/forms-library-review.md](../notes/forms-library-review.md) §2.1).
+(§2.1 — source note retained in the private Bindery repo).
 Migration `1789000018` implements it.
 
 ## Context

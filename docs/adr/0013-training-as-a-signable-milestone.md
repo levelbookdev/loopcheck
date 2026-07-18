@@ -9,7 +9,7 @@ status was not advanced. References below to migration/seed/UI work waiting for
 review are historical and require formal reconciliation.
 
 Acts on the forms-library review
-([docs/notes/forms-library-review.md](../notes/forms-library-review.md) §2.3).
+(§2.3 — source note retained in the private Bindery repo).
 Depends on [ADR 0009](0009-per-tag-phase-applicability.md) (`phases_na`),
 which shipped — without it, training would false-red every tag that owes no
 training.
