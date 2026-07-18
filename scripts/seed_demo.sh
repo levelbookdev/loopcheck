@@ -18,7 +18,7 @@
 # and a seed script that skipped auth would quietly break that day. This
 # script behaves like the sidecar must: sign in, send the token, always.)
 #
-# Idempotence: aborts if the sentinel project ("Cedar Hollow WRF Phase II
+# Idempotence: aborts if the sentinel project ("Example WRF Phase II
 # Expansion") already exists, so re-running cannot duplicate data. To
 # reseed, start from a fresh pb_data/ (or delete the demo records).
 #
@@ -30,8 +30,8 @@
 # client-set: systems.planned_startup, checks.performed_at, and
 # punch_items.closed_at.
 #
-# The fictional plant (Cedar Hollow WRF, Cedar Hollow Sanitation District,
-# Meridian Engineering Group, Blue Rock Constructors) and every person named
+# The fictional plant (Example WRF, Example Sanitation District,
+# Example Engineering Group, Example Constructors) and every person named
 # here are invented; any resemblance to a real project is accidental.
 #
 # Needs: curl, and GNU date for the date arithmetic (Linux and Git Bash
@@ -98,9 +98,9 @@ echo "Signed in as $LC_EMAIL"
 
 # ---- Idempotence sentinel -----------------------------------------------------
 api GET "collections/projects/records?filter=(name~'Cedar%20Hollow%20WRF')&perPage=1"
-if grep -q 'Cedar Hollow WRF' "$TMP"; then
+if grep -q 'Example WRF' "$TMP"; then
   echo "ABORT: demo data already present (found the sentinel project" >&2
-  echo "'Cedar Hollow WRF...'). Re-running would duplicate records." >&2
+  echo "'Example WRF...'). Re-running would duplicate records." >&2
   echo "Reseed against a fresh pb_data/, or delete the demo records first." >&2
   exit 1
 fi
@@ -109,13 +109,13 @@ echo "Seeding demo data into $LC_URL ..."
 
 # ---- Project ------------------------------------------------------------------
 api POST "collections/projects/records" '{
-  "name": "Cedar Hollow WRF Phase II Expansion",
-  "owner_name": "Cedar Hollow Sanitation District",
-  "engineer_of_record": "Meridian Engineering Group",
-  "contractor_name": "Blue Rock Constructors, Inc."
+  "name": "Example WRF Phase II Expansion",
+  "owner_name": "Example Sanitation District",
+  "engineer_of_record": "Example Engineering Group",
+  "contractor_name": "Example Constructors, Inc."
 }'
 PROJ=$(rid)
-echo "  1 project (Cedar Hollow WRF)"
+echo "  1 project (Example WRF)"
 
 # ---- Systems (8) -- staggered startups; the first two are AT RISK (<14 days) --
 # sys NUMBER NAME SEQ DAYS_TO_STARTUP
@@ -231,7 +231,7 @@ if [ "$_probe" != "200" ]; then
 else
   api POST "collections/test_standards/records" "{
     \"name\": \"Fluke Documenting Process Calibrator\", \"model\": \"754\",
-    \"serial\": \"DMO-754-0182\", \"owner\": \"Blue Rock Constructors\",
+    \"serial\": \"DMO-754-0182\", \"owner\": \"Example Constructors\",
     \"cert_date\": \"$(days_from -180)\", \"cert_due_date\": \"$(days_from 185)\"}"
   STD_CURRENT=$(rid)
   api POST "collections/test_standards/records" "{
@@ -695,7 +695,7 @@ else
   # Supervisor removal, in history: R. Patel's lock on MOV-4530 released by
   # the site super after Patel rolled off -- the released_by_note carries the
   # justification into the immutable record.
-  _a=$(loto_apply MOV-4530 "R. Patel" "Blue Rock Constructors" \
+  _a=$(loto_apply MOV-4530 "R. Patel" "Example Constructors" \
     "Actuator wiring - seat leak rework after failed hydro" "BR-114" 15)
   loto_release MOV-4530 "$_a" "C. Delgado" \
     "Supervisor removal per SOP - R. Patel off site, isolation walked down and verified, C. Delgado authorized" 12
@@ -740,9 +740,9 @@ else
         \"statement\":\"$4\",\"signed_at\":\"$(days_from "-$5")\",
         \"signed_content_hash\":\"$PKGHASH\"}"
     }
-    sign "D. Okafor" "contractor" "Commissioning Lead, Blue Rock Constructors" \
+    sign "D. Okafor" "contractor" "Commissioning Lead, Example Constructors" \
       "I certify the checks recorded here were performed and accurately recorded." 2
-    sign "K. Brandt" "engineer" "Resident Engineer, Meridian Engineering Group" \
+    sign "K. Brandt" "engineer" "Resident Engineer, Example Engineering Group" \
       "Reviewed and accepted for startup." 1
     echo "  1 turnover package (System 10, sealed) + 2 signatures (contractor + EOR)"
   fi
@@ -750,7 +750,7 @@ fi
 
 # ---- Summary --------------------------------------------------------------------
 echo ""
-echo "Done. Cedar Hollow WRF is seeded:"
+echo "Done. Example WRF is seeded:"
 echo "  project home:   $LC_URL/"
 echo "  at-risk system: $LC_URL/system.html?id=$S10  (starts in 7 days, open A items)"
 echo "  a busy tag:     $LC_URL/t/PMP-1002  (failed check + open A punch + LOCKED OUT, 2 locks)"
