@@ -276,7 +276,7 @@ accountless check/punch-flag/LOTO paths remain load-bearing.
 
 ## The paid tier (separate repository, sidecar)
 
-LoopCheck-Lookahead exists locally as a separate read-only sidecar with its own
+Bindery LoopCheck exists locally as a separate read-only sidecar with its own
 database and weekly readiness workflow. Further office-facing modules remain
 planned: notifications (including warranty-expiry alerts) and compiled
 deliverables (the turnover binder and compiled Warranty Log & Closeout

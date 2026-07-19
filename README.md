@@ -135,7 +135,7 @@ The intended independently deployed product family is:
   LineCheck's; LineCheck is archived.)
 - **LoopCheck:** plant tags/systems, checkout, startup, functional testing,
   training, warranty/closeout, turnover, and service cutover/restoration.
-- **`*-lookahead`:** optional paid coordination, managed operations,
+- **`bindery-*`:** optional paid coordination, managed operations,
   integrations, aggregation, notifications, and advanced compilation.
 
 Service cutover stays in LoopCheck permanently. The segment schema slice that

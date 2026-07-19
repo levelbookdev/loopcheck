@@ -1,8 +1,8 @@
-# Scoping LoopCheck-Lookahead — a constraint-driven startup lookahead sidecar
+# Scoping Bindery LoopCheck — a constraint-driven startup lookahead sidecar
 
 *Design note, 2026-07-10. Acts on §4 of the forms-library
 review (source note retained in the private Bindery repo). Proposes the shape of the
-`loopcheck-lookahead` repo (today an empty `.git` shell) before any code is
+`bindery-loopcheck` repo (today an empty `.git` shell) before any code is
 written. Checked against the shipped core schema, ADR 0003 (the core/premium
 boundary), and `DATA_MODEL_PLAN.md`, which parks scheduling/lookaheads as
 sidecar-side in their own database.*
@@ -27,7 +27,7 @@ The sidecar's own load-bearing decisions — derived readiness with no stored
 `ready` flag, constraints as first-class polymorphic records, the mutable-plan
 vs. immutable-ledger line — are real structural choices, but they are
 structural choices **about the sidecar's schema**, so they belong in the
-sidecar's repo. They become **`loopcheck-lookahead/docs/adr/0001`, written
+sidecar's repo. They become **`bindery-loopcheck/docs/adr/0001`, written
 before that repo's first migration**, honoring the same docs-as-code discipline
 one repo over. This note is that ADR's source material.
 
@@ -53,7 +53,7 @@ That's a pull-plan / Last-Planner model, not a Gantt bar.
 crews are already writing in the field. "Commission the RAS pumps" becomes
 ready the instant PMP-xxxx's energization phase reads *pass* in the check
 ledger, with no human re-keying anything. MS Project can't do this because it
-has no field ledger under it; Lookahead can *only* do it because LoopCheck's
+has no field ledger under it; Bindery LoopCheck can *only* do it because LoopCheck's
 accountless field tier exists.
 
 **The invariant, inherited from tag status (hard constraint #4, ADR 0003):
@@ -144,7 +144,7 @@ anonymously. After the auth lockdown, those reads must go through the
 **read-capable service-account role ADR 0003 already obligates the auth ADR to
 define** (an ordinary account with ordinary API-rule read permissions, never a
 superuser). The lookahead's read scope is a concrete client of that role.
-That's not a new requirement — it's naming Lookahead as the first consumer of
+That's not a new requirement — it's naming Bindery LoopCheck as the first consumer of
 an obligation already on record. Flagging it per ADR 0003's "capability lands
 in core first" rule so it isn't discovered late.
 
@@ -276,7 +276,7 @@ Field views stay dead-simple; the office/planner board carries the richer grid
   it). Treat MSP as an **export target later at most, never the native value**;
   importing it would drag date-driven Gantt semantics back in to fight the
   pull-plan model.
-- **Critical-path / resource-leveling math.** Lookahead is a *readiness filter*,
+- **Critical-path / resource-leveling math.** Bindery LoopCheck is a *readiness filter*,
   not a scheduling optimizer.
 - **Cost / labor-hour rollups and S-curves.** That's core-derived premium
   territory (`DATA_MODEL_PLAN.md` module 7), computed off the ledger's
@@ -319,7 +319,7 @@ Mirrors the core repo so a maintainer moves between them without re-learning
 the layout:
 
 ```
-loopcheck-lookahead/
+bindery-loopcheck/
   CLAUDE.md              sidecar doctrine: reads core / owns the plan, inherited
                          constraints, the readiness invariant, the not-inherited
                          append-only note
@@ -364,7 +364,7 @@ loopcheck-lookahead/
 
 ## Decision points for the maintainer — resolved 2026-07-10
 
-1. **License / visibility — private, commercial.** `loopcheck-lookahead` is the
+1. **License / visibility — private, commercial.** `bindery-loopcheck` is the
    **paid sidecar**: a private, commercially-licensed repo, **not AGPL**, per
    the boundary doctrine ("insight about the ledger is paid") and
    `DATA_MODEL_PLAN.md`'s parking of scheduling sidecar-side.

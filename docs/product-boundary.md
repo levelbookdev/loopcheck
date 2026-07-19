@@ -88,16 +88,16 @@ service cutover, and restoration. LoopCheck may consume a segment/service
 accepted or placed-in-service event when plant startup depends on it; it should
 not remain the second authoritative ledger for those facts.
 
-### `*-lookahead` products
+### `bindery-*` products
 
-**DECIDED for LoopCheck's paid boundary.** Lookahead products own optional
+**DECIDED for LoopCheck's paid boundary.** Bindery products own optional
 coordination, managed operations, notification delivery, portfolio aggregation,
 integrations, and advanced deliverable compilation. They use their own
 databases and public versioned contracts. They do not acquire authority over
 core field facts and are never prerequisites for core field execution.
 
-The local LoopCheck-Lookahead README confirms a separate PocketBase database
-and read-only HTTP use of LoopCheck. The local TrenchNote-Lookahead README
+The local Bindery LoopCheck README confirms a separate PocketBase database
+and read-only HTTP use of LoopCheck. The local Bindery TrenchNote README
 confirms a separate read-only sidecar. `linecheck-lookahead` exists locally but
 had no README to inspect.
 

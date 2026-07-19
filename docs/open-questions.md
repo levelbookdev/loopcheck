@@ -117,7 +117,7 @@ safe.
   changes; auth and removal of PII fields change client behavior.
 - **Recommendation:** publish a reviewed compatibility matrix and bump the
   contract for auth/PII semantics; decide segment status separately.
-- **Validate:** LoopCheck-Lookahead, seed scripts, public pages, third-party
+- **Validate:** Bindery LoopCheck, seed scripts, public pages, third-party
   assumptions, and PocketBase REST behavior.
 - **Decision owner:** Maintainer/API owner.
 - **Latest safe decision point:** before the next tagged release or external
