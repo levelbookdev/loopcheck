@@ -36,7 +36,8 @@ raise it rather than proceeding.
    records. This immutability is what makes turnover deliverables trustworthy.
    Enforced in the schema: `checks` and `check_items` have `updateRule: null`
    and `deleteRule: null`.
-   Note (Phase 6 design input): bac-t samples introduce the one record type
+   Note (design input carried to MainLine's future segment module, not built
+   here): bac-t samples introduce the one record type
    whose result is pending an external party (the lab). Design the
    checks/results model so a record can be signed at collection time and
    later receive an externally-attached result without mutating the
@@ -120,7 +121,8 @@ Cutover Status Report and customer-notification automation are paid-tier),
 photo logging), optional meter-box QR labels. This generalization was the
 deliberate pilot for Phase 5 locations and the (since-landed) segment subject
 kind — a fourth subject kind proved boring to add. (Segment acceptance itself
-then moved to LineCheck, 2026-07-14; see Phase 6 below.)
+moved out of LoopCheck; it now belongs to MainLine as a future module — see
+Phase 6 below.)
 
 **PII rule:** `services.customer_name` and `services.customer_phone` are
 visible only to authenticated users, never on any page reachable without
@@ -192,17 +194,21 @@ signing surface says so (LOTO-style honesty).
 **Phase 4:** shutdown runbooks (shutdowns, shutdown_steps, roles).
 **Phase 5:** recurrence + location subjects (compliance logs).
 
-- **Phase 6 — Segment acceptance records: MOVED TO LineCheck (2026-07-14).**
-  Pipeline/segment (linear) acceptance is **LineCheck's bounded context, not
-  LoopCheck's** — maintainer decision, ADR 0014 (superseded). The schema slice
-  that already shipped (migrations `1789000023`–`1789000025`: the open→resolve
-  fields, the `segments` collection + four-way subject XOR, segment phases, and
-  the segment seed templates) **stays, frozen at maintenance-only** — landed
-  records can't be relabeled, so it is maintained, not ripped out. **Do not
-  build the segment execution UI in LoopCheck** (page/board/resolve UI/CSV
-  import/acceptance package) — LineCheck owns that; the eventual move happens
-  deliberately after LineCheck has equivalent capability and a versioned
-  importer. See `docs/overlap-and-migrations.md`, `docs/architecture-status.md`,
+- **Phase 6 — Segment acceptance records: MOVED TO MainLine (2026-07-18).**
+  Pipeline/segment (linear) acceptance is **not LoopCheck's bounded context** —
+  maintainer decision, ADR 0014 (superseded). It was briefly scoped to
+  LineCheck (2026-07-14); LineCheck is now archived and the scope folds into
+  **MainLine as an unscheduled future module**, because MainLine already models
+  alignments, stations, and append-only test ledgers with derived acceptance.
+  See MainLine's `ROADMAP.md`, "Future module: segment testing & acceptance."
+  The schema slice that already shipped (migrations `1789000023`–`1789000025`:
+  the open→resolve fields, the `segments` collection + four-way subject XOR,
+  segment phases, and the segment seed templates) **stays, frozen at
+  maintenance-only** — landed records can't be relabeled, so it is maintained,
+  not ripped out. **Do not build the segment execution UI in LoopCheck**
+  (page/board/resolve UI/CSV import/acceptance package). There is no migration
+  to plan: cross-product record migrations are frozen until there are real
+  users. See `docs/overlap-and-migrations.md`, `docs/architecture-status.md`,
   `docs/open-questions.md`. The open→resolve pattern (ADR 0012) itself is
   general-purpose and stays in LoopCheck (e.g. the tank leak test uses it);
   only the segment *application* moved.

@@ -129,16 +129,20 @@ The intended independently deployed product family is:
 
 - **TrenchNote:** receipt, storage, preservation, custody, movement, issue, and
   installation references for physical material/assets.
-- **LineCheck:** test segments, pressure/gravity testing, flushing,
-  disinfection, sampling, service cutover/restoration, and linear acceptance.
+- **MainLine:** station-based pipeline construction records, and — as a future,
+  unscheduled module — test segments, pressure/gravity testing, flushing,
+  disinfection, sampling, and linear acceptance. (This scope was briefly
+  LineCheck's; LineCheck is archived.)
 - **LoopCheck:** plant tags/systems, checkout, startup, functional testing,
-  training, warranty/closeout, and turnover.
+  training, warranty/closeout, turnover, and service cutover/restoration.
 - **`*-lookahead`:** optional paid coordination, managed operations,
   integrations, aggregation, notifications, and advanced compilation.
 
-Current LoopCheck service-cutover and segment work overlap LineCheck's intended
-boundary. The code is not being moved in this documentation session; the
-evidence-preserving recommendation is documented in
+Service cutover stays in LoopCheck permanently. The segment schema slice that
+shipped here stays too, frozen at maintenance-only — the segment execution UI
+is not built in LoopCheck, and that scope now belongs to MainLine's future
+module. Record migrations between products are frozen until there are real
+users; the overlap reasoning is preserved in
 [`docs/overlap-and-migrations.md`](docs/overlap-and-migrations.md).
 
 ## Repository layout
