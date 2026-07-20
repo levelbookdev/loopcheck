@@ -2,14 +2,34 @@
 
 **Status:** proposed · **Date:** 2026-07-10
 
-**Implementation status (CURRENT, 2026-07-12):** migrations `1789000019` and
+**Implementation status (CURRENT, 2026-07-19):** migrations `1789000019` and
 `1789000020` implemented the selective rules, `users.role`, disabled signup,
 and the `service_contacts` PII split even though this ADR was never advanced
-from Proposed. The committed office frontend is not fully reconciled with the
-rules, and the later `segments` migration reopened public create/update for that
-collection. Statements below saying no migration/rule has changed describe the
-proposal when written, not current code. Decision status, implementation, API
-version, and tests must now be reconciled explicitly.
+from Proposed. Statements below saying no migration/rule has changed describe
+the proposal when written, not current code.
+
+Migration `1789000033` closes the `segments` rule-ordering gap — that
+collection was created after the lockdown and had kept public create/update.
+Reads stay public (field-facing subject data, like `tags`); writes are now
+`@request.auth.id != ""`. **No collection is world-writable any longer.**
+
+Maintainer rulings on the reconciliation matrix (2026-07-19), which this ADR's
+§2 table should be read with:
+
+- `segments` — locked to auth on create/update, reads public. **Done.**
+- `signatures` — list/view stay **public**. A turnover package is a shareable
+  deliverable and its attestations are part of it; the identity strength
+  caveat is disclosed on every signing surface rather than hidden by a rule.
+- `test_equipment` create, `service_visits` create, `check_items` create
+  (no shape rule), and `attachments`' trust of the client-declared
+  `parent_collection` — all **confirmed deliberate**, the accepted cost of §3's
+  accountless field tier.
+
+Still open before this ADR can move to Accepted: the office frontend is not
+reconciled with the rules (only 4 of 25 pages load `lc-auth.js`), the service
+CSV import still writes PII to `services` columns that migration `1789000020`
+removed and never creates `service_contacts`, and the smoke test does not yet
+assert the matrix across all three tiers. API version and tests follow.
 
 This is a **decision proposal** for the maintainer to react to before any
 migration touches the collection rules. Each fork below carries a
