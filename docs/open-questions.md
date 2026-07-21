@@ -89,22 +89,19 @@ safe.
 - **Latest safe decision point:** before the first signature/package migration
   reaches a persistent database.
 
-## 6. What is the authoritative auth access matrix?
+## 6. What is the authoritative auth access matrix? — **RESOLVED (2026-07-20)**
 
-- **Why it matters:** backend lockdown is committed, office UI token use is
-  incomplete, and later segments reopened public writes.
-- **Options:** preserve current public field creates with authenticated office
-  actions; require shared field login for more writes; broader public access.
-- **Current evidence:** migration 0019 defines a selective model, migration
-  0020 protects PII, committed pages do not consistently send tokens, and
-  migration 0024 leaves segment writes public.
-- **Recommendation:** keep the narrow accountless flows required by the product,
-  authenticate office setup/closure/signature work, and mechanically test every
-  collection/operation pair.
-- **Validate:** cheap-phone scan flow, abuse/rate limits, token refresh, offline
-  replay, service account permissions, and all office pages.
-- **Decision owner:** Maintainer/security owner.
-- **Latest safe decision point:** before any internet-facing production use.
+- **Resolution:** ADR 0011 is Accepted. The narrow accountless flows are
+  preserved (public scan/reads; accountless check/punch-flag/LOTO/calibration
+  creates); every other write and all office/PII reads require an account.
+  Migration `1789000033` closed the segment public-write gap. The office pages
+  authenticate through `lc-auth.js`, and `scripts/smoke_test.sh` mechanically
+  asserts the matrix across guest, user, and superuser tiers — including the
+  field-level PII back-relation expand. The README/DEPLOY internet-exposure
+  warning tied to this question has been removed.
+- **Still tracked separately:** the API v1 *version bump* for the added
+  collections (question 7 below) — a contract-versioning decision, not an auth
+  one.
 
 ## 7. How should API v1 be reconciled?
 

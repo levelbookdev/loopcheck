@@ -1,6 +1,6 @@
 # ADR 0011 — Auth lockdown: a small public allowlist, everything else signed in
 
-**Status:** proposed · **Date:** 2026-07-10
+**Status:** Accepted (2026-07-20) · **Proposed:** 2026-07-10
 
 **Implementation status (CURRENT, 2026-07-19):** migrations `1789000019` and
 `1789000020` implemented the selective rules, `users.role`, disabled signup,
@@ -25,11 +25,25 @@ Maintainer rulings on the reconciliation matrix (2026-07-19), which this ADR's
   `parent_collection` — all **confirmed deliberate**, the accepted cost of §3's
   accountless field tier.
 
-Still open before this ADR can move to Accepted: the office frontend is not
-reconciled with the rules (only 4 of 25 pages load `lc-auth.js`), the service
-CSV import still writes PII to `services` columns that migration `1789000020`
-removed and never creates `service_contacts`, and the smoke test does not yet
-assert the matrix across all three tiers. API version and tests follow.
+**Reconciliation complete (2026-07-20), and this ADR is now Accepted.** The
+items that were open when it was Proposed are all closed:
+
+- The office frontend is reconciled: every page that reads or writes an
+  auth-gated collection loads `lc-auth.js`, using a hard gate (redirect on load)
+  for pure office pages and a soft gate (public render, gated action) for the
+  field-facing pages that must survive an accountless scan. `tag.html` now says
+  "requires sign-in" for the warranty/closeout sections instead of falsely
+  reporting them empty to a guest — the ADR 0007 honesty rule, applied here.
+- The service CSV import writes PII to `service_contacts`, not to the removed
+  `services` columns, and reports the service and contact counts separately.
+- `scripts/smoke_test.sh` asserts the matrix across guest, user, and superuser
+  tiers (70 assertions), including the segment-create lock in both directions,
+  the user-vs-superuser delete boundary, and the field-level PII back-relation
+  expand a guest must not pierce.
+
+The DEPLOY/README internet-exposure warning tied to this reconciliation is
+removed as of the same change. The API contract note in `docs/API.md` records
+the auth semantics; a formal v1 version bump is tracked there separately.
 
 This is a **decision proposal** for the maintainer to react to before any
 migration touches the collection rules. Each fork below carries a

@@ -8,26 +8,26 @@ internet" warning is deleted *truthfully* — every collection rule matches an
 accepted ADR 0011 access matrix, the office pages authenticate through
 `lc-auth.js`, and `scripts/smoke_test.sh` proves the matrix as guest, as user,
 and as superuser.
-**Started:** 2026-07-19   **Status:** checkpoint 4 of 6
+**Started:** 2026-07-19   **Status:** checkpoint 5 of 6
 
 ## Current state (living — overwrite freely)
-- **Done:** checkpoint 1 — access matrix approved. Checkpoint 2 — migration
-  `1789000033` locks `segments` to auth (committed `af54439`). Checkpoint 3 —
-  nine pages reconciled onto `lc-auth.js` + service-import PII repair (committed
-  `c2279b4`). Checkpoint 4 — `scripts/smoke_test.sh` now asserts all three
-  tiers (70/70, was 60): user positive reads, segment create in both
-  directions, the user-vs-superuser delete boundary, and the field-level PII
-  back-relation expand. Not yet committed.
-- **In progress:** nothing — awaiting review of checkpoint 4.
-- **Not started:** checkpoint 5 (docs + delete the README warning), 6 (tag +
-  release).
+- **Done:** CP1 matrix approved. CP2 migration `1789000033` (committed
+  `af54439`). CP3 nine pages + PII repair (`c2279b4`). CP4 three-tier smoke test,
+  70/70 (`521a074`). CP5 docs-as-code — ADR 0011 Accepted; README
+  internet-exposure warning DELETED; API.md/current-state/DEPLOY/USER_GUIDE and
+  the decision-trackers (adr/README, architecture-status, open-questions) all
+  reconciled. Not yet committed.
+- **In progress:** nothing — awaiting review of checkpoint 5.
+- **Not started:** checkpoint 6 (tag a release; remind maintainer to drop the
+  VPS basic_auth gate and re-verify from outside; delete THIS file in the final
+  commit).
 
 ## Next session: start here
-Start checkpoint 5 (docs-as-code): move ADR 0011 to Accepted, add the API.md
-contract note, update docs/current-state.md, and DELETE the README internet
-warning — but only after `scripts/smoke_test.sh` is green (it is: 70/70). No
-`sw.js` exists in this repo, so the bump-VERSION rule is a no-op here — say so
-rather than skipping silently.
+Start checkpoint 6: propose a version (v0.9.0) and tag it with release notes
+summarizing the lockdown; remind the maintainer to remove the temporary VPS
+firewall/basic-auth per docs/DEPLOY.md and re-verify from outside; then DELETE
+SESSION-NOTES.md in that same final commit. No `sw.js` exists, so no VERSION
+bump applies.
 
 ## Decisions made mid-effort
 - 2026-07-19 Ground truth for the matrix comes from booting a throwaway
@@ -72,6 +72,26 @@ rather than skipping silently.
   evidence of the live rule.
 
 ## Session log (append-only, newest first — never edit old entries)
+### 2026-07-20 (checkpoint 5)
+- Attempted: docs-as-code — make every doc truthful to the reconciled state and
+  delete the README internet-exposure warning.
+- Landed (not yet committed): ADR 0011 → Accepted with the rulings folded in;
+  README warning paragraph removed + local-dev note corrected; API.md contract
+  note + segments row; current-state auth/tests/deploy sections; DEPLOY.md auth
+  note + a "removal condition met" note on the temporary VPS gate; USER_GUIDE
+  "what needs an account" section; adr/README, architecture-status, and
+  open-questions decision entries flipped to Resolved.
+- Learned: the stale-warning blast radius was wider than the four docs the
+  checkpoint named — the decision-tracker docs (architecture-status,
+  open-questions) each independently asserted "segments public / office UI
+  incomplete", so truthfulness meant a grep sweep, not just the named files.
+  Landing page needed nothing (auth is invisible to it). No `sw.js` = no VERSION
+  bump. Smoke test still 70/70 (docs don't touch it, but it is the gate the
+  README deletion is allowed on).
+- Stopped because: checkpoint boundary — releasing/tagging and the live-server
+  reminder are checkpoint 6, and deleting SESSION-NOTES belongs to that final
+  commit.
+
 ### 2026-07-20 (checkpoint 4)
 - Attempted: extend the smoke test to assert the matrix across all three tiers.
 - Landed: not yet committed — `scripts/smoke_test.sh` +10 assertions (sections

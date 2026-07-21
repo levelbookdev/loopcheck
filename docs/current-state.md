@@ -1,7 +1,11 @@
 # LoopCheck current state
 
 Snapshot date: 2026-07-12  
-Snapshot commit: `3da73d0` on `main`
+Snapshot commit: `3da73d0` on `main`  
+Auth sections revised: 2026-07-20 (ADR 0011 reconciliation) — the
+"Authentication and public access", "Tests and quality gates", and "Deployment
+status" sections below are current as of that revision; the rest remains at the
+original snapshot.
 
 This document is descriptive, not a roadmap. `CURRENT` means directly
 confirmed in the committed repository at the snapshot above. Work present only
@@ -95,30 +99,34 @@ The complete entity-by-entity description is in
 
 ## Authentication and public access
 
-**CURRENT.** Migrations `1789000019` and `1789000020` landed the non-uniform
-authentication lockdown and structural PII split:
+**CURRENT (revised 2026-07-20).** Migrations `1789000019`, `1789000020`, and
+`1789000033` landed the non-uniform authentication lockdown, the structural PII
+split, and the closing `segments` rule. ADR 0011 is **Accepted**; the frontend
+is reconciled with the rules.
 
 - Public reads remain for field-facing collections needed by tag/service
   scans, checks, punch visibility, and LOTO visibility.
-- Accountless creation remains for checks/check items, punch flags, and LOTO
-  events; attachment creation is conditional on its parent or authentication.
-- Project/setup/template/service writes and punch closure require an
+- Accountless creation remains for checks/check items, punch flags, LOTO
+  events, and instrument-calibration/service-visit capture; attachment creation
+  is conditional on its parent or authentication.
+- Project/setup/template/service/segment writes and punch closure require an
   authenticated user.
 - Warranty, closeout, and `service_contacts` reads/writes require auth.
 - `service_contacts` is the only home of customer name and phone; `services`
-  no longer contains those fields.
+  no longer contains those fields, and a guest cannot reach them through the
+  back-relation expand.
 - Public user self-signup is disabled.
 
-Two important limitations are confirmed:
+The two limitations recorded at the original snapshot are **both resolved**:
 
-1. The committed frontend does not yet contain a general authenticated fetch
-   path for the office pages. The lockdown can therefore reject project
-   creation, CSV imports, punch closure, and warranty/closeout operations from
-   those pages. A staged `lc-auth.js`/login implementation in the starting
-   worktree is active development, not part of this baseline.
-2. `segments` was created after the lockdown with public create/update rules
-   and a remaining `TODO(auth)`. That is a rule-ordering gap relative to the
-   stated office/engineering intent and must be resolved before internet use.
+1. The office pages now authenticate through the shared `lc-auth.js` helper —
+   hard-gated (redirect on load) for pure office pages, soft-gated (public
+   render, gated action) for the field-facing pages that must survive an
+   accountless scan. Project creation, CSV imports, punch closure, and
+   warranty/closeout operations all attach the token and handle expiry.
+2. `segments` create/update now require auth (migration `1789000033`); reads
+   stay public like `tags`. No collection carries a public write rule outside
+   the deliberate accountless field paths.
 
 ## Offline behavior
 
@@ -148,16 +156,20 @@ renderer and no committed versioned cross-product handoff manifest.
 **CURRENT.** `scripts/smoke_test.sh` is the only committed automated test
 suite. It boots a throwaway PocketBase database, applies migrations, runs the
 demo seed through REST, tests selected collection/rule invariants, verifies
-PII/auth boundaries, and checks the `/t/` and `/s/` routes. `.githooks/pre-push`
-runs it when the binary is present.
+PII/auth boundaries, and checks the `/t/` and `/s/` routes. As of the
+2026-07-20 revision it also asserts the ADR 0011 access matrix across all three
+tiers — guest denial, authenticated-user reads/writes, the user-vs-superuser
+delete boundary, segment-create in both directions, and the field-level PII
+back-relation expand (70 assertions total). `.githooks/pre-push` runs it when
+the binary is present.
 
 Known coverage gaps at this snapshot:
 
-- the expected-collection loop omits `segments`;
-- segment and tank seeds/workflows are not asserted;
+- the expected-collection existence loop omits `segments` (its create is
+  exercised by the matrix section, but not the existence loop);
+- tank seeds/workflows are not asserted;
 - open-to-resolve behavior is not asserted;
-- there are no unit, browser, accessibility, documentation, or link tests;
-- staged turnover/signature work is not part of the committed baseline.
+- there are no unit, browser, accessibility, documentation, or link tests.
 
 There is no committed CI configuration or environment template. Runtime setup
 is script- and documentation-driven.
@@ -170,11 +182,15 @@ script selects and downloads PocketBase, and the repository includes a Windows
 binary locally.
 
 The baseline deployment guide's warning that all rules were Phase-1 permissive
-was stale and has been corrected in this session; the selective lockdown is
-committed. The reverse problem now matters: office
-UI authentication is incomplete in committed code, and the later `segments`
-rules remain public. Internet exposure should wait for rule reconciliation,
-end-to-end authenticated UI testing, and documentation correction.
+was stale and has been corrected; the selective lockdown is committed. As of the
+2026-07-20 revision the follow-on blockers are also cleared: the office UI
+authenticates through `lc-auth.js`, `segments` writes require auth, and the
+smoke test asserts the matrix across three tiers. The README's
+"do-not-expose-to-the-internet" warning tied to this reconciliation has been
+removed accordingly. Standard pre-release caution still applies (this is not a
+tagged stable release), and any live instance that was firewalled or
+basic-auth-gated pending this work can now be re-verified from outside per
+`docs/DEPLOY.md`.
 
 ## Active development at session start
 

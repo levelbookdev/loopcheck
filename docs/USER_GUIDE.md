@@ -44,6 +44,21 @@ records — who, when, why, photo. The project LOTO board shows every
 active lock in the plant, oldest first, so a lock hung three weeks ago on
 a forgotten valve is the first thing everyone sees.
 
+## What needs an account, and what doesn't
+
+**The field flow never needs an account.** Scanning a tag or service QR,
+reading its status and LOTO banner, logging a check, flagging a punch item,
+logging a lock apply/release, and exporting a tag's CSV all work with no login —
+that is the whole point of the field tier.
+
+**A sign-in is for the office actions:** creating a project, importing
+equipment/services from CSV, closing a punch item, recording warranty or
+closeout facts, and building or signing a turnover package. On the tag page, the
+**Warranty** and **Closeout deliverables** sections show "requires sign-in"
+until you log in — that means *not visible without an account*, never "none on
+file." Accounts are created by your operator in the admin console; there is no
+self-signup.
+
 ## Signing off a system for turnover
 
 When a system is checked out, the **Turnover & signatures** page (from the

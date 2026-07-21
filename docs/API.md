@@ -13,16 +13,20 @@ reachable at the same origin that serves the pages. Current release is
 tested against **PocketBase 0.39.6**; a PocketBase upgrade that changes
 REST behavior is a breaking change to this contract.
 
-> **Contract reconciliation required (CURRENT, 2026-07-12).** Contract v1 was
+> **Contract reconciliation required (CURRENT, 2026-07-20).** Contract v1 was
 > published for the original sixteen collections. Committed migrations have
 > since added `service_contacts`, `segments`, `service_visits`,
 > `test_standards`, `calibrations`, and `calibration_points`, removed PII fields from
-> `services`, and applied selective authentication. Those changes outran this
-> document's ADR/version approval: ADRs 0011 and 0014 still say Proposed. The
-> table below now reports the **implemented REST surface truthfully**, but the
-> six added collections and changed auth/PII semantics are not silently
-> promoted into an approved v1 stability promise. Resolve the version and ADR
-> status before an external release or integration commitment.
+> `services`, and applied selective authentication. The **auth and PII
+> semantics are now settled**: ADR 0011 is Accepted, the access matrix below is
+> the reconciled policy (no public write rule survives outside the deliberate
+> accountless field paths), and `scripts/smoke_test.sh` asserts it across three
+> tiers. What is still not promoted into an approved v1 stability promise is the
+> **collection set**: the six added collections remain marked **delta** pending
+> a formal contract version bump, and ADR 0014 (segments) is superseded — the
+> segment application moved to MainLine, though the shipped schema slice stays.
+> Resolve the collection-set version before an external release or integration
+> commitment.
 
 ## Contract collections
 
@@ -39,7 +43,7 @@ operation. Shape-specific create rules still apply in addition to auth.
 | `tags` | v1 | public | auth | auth | admin-only |
 | `services` | v1, changed shape | public, PII-free | auth | auth | admin-only |
 | `service_contacts` | **delta** | auth | auth | auth | admin-only |
-| `segments` | **delta; rule gap** | public | public | public | admin-only |
+| `segments` | **delta; ADR 0011** | public | auth | auth | admin-only |
 | `checklist_templates` | v1 | public | auth | auth | admin-only |
 | `template_items` | v1 | public | auth | auth | admin-only |
 | `checks` | v1 | public | public, subject rule | **never** | **never** |
@@ -59,9 +63,13 @@ operation. Shape-specific create rules still apply in addition to auth.
 | `turnover_packages` | **delta; ADR 0010** | public | build route only (createRule `null`) | **never** | **never** |
 | `signatures` | **delta; ADR 0010** | public | auth | **never** | **never** |
 
-`segments` was created after the auth migration and still carries public
-create/update rules plus a `TODO(auth)`. That row describes current behavior,
-not the recommended production policy.
+`segments` was created after the auth migration and had briefly kept public
+create/update rules; migration `1789000033` (ADR 0011) closed that gap, so its
+create/update now require auth like `tags`, with reads public. No collection
+carries a public write rule except the deliberate accountless field paths
+(`checks`/`check_items`/`punch_items` create, `test_equipment` create, the
+`loto_events` and `service_visits` shape-ruled creates, and the parent-scoped
+`attachments` create).
 
 Field-level shapes are defined by the migrations in `pb_migrations/` and
 explained in [ARCHITECTURE.md](../ARCHITECTURE.md). Load-bearing semantics

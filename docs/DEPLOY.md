@@ -5,16 +5,18 @@ dead SD card can't erase a project's checkout ledger. Same boring-ops
 philosophy as the sibling TrenchNote repo: systemd + Caddy + copy-a-folder
 backups, no containers.
 
-> **Auth status — read this first.** The selective backend lockdown and
-> structural service-PII split are committed (`1789000019`/`1789000020`):
-> public tag/service/ledger reads and the narrow accountless check, punch-flag,
-> and LOTO create paths remain; office setup/lifecycle writes and office/PII
-> reads require a user token. The implementation is **not yet ready for public
-> internet exposure**: committed office pages do not consistently send that
-> token, and the later `segments` migration currently leaves segment
-> create/update public. Complete and test the access-matrix reconciliation
-> before following the VPS option for production data. A LAN deployment still
-> needs an immediately claimed superuser and a network exposure review.
+> **Auth status — read this first.** The selective backend lockdown, structural
+> service-PII split, and the closing `segments` rule are committed
+> (`1789000019`/`1789000020`/`1789000033`), and ADR 0011 is **Accepted**. Public
+> tag/service/ledger reads and the narrow accountless check, punch-flag, and
+> LOTO create paths remain; every other write and all office/PII reads require a
+> user token. The office pages now authenticate through `lc-auth.js`, and
+> `scripts/smoke_test.sh` asserts the access matrix across guest, user, and
+> superuser tiers. The auth reconciliation that previously blocked public
+> internet exposure is **complete** — this is no longer a blocker for the VPS
+> option. Standard pre-release caution still applies (no tagged stable release
+> yet), and any deployment still needs an immediately claimed superuser and a
+> network exposure review.
 
 > **Temporary exposure lockdown (added 2026-07-15).** An internet-reachable
 > pre-release deployment was found serving the app, the `/_/` admin login, and
@@ -33,6 +35,14 @@ backups, no containers.
 > `Caddyfile.bak.*` backup was left beside the live config for a one-line
 > revert) and `systemctl reload caddy`. The credential lives only in the
 > deployed Caddyfile as a hash; it is deliberately kept out of this repository.
+>
+> **Removal condition met (2026-07-20).** The auth reconciliation (ADR 0011) is
+> complete and asserted by the smoke test, so this stop-gap gate can now be
+> removed. That is a **live-server action for the operator**, not a repo change:
+> delete the `basic_auth` block, `systemctl reload caddy`, then re-verify from
+> outside that the public field tier (`/t/{tag}`) reads work anonymously while
+> office/PII reads and writes are refused without a token. This note stays here
+> until that removal is done and confirmed.
 
 ## First-boot hardening (any internet-reachable box)
 

@@ -33,12 +33,16 @@ implemented — `sign.html`, `turnover.html`, and the server-side
 stays Proposed pending the formal API-contract decision, so treat the two
 collections as delta, not v1.
 
-The selective backend authentication lockdown is committed, but office-page
-token use and the later segment rules still need reconciliation. Treat current
-`main` as a development snapshot and **do not expose it to the public internet**
-until the access matrix and authenticated office workflows are verified. See
-[`docs/current-state.md`](docs/current-state.md) for the exact snapshot and
-limitations.
+The selective backend authentication lockdown is complete and reconciled
+(ADR 0011). Public reads and the narrow accountless field-write paths stay open
+by design; every other write, and all office/PII reads, require an account. The
+office pages authenticate through the shared `lc-auth.js` helper, and
+`scripts/smoke_test.sh` asserts the access matrix across guest, user, and
+superuser tiers — including that customer PII never appears in any accountless
+response. It remains a **pre-release development project** (see the maturity
+note above), but the auth reconciliation that previously blocked internet
+exposure is done. See [`docs/current-state.md`](docs/current-state.md) for the
+exact snapshot.
 
 ## Design constraints
 
@@ -86,9 +90,9 @@ sh scripts/seed_demo.sh
 
 The script populates a project with equipment, checks, punches, warranties,
 closeout records, service cutover, and LOTO data. `scripts/smoke_test.sh` boots
-a throwaway database and exercises the same combined stack. Manual project
-creation/import pages are part of the current auth-client reconciliation noted
-above.
+a throwaway database and exercises the same combined stack. The project
+creation and CSV import pages require a sign-in — create a user in the admin UI
+and sign in through `/login.html` (the field tag/service pages need no account).
 
 ## Current entry points and exports
 
