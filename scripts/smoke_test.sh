@@ -146,6 +146,50 @@ patch_status() {
     "$BASE/api/collections/$1/records/$2" \
     -H "Content-Type: application/json" -H "Authorization: $TOKEN" -d "$3"
 }
+# --- three-tier helpers (ADR 0011 matrix: guest / user / superuser) ----------
+# The negative axis (guest denied, field tier public) is section 7. These add
+# the POSITIVE user axis and the distinct superuser axis. $TOKEN is the ordinary
+# demo user (set in step 6); $SU is the superuser (step 4).
+# auth_total COLLECTION [querySuffix]  -> totalItems for an ORDINARY-USER read.
+# Proves the positive half of the lockdown: a signed-in user CAN read the office
+# collections a guest cannot. Asserts on data presence, per the 200-empty gotcha.
+auth_total() {
+  curl -s "$BASE/api/collections/$1/records?perPage=1${2:-}" \
+    -H "Authorization: ${TOKEN:-}" \
+    | sed -n 's/.*"totalItems":\([0-9]*\).*/\1/p'
+}
+# auth_post_status COLLECTION JSON  -> HTTP code of an ORDINARY-USER create.
+auth_post_status() {
+  curl -s -o /dev/null -w '%{http_code}' -X POST \
+    "$BASE/api/collections/$1/records" \
+    -H "Content-Type: application/json" -H "Authorization: ${TOKEN:-}" -d "$2"
+}
+# auth_delete_status / su_delete_status COLLECTION ID  -> HTTP code of a DELETE
+# as ordinary user / as superuser. Deletes are admin-only everywhere
+# (deleteRule null), so the two together prove the tier boundary: the same
+# request the user is refused, the superuser is granted.
+auth_delete_status() {
+  curl -s -o /dev/null -w '%{http_code}' -X DELETE \
+    "$BASE/api/collections/$1/records/$2" -H "Authorization: ${TOKEN:-}"
+}
+su_delete_status() {
+  curl -s -o /dev/null -w '%{http_code}' -X DELETE \
+    "$BASE/api/collections/$1/records/$2" -H "Authorization: ${SU:-}"
+}
+# anon_field_absent LABEL URL NEEDLE  -- pass when an UNAUTHENTICATED GET of URL
+# returns a body that does NOT contain NEEDLE. This is the ONE field-level check
+# a collection rule cannot express (ADR 0011 §4): PocketBase rules are
+# collection-level, so the PII guarantee for customer_name/phone rests on the
+# structural split PLUS the fact that a guest expanding the back-relation gets
+# nothing. Asserts on the BODY, not a status -- a leak comes back 200 with the
+# needle present, which the status-code gotcha would miss entirely.
+anon_field_absent() {
+  body=$(curl -s "$2")
+  case "$body" in
+    *"$3"*) bad "$1 (LEAKED: '$3' present in an anonymous response)" ;;
+    *)      ok  "$1 ('$3' absent from anon body)" ;;
+  esac
+}
 
 # ---- 0. clean slate + guard the port ----------------------------------------
 rm -rf "$DATA_DIR"
@@ -288,7 +332,59 @@ nonzero "anon list loto_events (safety never gated)" "$(anon_total loto_events)"
 accepted "anon check-create (accountless field logging)" \
   "$(anon_post_status checks "{\"tag\":\"$(first_id tags)\",\"result\":\"pass\",\"phase\":\"installation\"}")"
 
-# ---- 8. the clean-URL hook routes serve (printed on QR labels = contract) ----
+# ---- 8. the matrix from the OTHER two tiers: user (positive) + superuser ------
+# Section 7 proved the guest axis. The lockdown is only half-tested until the
+# authenticated tiers are asserted too: a rule that denied EVERYONE would also
+# pass section 7. Here an ordinary user must READ what the guest could not and
+# WRITE where the field tier may not, and a superuser must be able to do the one
+# thing even a signed-in user cannot (delete). ADR 0011 §2 matrix.
+echo "==> matrix: authenticated user reads office data + writes segments (ADR 0011)"
+PID=$(first_id projects)
+
+# Positive read axis: the same office/PII collections section 7 hid from a guest
+# must be READABLE by an ordinary signed-in user. Data presence, not status.
+for c in warranties closeout_requirements closeout_log warranty_claims service_contacts; do
+  nonzero "user reads $c (auth path)" "$(auth_total "$c")"
+done
+
+# The segment lock (migration R / 1789000033, the gap this effort closed): guest
+# create is REFUSED, the same create as an authenticated user is ACCEPTED. This
+# is the one rule the whole reconciliation turned on, so it is asserted in both
+# directions.
+rejected "anon segment-create denied (the closed gap)" \
+  "$(anon_post_status segments "{\"project\":\"$PID\",\"segment_id\":\"SMOKE-SEG-A\",\"segment_type\":\"pressure_main\"}")"
+accepted "user segment-create allowed (auth path)" \
+  "$(auth_post_status segments "{\"project\":\"$PID\",\"segment_id\":\"SMOKE-SEG-B\",\"segment_type\":\"pressure_main\"}")"
+
+# Superuser tier is DISTINCT from user tier: deletes are admin-only everywhere
+# (deleteRule null). Create a throwaway punch via the accountless field tier,
+# then the ordinary user is REFUSED the delete and the superuser is GRANTED it —
+# the same request, two tiers, opposite outcomes. Self-cleaning (the record is
+# gone by the time the superuser is done).
+PUNCH_ID=$(curl -s -X POST "$BASE/api/collections/punch_items/records" \
+  -H "Content-Type: application/json" \
+  -d "{\"project\":\"$PID\",\"tag\":\"$(first_id tags)\",\"description\":\"smoke tier-test punch\",\"severity\":\"C\",\"status\":\"open\"}" \
+  | sed -n 's/.*"id":"\([a-z0-9]\{15\}\)".*/\1/p' | head -1)
+rejected "ordinary user CANNOT delete (deletes are admin-only)" "$(auth_delete_status punch_items "$PUNCH_ID")"
+accepted "superuser CAN delete (the distinct admin tier)"        "$(su_delete_status   punch_items "$PUNCH_ID")"
+
+# ---- 9. field-level PII: the back-relation expand a guest must not pierce -----
+# The collection rule hides service_contacts as a list/view (section 7). The
+# remaining escape is EXPAND: a guest reading a public service could ask
+# PocketBase to expand the back-relation and pull the contact along with it.
+# PocketBase applies the target's viewRule to expands, so this should come back
+# with an empty expand -- but nothing else in this suite proves it, and a future
+# rule change could silently open it. Pick a service that actually HAS a contact
+# (so there is something to leak), then assert the anon expand body carries no
+# customer_name key at all.
+echo "==> field-level PII: guest cannot expand service_contacts off a service"
+SVC_WITH_CONTACT=$(curl -s "$BASE/api/collections/service_contacts/records?perPage=1" \
+  -H "Authorization: $SU" | sed -n 's/.*"service":"\([a-z0-9]\{15\}\)".*/\1/p' | head -1)
+anon_field_absent "anon expand of service_contacts_via_service carries no PII" \
+  "$BASE/api/collections/services/records/$SVC_WITH_CONTACT?expand=service_contacts_via_service" \
+  "customer_name"
+
+# ---- 10. the clean-URL hook routes serve (printed on QR labels = contract) ---
 echo "==> clean-URL routes serve"
 accepted "/t/{tag} route"     "$(http_status GET "$BASE/t/PMP-1002")"
 accepted "/s/{service} route" "$(http_status GET "$BASE/s/$(first_id services)")"

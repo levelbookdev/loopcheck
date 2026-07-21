@@ -8,22 +8,26 @@ internet" warning is deleted *truthfully* — every collection rule matches an
 accepted ADR 0011 access matrix, the office pages authenticate through
 `lc-auth.js`, and `scripts/smoke_test.sh` proves the matrix as guest, as user,
 and as superuser.
-**Started:** 2026-07-19   **Status:** checkpoint 3 of 6
+**Started:** 2026-07-19   **Status:** checkpoint 4 of 6
 
 ## Current state (living — overwrite freely)
 - **Done:** checkpoint 1 — access matrix approved. Checkpoint 2 — migration
-  `1789000033` locks `segments` create/update to auth (committed `af54439`).
-  Checkpoint 3 — nine pages reconciled onto `lc-auth.js`; the service CSV
-  import's PII path repaired; verified in a browser against a seeded database.
-- **In progress:** nothing — awaiting review of checkpoint 3.
-- **Not started:** checkpoint 4 (smoke-test matrix assertions), 5 (docs +
-  delete the README warning), 6 (tag + release).
+  `1789000033` locks `segments` to auth (committed `af54439`). Checkpoint 3 —
+  nine pages reconciled onto `lc-auth.js` + service-import PII repair (committed
+  `c2279b4`). Checkpoint 4 — `scripts/smoke_test.sh` now asserts all three
+  tiers (70/70, was 60): user positive reads, segment create in both
+  directions, the user-vs-superuser delete boundary, and the field-level PII
+  back-relation expand. Not yet committed.
+- **In progress:** nothing — awaiting review of checkpoint 4.
+- **Not started:** checkpoint 5 (docs + delete the README warning), 6 (tag +
+  release).
 
 ## Next session: start here
-Start checkpoint 4: extend `scripts/smoke_test.sh` to assert the matrix as
-guest / user / superuser — assert on DATA PRESENCE, never status codes, and add
-the back-relation expand check (`services?expand=service_contacts_via_service`
-must return an empty `expand` to a guest).
+Start checkpoint 5 (docs-as-code): move ADR 0011 to Accepted, add the API.md
+contract note, update docs/current-state.md, and DELETE the README internet
+warning — but only after `scripts/smoke_test.sh` is green (it is: 70/70). No
+`sw.js` exists in this repo, so the bump-VERSION rule is a no-op here — say so
+rather than skipping silently.
 
 ## Decisions made mid-effort
 - 2026-07-19 Ground truth for the matrix comes from booting a throwaway
@@ -52,6 +56,13 @@ must return an empty `expand` to a guest).
 - Synthetic `input` events do not reliably drive Alpine `x-model`. To script a
   form in the browser pane, use `Alpine.$data(root)` and set properties, then
   call the component method directly.
+- **PocketBase's refusal code is per-operation, not a uniform 401/403.** A
+  denied LIST returns 200 + empty; a denied VIEW returns 404; a denied CREATE
+  returns 400; a denied UPDATE/DELETE returns 403. So "assert the locked path
+  401/403s" is wrong for creates. The discipline that actually works: assert the
+  path is REFUSED (non-2xx) AND pair it with the same request one tier up
+  SUCCEEDING — that proves the refusal is the auth rule, not a malformed
+  payload. The smoke test's segment-create pair is built this way.
 - **PocketBase returns 200 + an empty list for a dead/absent token on reads,
   not 401.** Every "is auth working" assertion must test for data presence, not
   status code. `lc-auth.js` already detects expiry via `auth-refresh` for this
@@ -61,6 +72,19 @@ must return an empty `expand` to a guest).
   evidence of the live rule.
 
 ## Session log (append-only, newest first — never edit old entries)
+### 2026-07-20 (checkpoint 4)
+- Attempted: extend the smoke test to assert the matrix across all three tiers.
+- Landed: not yet committed — `scripts/smoke_test.sh` +10 assertions (sections
+  8 & 9), now 70 passing. Added five helpers (`auth_total`, `auth_post_status`,
+  `auth_delete_status`, `su_delete_status`, `anon_field_absent`).
+- Learned: section 7 alone (guest-denied) would also pass for a rule that denied
+  EVERYONE — the positive user axis is what makes it a real matrix. Confirmed
+  live: user reads warranties(5)/closeout(8)/log(15)/claims(2)/contacts(12);
+  guest segment-create 400 vs user 200; user delete 403 vs superuser 204; anon
+  back-relation expand carries no customer_name.
+- Stopped because: checkpoint boundary — docs-as-code (incl. deleting the README
+  warning) is the next and most consequential step, worth its own review.
+
 ### 2026-07-19 (checkpoint 3)
 - Attempted: reconcile the office pages onto `lc-auth.js`.
 - Landed: not yet committed — 9 pages (`warranty`, `readiness`, `closeout`,
