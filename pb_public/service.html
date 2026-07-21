@@ -26,6 +26,7 @@
   service's append-only check ledger. No stored status anywhere.
 -->
 <link rel="stylesheet" href="/app.css">
+<script defer src="/lc-auth.js"></script>
 <script defer src="/vendor/alpine.min.js"></script>
 <style>
   /* Cutover phase strip — one cell per required phase, colored by derived
@@ -296,6 +297,7 @@ function servicePage() {
     flagFile: null,
     flagBy: localStorage.getItem('lc_name') || '',
     busy: false,
+    isAuthed: false,   // ADR 0011: gates punch CLOSE only; the page itself is public
     flagFlash: '',
     flagError: '',
 
@@ -353,6 +355,11 @@ function servicePage() {
         this.errorMsg = 'No service id in the URL. Open this from the cutover board.';
         return;
       }
+      // SOFT gate (ADR 0011): /s/{id} is a field page and renders with no
+      // account. Only closing a punch item needs a session; refresh() here is
+      // what notices an expired one before the button is offered.
+      await lcAuth.refresh();
+      this.isAuthed = lcAuth.isAuthed();
       try {
         // 1. The service. `fields=` DELIBERATELY excludes customer_name and
         //    customer_phone — this page needs no PII and must never carry it
@@ -473,9 +480,11 @@ function servicePage() {
         if (this.closeCheckId) body.closing_check = this.closeCheckId;
         const res = await fetch(`${PB}/api/collections/punch_items/records/${p.id}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...lcAuth.header() },
           body: JSON.stringify(body),
         });
+        // Closing requires auth (ADR 0011 §3) — flagging never does.
+        if (res.status === 401 || res.status === 403) { lcAuth.requireAuth(); return; }
         if (!res.ok) throw new Error('close rejected (' + res.status + ')');
         this.closingId = '';
         await this.load();

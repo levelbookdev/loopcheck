@@ -14,6 +14,7 @@
   skipped.
 -->
 <link rel="stylesheet" href="/app.css">
+<script defer src="/lc-auth.js"></script>
 <script defer src="/vendor/alpine.min.js"></script>
 <style>
   table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
@@ -282,6 +283,13 @@ function importPage() {
     busy: false, progress: 0, result: null,
 
     async load() {
+      // Office page (ADR 0011): every collection this page writes — projects,
+      // systems, tags, warranties — requires auth. CSV import stays free
+      // (constraint #7) but it is the onboarding act of someone with an
+      // account, not an anonymous one. Gate on load rather than letting a whole
+      // CSV run and fail row by row on 403.
+      await lcAuth.refresh();
+      if (!lcAuth.requireAuth()) return;
       try {
         const res = await fetch(`${PB}/api/collections/projects/records?sort=name&perPage=200`);
         this.projects = (await res.json()).items;
@@ -471,7 +479,7 @@ function importPage() {
         if (!tagId) { res.unknownTags++; res.errors.push(`${r.tag_number}: no such tag in this project`); continue; }
         try {
           const cr = await fetch(`${PB}/api/collections/warranties/records`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: { 'Content-Type': 'application/json', ...lcAuth.header() },
             body: JSON.stringify({
               project: this.projectId,
               tag: tagId,
@@ -522,7 +530,7 @@ function importPage() {
             if (r.system_number) {
               if (!sysByNumber[r.system_number]) {
                 const cr = await fetch(`${PB}/api/collections/systems/records`, {
-                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  method: 'POST', headers: { 'Content-Type': 'application/json', ...lcAuth.header() },
                   body: JSON.stringify({ project: this.projectId, number: r.system_number }),
                 });
                 if (cr.ok) {
@@ -542,7 +550,7 @@ function importPage() {
             // Create the tag. The unique (project, tag_number) index rejects
             // duplicates — we count those as skipped rather than failing.
             const cr = await fetch(`${PB}/api/collections/tags/records`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              method: 'POST', headers: { 'Content-Type': 'application/json', ...lcAuth.header() },
               body: JSON.stringify({
                 project: this.projectId,
                 system: systemId,

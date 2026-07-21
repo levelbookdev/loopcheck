@@ -10,6 +10,7 @@
   loaded through the CSV import page.
 -->
 <link rel="stylesheet" href="/app.css">
+<script defer src="/lc-auth.js"></script>
 <script defer src="/vendor/alpine.min.js"></script>
 </head>
 <body>
@@ -44,7 +45,12 @@
       <!-- New project -->
       <h2 class="section">New project</h2>
       <template x-if="!showNew">
-        <button class="go" @click="showNew = true">Create project</button>
+        <button class="go" @click="isAuthed ? showNew = true : lcAuth.requireAuth()">Create project</button>
+      </template>
+      <!-- Honest about WHY, rather than hiding the button: a signed-out PM
+           should learn they need to sign in, not conclude the feature is gone. -->
+      <template x-if="!showNew && !isAuthed">
+        <p class="empty" style="margin-top:6px">Creating a project requires sign-in.</p>
       </template>
       <template x-if="showNew">
         <div>
@@ -86,10 +92,16 @@ function home() {
   return {
     state: 'loading', errorMsg: '', errorMsg2: '',
     projects: [],
-    showNew: false, busy: false,
+    showNew: false, busy: false, isAuthed: false,
     nName: '', nOwner: '', nEor: '', nContractor: '',
 
     async load() {
+      // SOFT gate (ADR 0011): the project list is a public read and stays one —
+      // this is the page a scanned QR's "back to project" link lands on. Only
+      // CREATING a project needs an account, so we note the auth state for the
+      // button and never redirect on load.
+      await lcAuth.refresh();
+      this.isAuthed = lcAuth.isAuthed();
       try {
         const res = await fetch(`${PB}/api/collections/projects/records?sort=name&perPage=200`);
         if (!res.ok) throw new Error('API error ' + res.status);
@@ -102,15 +114,20 @@ function home() {
     },
 
     async create() {
+      if (!lcAuth.isAuthed()) { lcAuth.requireAuth(); return; }
       this.busy = true; this.errorMsg2 = '';
       try {
         const res = await fetch(`${PB}/api/collections/projects/records`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...lcAuth.header() },
           body: JSON.stringify({
             name: this.nName, owner_name: this.nOwner,
             engineer_of_record: this.nEor, contractor_name: this.nContractor,
           }),
         });
+        // A token that expired between load and submit comes back 401/403 here
+        // (writes DO fail loudly — it is only reads that lie with 200+empty).
+        if (res.status === 401 || res.status === 403) { lcAuth.requireAuth(); return; }
         if (!res.ok) throw new Error('rejected (' + res.status + ')');
         const p = await res.json();
         location.href = '/project.html?id=' + p.id;

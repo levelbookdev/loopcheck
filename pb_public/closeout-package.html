@@ -19,6 +19,7 @@
   warranty dispute is actually about.
 -->
 <link rel="stylesheet" href="/app.css">
+<script defer src="/lc-auth.js"></script>
 <script defer src="/vendor/alpine.min.js"></script>
 <style>
   body { max-width: 960px; }
@@ -232,18 +233,27 @@ function packagePage() {
       if (!this.projectId) {
         this.state = 'error'; this.errorMsg = 'No project id in the URL (open as /closeout-package.html?project=…).'; return;
       }
+      // Office page (ADR 0011): three of the five reads below are auth-gated,
+      // and PocketBase answers a tokenless read with 200 + an empty list rather
+      // than 401. Signed out, this would print a turnover deliverable showing
+      // no warranties, no requirements and no claims — a document that looks
+      // complete and is not. That failure mode is why the gate is BEFORE the
+      // reads, not a catch on their status.
+      await lcAuth.refresh();
+      if (!lcAuth.requireAuth()) return;
       try {
         const pRes = await fetch(`${PB}/api/collections/projects/records/${this.projectId}`);
         if (!pRes.ok) throw new Error('project not found (' + pRes.status + ')');
         this.project = await pRes.json();
 
         const f = encodeURIComponent(`project='${this.projectId}'`);
+        const A = { headers: { ...lcAuth.header() } }; // the auth-gated reads
         const [sRes, tRes, wRes, rRes, cRes] = await Promise.all([
           fetch(`${PB}/api/collections/systems/records?filter=(${f})&sort=number&perPage=500`),
           fetch(`${PB}/api/collections/tags/records?filter=(${f})&perPage=500&fields=id,tag_number,description,system`),
-          fetch(`${PB}/api/collections/warranties/records?filter=(${f})&perPage=500`),
-          fetch(`${PB}/api/collections/closeout_requirements/records?filter=(${f})&perPage=1000`),
-          fetch(`${PB}/api/collections/warranty_claims/records?filter=(${f})&perPage=1000`),
+          fetch(`${PB}/api/collections/warranties/records?filter=(${f})&perPage=500`, A),
+          fetch(`${PB}/api/collections/closeout_requirements/records?filter=(${f})&perPage=1000`, A),
+          fetch(`${PB}/api/collections/warranty_claims/records?filter=(${f})&perPage=1000`, A),
         ]);
         this.systems = (await sRes.json()).items;
         for (const t of (await tRes.json()).items) this.tagById[t.id] = t;

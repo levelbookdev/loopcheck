@@ -17,6 +17,7 @@
   free answer: open it and look.
 -->
 <link rel="stylesheet" href="/app.css">
+<script defer src="/lc-auth.js"></script>
 <script defer src="/vendor/alpine.min.js"></script>
 <style>
   .wrow { border: 2px solid var(--line); border-left-width: 6px; padding: 12px; margin-bottom: 10px; }
@@ -152,6 +153,14 @@ function warrantyPage() {
       if (!this.projectId) {
         this.state = 'error'; this.errorMsg = 'No project id in the URL (open as /warranty.html?project=…).'; return;
       }
+      // Office page (ADR 0011): `warranties` is auth-gated, and PocketBase
+      // answers a tokenless read with 200 + an EMPTY list, never 401. Loading
+      // this page signed out would therefore render a confident, wrong "no
+      // warranties" timeline. Gate BEFORE reading, and carry the token on the
+      // reads below; refresh() first so an expired token redirects to login
+      // instead of silently returning nothing.
+      await lcAuth.refresh();
+      if (!lcAuth.requireAuth()) return;
       try {
         const pRes = await fetch(`${PB}/api/collections/projects/records/${this.projectId}`);
         if (!pRes.ok) throw new Error('project not found (' + pRes.status + ')');
@@ -159,7 +168,8 @@ function warrantyPage() {
 
         const f = encodeURIComponent(`project='${this.projectId}'`);
         const [wRes, tRes] = await Promise.all([
-          fetch(`${PB}/api/collections/warranties/records?filter=(${f})&perPage=500`),
+          fetch(`${PB}/api/collections/warranties/records?filter=(${f})&perPage=500`,
+                { headers: { ...lcAuth.header() } }),
           fetch(`${PB}/api/collections/tags/records?filter=(${f})&perPage=500&fields=id,tag_number,description`),
         ]);
         this.warranties = (await wRes.json()).items;

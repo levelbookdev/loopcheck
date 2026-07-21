@@ -14,6 +14,7 @@
   editable state always has an unforgeable trail behind it.
 -->
 <link rel="stylesheet" href="/app.css">
+<script defer src="/lc-auth.js"></script>
 <script defer src="/vendor/alpine.min.js"></script>
 <style>
   body { max-width: 960px; }  /* the matrix needs more room than the field pages */
@@ -243,6 +244,13 @@ function closeoutPage() {
       if (!this.projectId) {
         this.state = 'error'; this.errorMsg = 'No project id in the URL (open as /closeout.html?project=…).'; return;
       }
+      // Office page (ADR 0011): `closeout_requirements` and `closeout_log` are
+      // auth-gated, and a tokenless read returns 200 + an empty list, not 401 —
+      // signed out, this dashboard would render "no requirements" for a project
+      // that has plenty. Gate before reading; every fetch below carries the
+      // token.
+      await lcAuth.refresh();
+      if (!lcAuth.requireAuth()) return;
       try {
         const pRes = await fetch(`${PB}/api/collections/projects/records/${this.projectId}`);
         if (!pRes.ok) throw new Error('project not found (' + pRes.status + ')');
@@ -253,7 +261,8 @@ function closeoutPage() {
         const [sRes, tRes, rRes] = await Promise.all([
           fetch(`${PB}/api/collections/systems/records?filter=(${f})&sort=startup_sequence,number&perPage=500`),
           fetch(`${PB}/api/collections/tags/records?filter=(${f})&sort=tag_number&perPage=500&fields=id,tag_number,system,description`),
-          fetch(`${PB}/api/collections/closeout_requirements/records?filter=(${f})&perPage=1000`),
+          fetch(`${PB}/api/collections/closeout_requirements/records?filter=(${f})&perPage=1000`,
+                { headers: { ...lcAuth.header() } }),
         ]);
         this.systems = (await sRes.json()).items;
         this.tags = (await tRes.json()).items;
@@ -272,7 +281,7 @@ function closeoutPage() {
     async logChange(reqId, from, to, note) {
       await fetch(`${PB}/api/collections/closeout_log/records`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...lcAuth.header() },
         body: JSON.stringify({
           requirement: reqId, from_status: from, to_status: to,
           changed_by: this.who || 'unspecified', note: note || '',
@@ -292,7 +301,7 @@ function closeoutPage() {
         if (to === 'accepted') body.accepted_by = this.who || 'unspecified';
         const res = await fetch(`${PB}/api/collections/closeout_requirements/records/${r.id}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...lcAuth.header() },
           body: JSON.stringify(body),
         });
         if (!res.ok) throw new Error('update rejected (' + res.status + ')');
@@ -312,7 +321,7 @@ function closeoutPage() {
       try {
         const res = await fetch(`${PB}/api/collections/closeout_requirements/records`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...lcAuth.header() },
           body: JSON.stringify({
             project: this.projectId, tag: this.sel.tagId,
             req_type: this.sel.type, description: this.addDesc,
@@ -335,7 +344,8 @@ function closeoutPage() {
     // Refresh just the requirements; keep the selection in place.
     async reload() {
       const f = encodeURIComponent(`project='${this.projectId}'`);
-      const rRes = await fetch(`${PB}/api/collections/closeout_requirements/records?filter=(${f})&perPage=1000`);
+      const rRes = await fetch(`${PB}/api/collections/closeout_requirements/records?filter=(${f})&perPage=1000`,
+                               { headers: { ...lcAuth.header() } });
       this.reqs = (await rRes.json()).items;
     },
   };

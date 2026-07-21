@@ -19,6 +19,7 @@
   locally: zero external requests at runtime.
 -->
 <link rel="stylesheet" href="/app.css">
+<script defer src="/lc-auth.js"></script>
 <script defer src="/vendor/alpine.min.js"></script>
 </head>
 <body>
@@ -523,7 +524,14 @@
            warranty dispute is actually about. -->
       <h2 class="section">Warranty</h2>
 
-      <template x-if="!warranties.length">
+      <!-- Signed out, we did not read this data and must not imply it is empty
+           (ADR 0011 + the ADR 0007 honesty doctrine). Two distinct states. -->
+      <template x-if="!isAuthed">
+        <p class="empty">Warranty records require sign-in.
+          <a class="link" :href="'/login.html?next=' + encodeURIComponent(location.pathname + location.search)">Sign in</a>
+          to see whether this equipment is under warranty.</p>
+      </template>
+      <template x-if="isAuthed && !warranties.length">
         <p class="empty">No warranty recorded for this equipment.</p>
       </template>
 
@@ -596,7 +604,10 @@
            advances on the project's closeout dashboard, where every change
            also lands in the append-only closeout_log. -->
       <h2 class="section">Closeout deliverables</h2>
-      <template x-if="!reqs.length">
+      <template x-if="!isAuthed">
+        <p class="empty">Closeout deliverables require sign-in.</p>
+      </template>
+      <template x-if="isAuthed && !reqs.length">
         <p class="empty">No closeout deliverables recorded for this tag.</p>
       </template>
       <template x-for="r in reqs" :key="r.id">
@@ -767,6 +778,11 @@ function tagPage() {
     closeNote: '',
     closeCheckId: '',      // optional closing_check evidence link (ADR 0004)
     passingChecks: [],     // passing checks on this tag, offered at close time
+
+    // Auth state (ADR 0011). The field tier is accountless, so this page never
+    // requires a session — this flag only decides whether the office sections
+    // are read/rendered and whether authenticated actions are offered.
+    isAuthed: false,
 
     // Warranty & closeout (ADR 0005)
     warranties: [],
@@ -1038,6 +1054,15 @@ function tagPage() {
         return;
       }
 
+      // SOFT gate (ADR 0011): this is THE field page — a scanned QR must render
+      // it with no account (hard constraint #1), so we never redirect here. We
+      // only learn whether a session exists, which decides two things: whether
+      // the office sections are read at all (see step 4), and whether the
+      // authenticated actions below are offered. refresh() is what detects an
+      // expired token, since reads cannot.
+      await lcAuth.refresh();
+      this.isAuthed = lcAuth.isAuthed();
+
       // LOTO groundwork runs before anything can fail: read the offline
       // outbox, tick the staleness clock, re-sync when the connection or
       // the tab comes back. The 4-minute re-fetch keeps a page that sits
@@ -1112,17 +1137,30 @@ function tagPage() {
             .map(t => PHASE_LABELS[t.phase] || t.phase);
         }
 
-        // 4. Warranty & closeout (ADR 0005) — three small parallel reads.
-        //    All filter on the tag relation; project scope is implicit.
-        const tf = encodeURIComponent(`tag='${this.tag.id}'`);
-        const [warRes, reqRes, clmRes] = await Promise.all([
-          fetch(`${PB}/api/collections/warranties/records?filter=(${tf})&sort=created&perPage=50`),
-          fetch(`${PB}/api/collections/closeout_requirements/records?filter=(${tf})&sort=req_type,created&perPage=200`),
-          fetch(`${PB}/api/collections/warranty_claims/records?filter=(${tf})&sort=-opened_at&perPage=200`),
-        ]);
-        this.warranties = (await warRes.json()).items || [];
-        this.reqs = (await reqRes.json()).items || [];
-        this.claims = (await clmRes.json()).items || [];
+        // 4. Warranty & closeout (ADR 0005) — three small parallel reads, and
+        //    all THREE collections are auth-gated (ADR 0011). This page is
+        //    field-facing and must render for an accountless scan, so we do not
+        //    gate the page — we skip these reads when signed out and say so in
+        //    the UI.
+        //
+        //    Why skip rather than just fire them: PocketBase answers a tokenless
+        //    read with 200 + an empty list, NOT 401. Firing them signed out
+        //    would fill these arrays with [] and the sections would print "No
+        //    warranty recorded for this equipment" to a plant operator standing
+        //    at a pump that is in fact under warranty. Same doctrine as the LOTO
+        //    banner (ADR 0007): never state an absence you cannot actually see.
+        if (this.isAuthed) {
+          const tf = encodeURIComponent(`tag='${this.tag.id}'`);
+          const A = { headers: { ...lcAuth.header() } };
+          const [warRes, reqRes, clmRes] = await Promise.all([
+            fetch(`${PB}/api/collections/warranties/records?filter=(${tf})&sort=created&perPage=50`, A),
+            fetch(`${PB}/api/collections/closeout_requirements/records?filter=(${tf})&sort=req_type,created&perPage=200`, A),
+            fetch(`${PB}/api/collections/warranty_claims/records?filter=(${tf})&sort=-opened_at&perPage=200`, A),
+          ]);
+          this.warranties = (await warRes.json()).items || [];
+          this.reqs = (await reqRes.json()).items || [];
+          this.claims = (await clmRes.json()).items || [];
+        }
 
         // 5. The check ledger (Phase 2b). Required phases are DERIVED from the
         //    template library (phases with a template for this tag_type — no
@@ -1521,9 +1559,12 @@ function tagPage() {
         if (this.closeCheckId) body.closing_check = this.closeCheckId;
         const res = await fetch(`${PB}/api/collections/punch_items/records/${p.id}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...lcAuth.header() },
           body: JSON.stringify(body),
         });
+        // Closing requires auth (ADR 0011 §3): FLAGGING a defect must never hit
+        // a wall, but closing one hides a blocker, so it carries attribution.
+        if (res.status === 401 || res.status === 403) { lcAuth.requireAuth(); return; }
         if (!res.ok) throw new Error('close rejected (' + res.status + ')');
         this.closingId = '';
         await this.load();
@@ -1557,9 +1598,10 @@ function tagPage() {
         };
         const res = await fetch(`${PB}/api/collections/warranties/records`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...lcAuth.header() },
           body: JSON.stringify(body),
         });
+        if (res.status === 401 || res.status === 403) { lcAuth.requireAuth(); return; }
         if (!res.ok) throw new Error('warranty rejected (' + res.status + ')');
         this.showWForm = false;
         this.wForm = { vendor_name: '', vendor_contact_name: '', vendor_phone: '',
@@ -1589,9 +1631,10 @@ function tagPage() {
         };
         const res = await fetch(`${PB}/api/collections/warranty_claims/records`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...lcAuth.header() },
           body: JSON.stringify(body),
         });
+        if (res.status === 401 || res.status === 403) { lcAuth.requireAuth(); return; }
         if (!res.ok) throw new Error('claim rejected (' + res.status + ')');
         this.showClaimForm = false; this.claimDesc = '';
         await this.load();
@@ -1609,11 +1652,12 @@ function tagPage() {
         // (updateRule: closed_at = '') rejects this on a closed claim.
         const res = await fetch(`${PB}/api/collections/warranty_claims/records/${c.id}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...lcAuth.header() },
           body: JSON.stringify({
             vendor_notified_date: new Date().toISOString().replace('T', ' ').slice(0, 19),
           }),
         });
+        if (res.status === 401 || res.status === 403) { lcAuth.requireAuth(); return; }
         if (!res.ok) throw new Error('update rejected (' + res.status + ')');
         await this.load();
       } catch (err) {
@@ -1632,7 +1676,7 @@ function tagPage() {
         // Corrections after closure are new claims.
         const res = await fetch(`${PB}/api/collections/warranty_claims/records/${c.id}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...lcAuth.header() },
           body: JSON.stringify({
             resolution_note: this.claimResolution || '',
             closed_at: new Date().toISOString().replace('T', ' ').slice(0, 19),

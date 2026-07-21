@@ -14,13 +14,18 @@
   contractor's takeoff: address, station, account or parcel, customer
   name/phone, existing meter number, size, material.
 
-  PII note: customer_name and customer_phone are imported and stored, but the
-  preview below deliberately renders the name only (mapping proof) and never
-  the phone — and no page reachable without sign-in ever renders either
-  (CLAUDE.md PII rule). What you paste here stays in your browser until you
-  click Import.
+  PII note: customer_name and customer_phone are imported and stored, but NOT
+  on the service. They are split off per row and written to the auth-gated
+  `service_contacts` collection (ADR 0011 §4, migration 1789000020) — `services`
+  is structurally PII-free, so there is no column there to leak. The preview
+  below deliberately renders the name only (mapping proof) and never the phone,
+  and no page reachable without sign-in ever renders either (CLAUDE.md PII
+  rule). What you paste here stays in your browser until you click Import.
+
+  This page therefore requires sign-in: it writes services AND person data.
 -->
 <link rel="stylesheet" href="/app.css">
+<script defer src="/lc-auth.js"></script>
 <script defer src="/vendor/alpine.min.js"></script>
 <style>
   table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
@@ -109,6 +114,10 @@
       <div class="flash">✓ Done</div>
       <ul class="result" style="margin-top:12px; padding-left:18px">
         <li><strong x-text="result.created"></strong> services created</li>
+        <!-- Reported separately from services: the contact is a second record
+             in a different, auth-gated collection, so "40 services created"
+             must never be read as "40 customers imported". -->
+        <li><strong x-text="result.contacts"></strong> customer contacts saved (sign-in only, never public)</li>
         <li><strong x-text="result.duplicates"></strong> duplicates skipped (same address + station already in the project)</li>
         <li><strong x-text="result.blank"></strong> blank rows skipped</li>
         <li x-show="result.errors.length" style="color:var(--sev-a)">
@@ -169,6 +178,12 @@ function importServicesPage() {
     busy: false, progress: 0, result: null,
 
     async load() {
+      // Gate before anything is pasted: this page writes `services` (auth) and
+      // `service_contacts` (auth, and it is PII). Failing at Import time — after
+      // someone has pasted a district's customer export into the box — would be
+      // the worst moment to discover the session expired.
+      await lcAuth.refresh();
+      if (!lcAuth.requireAuth()) return;
       try {
         const res = await fetch(`${PB}/api/collections/projects/records?sort=name&perPage=200`);
         this.projects = (await res.json()).items;
@@ -259,18 +274,46 @@ function importServicesPage() {
 
     async doImport() {
       this.busy = true; this.progress = 0;
-      const res = { created: 0, duplicates: 0, blank: 0, errors: [] };
+      const res = { created: 0, contacts: 0, duplicates: 0, blank: 0, errors: [] };
       try {
         for (const r of this.rows) {
           this.progress++;
           try {
+            // TWO writes per row, because the PII lives in a different
+            // collection (ADR 0011 §4, migration 1789000020). `services` is
+            // structurally PII-free — customer_name/customer_phone are columns
+            // it no longer has — so they are split off here and POSTed to the
+            // auth-gated `service_contacts` instead. Sending them to /services
+            // would silently drop them on the floor.
+            const { customer_name, customer_phone, ...svc } = r;
+
             // The unique (project, address, station) index rejects re-imports
             // as HTTP 400 — counted as skipped, same pattern as tags.
             const cr = await fetch(`${PB}/api/collections/services/records`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ project: this.projectId, ...r }),
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...lcAuth.header() },
+              body: JSON.stringify({ project: this.projectId, ...svc }),
             });
-            if (cr.ok) { res.created++; }
+            if (cr.ok) {
+              res.created++;
+              // The contact record is one-to-one with the service and only
+              // written when the CSV actually carried a person. A failure here
+              // must not read as a failed service import — the service landed;
+              // report the contact separately so nobody assumes PII imported
+              // when it didn't.
+              if (customer_name || customer_phone) {
+                const svcRec = await cr.json();
+                const kr = await fetch(`${PB}/api/collections/service_contacts/records`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', ...lcAuth.header() },
+                  body: JSON.stringify({
+                    service: svcRec.id, customer_name, customer_phone,
+                  }),
+                });
+                if (kr.ok) res.contacts++;
+                else res.errors.push(`${r.address}: service imported, contact NOT saved (HTTP ${kr.status})`);
+              }
+            }
             else if (cr.status === 400) { res.duplicates++; }
             else { res.errors.push(`${r.address}: HTTP ${cr.status}`); }
           } catch (rowErr) {

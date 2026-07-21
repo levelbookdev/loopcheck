@@ -27,6 +27,7 @@
   job (ADR 0003). Open as: readiness.html?project={projectId}
 -->
 <link rel="stylesheet" href="/app.css">
+<script defer src="/lc-auth.js"></script>
 <script defer src="/vendor/alpine.min.js"></script>
 <style>
   body { max-width: 1100px; }   /* the matrix needs room */
@@ -287,6 +288,14 @@ function readinessPage() {
         this.errorMsg = 'No project id in the URL (open as /readiness.html?project=…).';
         return;
       }
+      // Office page (ADR 0011): the readiness matrix folds in
+      // `closeout_requirements`, which is auth-gated. A tokenless read of it
+      // returns 200 + an empty list (never 401), so a signed-out load would
+      // quietly show every system as having no closeout requirements — a
+      // readiness board that is wrong in the optimistic direction. Gate before
+      // reading, and carry the token on that read.
+      await lcAuth.refresh();
+      if (!lcAuth.requireAuth()) return;
       try {
         const pRes = await fetch(`${PB}/api/collections/projects/records/${this.projectId}`);
         if (!pRes.ok) throw new Error('project not found (' + pRes.status + ')');
@@ -301,7 +310,8 @@ function readinessPage() {
         const [sRes, tRes, rRes, ckRes, tplRes] = await Promise.all([
           fetch(`${PB}/api/collections/systems/records?filter=(${f})&sort=startup_sequence,number&perPage=500`),
           fetch(`${PB}/api/collections/tags/records?filter=(${f})&sort=tag_number&perPage=1000&fields=id,tag_number,system,description,tag_type,phases_na`),
-          fetch(`${PB}/api/collections/closeout_requirements/records?filter=(${f})&perPage=2000`),
+          fetch(`${PB}/api/collections/closeout_requirements/records?filter=(${f})&perPage=2000`,
+                { headers: { ...lcAuth.header() } }),
           fetch(`${PB}/api/collections/checks/records?filter=(${ckF})&perPage=2000&fields=tag,phase,result,performed_at,created`),
           fetch(`${PB}/api/collections/checklist_templates/records?filter=(${tplF})&perPage=200&fields=tag_type,phase`),
         ]);
