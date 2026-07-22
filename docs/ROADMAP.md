@@ -1,291 +1,349 @@
 # LoopCheck — Roadmap
 
-What's built, what's next, and where the line between free and paid sits.
-Companion to [ARCHITECTURE.md](../ARCHITECTURE.md) (how it's built) and
-[CLAUDE.md](../CLAUDE.md) (the constraints). Dates are intentionally absent —
-this is a sequence, not a schedule. The maintainer builds this around a
-full-time construction job; sequence is the honest promise.
+What's shipped, what's next, and where the line between free and paid sits.
+Companion to [ARCHITECTURE.md](../ARCHITECTURE.md) (how it's built),
+[CLAUDE.md](../CLAUDE.md) (the constraints), and
+[DECISIONS.md](DECISIONS.md) (why the sequence is what it is). Dates are
+intentionally absent — this is a sequence, not a schedule. The maintainer builds
+this around a full-time construction job; sequence is the honest promise.
 
-## The one-sentence strategy
+Milestones are named by goal and mapped to a semver tag ([DECISIONS.md D1](DECISIONS.md#d1--milestone-structure-and-version-mapping)).
+The executable, self-contained tasks for the **current** milestone live in
+[`docs/tasks/`](tasks/); later milestones are defined here and broken into tasks
+when the prior milestone closes (the roadmap-maintenance workflow in
+`CLAUDE.md`).
 
-The field tier — scan, see status, flag punch items, log checks — is AGPL and
-free forever; office deliverables *derived from* that ledger (compiled
-turnover packages, notifications, dashboards) are the future paid tier, built
-as a separate sidecar application on the public API, never inside this repo.
+## Vision
 
-## Phase 0 — housekeeping (before Phase 2 work starts)
+LoopCheck is a startup & commissioning checkout tracker for water/wastewater and
+heavy-civil construction. Every piece of plant equipment already wears a P&ID tag
+(PMP-3101, FIT-2205, MOV-4410). LoopCheck puts a QR code on that tag so the
+person standing in front of it — a laborer with a stock camera app, no account,
+no training — can see exactly where that equipment stands in checkout, log the
+next check, or flag a punch item. It answers three questions and refuses to be
+anything else: what checks has this equipment passed and what remains; what punch
+items are blocking this system; and can we prove it, with signed, timestamped,
+immutable records, to the engineer of record, the owner, or a dispute.
 
-- [x] **Reconcile `pb_migrations/` seed to `seed/`** — done 2026-07-09: enum
-      renames, the fourth response type, `unit` / `confirm_per_spec` fields
-      landed; the seed migration is now a loader reading `seed/` directly, and
-      the required-phases map is derived from the template library
-      (ARCHITECTURE.md §9 records the mechanics).
-- [x] **Adopt the core/premium boundary formally** — done 2026-07-09:
-      [ADR 0003](adr/0003-core-premium-sidecar-boundary.md) (sidecar on the
-      public REST API, ported from TrenchNote's ADR 0011) and the
-      [API contract](API.md). Premium talks to PocketBase's REST API like
-      any third party, no private doors, capabilities premium needs land in
-      core first.
-- [x] **CONTRIBUTING.md with the CLA/DCO requirement** — done 2026-07-09,
-      recorded before the first outside patch, same reasoning as
-      TrenchNote's.
-- [x] Small schema additions that later phases silently depend on — done
-      2026-07-09 for the capture-side set (Migration A, ADR 0002):
-      `tags.area` + five more instrument-index fields,
-      `systems.planned_startup`, witness-required flags. Punch-to-check
-      linkage and the `test_equipment` registry are **Migration B**, which
-      waits for Phase 0 review and lands with Phase 2 (see
-      [DATA_MODEL_PLAN.md](DATA_MODEL_PLAN.md)).
+A hyper-focused tool beats a platform here because the value is trust, and trust
+comes from constraints a platform cannot keep: append-only records, derived
+(never stored) status, no forms designer, a no-install field tier that runs on a
+$40 Android and a Raspberry Pi. Every feature is measured against those walls
+(`CLAUDE.md`). The moment the tool tries to be an ERP, a scheduler, or a
+document-management suite, it stops being trustworthy at the one thing it does.
 
-## Phase 2 — check execution (the ledger goes live) — built
+The open-core boundary is load-bearing, not a business afterthought. The **field
+tier** — scan, see status, flag punch items, log checks, and export the ledger
+(CSV, and eventually a free structured manifest) — is AGPLv3 and free forever.
+The future **paid tier** is a separate sidecar application (`bindery-*`) that
+consumes the same public API any third party could, and compiles *derived* office
+deliverables (the hyperlinked turnover binder, notifications, portfolio
+dashboards). Paid software can never gate, degrade, or be required for any field
+workflow, and any schema the paid tier needs lands here, AGPL, for everyone,
+first ([ADR 0003](adr/0003-core-premium-sidecar-boundary.md)).
 
-The core promise, closed: a tech standing at the equipment logs a checklist
-run from the tag page, and the tag page reads the ledger back.
+---
 
-- [x] Check-execution UI (`check.html`): template → answered line items →
-      append-only `checks` + `check_items`, derived result, frozen prompts /
-      witness / test-equipment note, punch evidence links (ADR 0004).
-- [x] Tag status derived from the ledger against the required-phases map
-      (any pass wins — same rule as service cutover standing).
-- [x] Check history on the tag page; printable single-check view
-      (`check_view.html`) rendering the frozen record.
-- [x] Free per-tag CSV export — client-side, the whole ledger back out. A
-      crew that can log a check can always get its record back out.
+## Shipped (the product today)
 
-## Warranty & closeout module — built
+Feature-broad and working; never yet tagged, hardened, or validated. A fresh
+database from committed migrations has **24 application collections** plus
+PocketBase's `users`. Authoritative descriptions live in `ARCHITECTURE.md`;
+this is the index.
 
-Landed alongside Phase 2 ([ADR 0005](adr/0005-warranty-closeout-clock-start-provenance.md))
-because the closeout spreadsheet dies the day the PM rolls off — and the
-same QR that carried a tag through checkout should answer, for the rest of
-the plant's life: *is this under warranty, who do I call, where are the
-spares?* First LoopCheck surface aimed at the owner/operator as much as
-the contractor.
+- **Core checkout ledger (Phases 1–2).** Projects → systems → tags; CSV import;
+  QR labels; append-only check execution (`check.html`) with derived results,
+  frozen prompts/witness/test-equipment copies, and punch evidence links
+  ([ADR 0004](adr/0004-test-equipment-and-punch-evidence-links.md)); derived
+  checkout standing and check history on the tag page; printable single-check
+  view; free per-tag ledger CSV export.
+- **Warranty & Closeout** ([ADR 0005](adr/0005-warranty-closeout-clock-start-provenance.md)) —
+  derived warranty end dates, closeout dashboard, warranty timeline, closeout
+  package print view, CSV import.
+- **Instrument Calibration** ([ADR 0016](adr/0016-purpose-built-instrument-calibration-records.md)) —
+  `test_standards` registry with certificate provenance; append-only
+  `calibrations` + `calibration_points`; as-found/as-left; offline outbox;
+  derived due badges.
+- **Service Cutover Tracker** ([ADR 0006](adr/0006-service-connections-third-subject.md)) —
+  first non-equipment subject; `/s/{id}` page, cutover board, batch door-hanger
+  notice mode, CSV import, meter-box QR labels; customer PII isolated in
+  auth-gated `service_contacts` ([ADR 0011](adr/0011-auth-lockdown.md)).
+  **Semantics frozen** ([DECISIONS.md D9](DECISIONS.md#d9--service-cutover-stays-in-loopcheck-semantics-frozen)).
+- **LOTO Status Board** ([ADR 0007](adr/0007-loto-visibility-staleness-asymmetry.md)) —
+  append-only apply/release, derived lockout, staleness asymmetry, no green
+  state. A visibility layer, never part of the energy-control decision. Free
+  permanently — safety visibility is never paywalled.
+- **Signatures & Turnover** ([ADR 0010](adr/0010-signatures-and-turnover-package.md), **Proposed/frozen** — [DECISIONS.md D6](DECISIONS.md#d6--adr-0010-signatures--turnover-stays-proposed-and-frozen)) —
+  server-built frozen turnover snapshot + content hash, `sign.html`,
+  `turnover.html`, shared `lc-auth.js`/`login.html`. Implemented but not
+  formally accepted; no further work this cycle.
+- **Selective auth + PII split** ([ADR 0011](adr/0011-auth-lockdown.md), **Accepted**) —
+  public scan/reads and the deliberate accountless flag/check/LOTO/calibration
+  creates survive; office writes and PII reads require an account; 70-assertion
+  smoke test asserts the matrix across guest/user/superuser.
 
-- [x] Four collections: `warranties` (basis + trigger date + duration —
-      the end date is derived, never stored), `closeout_requirements`
-      (workflow state), `closeout_log` (append-only trail behind it),
-      `warranty_claims` (close-once ledger).
-- [x] Tag-page section: derived warranty badge, tap-to-call vendor,
-      deliverables checklist, open/close claims at the equipment.
-- [x] Closeout dashboard (tags × requirement types, completion % by
-      system), warranty timeline (soonest expiration first, ≤90 days
-      flagged), print-friendly Warranty Log & Closeout Package.
-- [x] CSV import mode for migrating an existing closeout spreadsheet.
-- **No expiry alerts in core, by design**: an alert is a derivation of
-  facts everyone already has (`clock_start_date`, `duration_months`,
-  today). Email/notification alerts are a future **hosted-tier** feature;
-  the free answer is the timeline page. Same boundary as the compiled
-  PDF package — the print-friendly HTML view is free, the compiled,
-  hyperlinked PDF deliverable ships with the paid deliverables phase.
+**Shipped schema without UI (deliberately parked, not roadmap items):** segment
+acceptance (owned by MainLine — [D10](DECISIONS.md#d10--segment-acceptance-is-owned-by-mainline-correction-of-record)),
+open→resolve + tank leak test ([D8](DECISIONS.md#d8--openresolve-and-tank-leak-test-uis-are-parked)),
+equipment preservation ([ADR 0015](adr/0015-stored-equipment-preservation-log.md)) and
+vendor field service visits ([ADR 0017](adr/0017-vendor-field-service-reports.md))
+([D7](DECISIONS.md#d7--preservation-adr-0015-and-vendor-visits-adr-0017-uis-are-parked)).
 
-## Instrument Calibration Records — built
+---
 
-Purpose-built rather than forced through the flat checklist engine
-([ADR 0016](adr/0016-purpose-built-instrument-calibration-records.md)): a loop
-check proves the signal path; calibration proves the instrument reads true and
-must preserve the paired as-found/as-left values plus the test standard's own
-certificate provenance.
+## M1 — Harden & Reconcile → **v0.9.0** (current milestone)
 
-- [x] Editable `test_standards` registry with certificate attachments and a
-      fixed 14-day expiring-soon highlight.
-- [x] Append-only `calibrations` + `calibration_points`, saved atomically with
-      frozen standard identity/cert due date and idempotent offline retry.
-- [x] An expired standard warns loudly but never blocks capture; the server
-      freezes `standard_expired_at_use=true`, rendered red in tag history and
-      the project board.
-- [x] Phone capture with five-point flow and three-point level/pressure
-      defaults, durable offline outbox, paired as-found/as-left entry, and an
-      optional certificate/report attachment.
-- [x] Instrument-only tag badge (current / due within 30 days / overdue / never)
-      and overdue-first project view. `next_due` is derived from performed date
-      + interval months, never stored.
-- **Open-core boundary:** capture, badges, registry, history, attachments, and
-  project due view stay free. The formatted calibration-sheet section of a
-  compiled turnover-package PDF belongs to the paid deliverables sidecar; all
-  source facts remain available through core.
+**Goal.** Make the existing breadth trustworthy enough to deploy on a real job:
+the tests prove the invariants, the docs tell one truth, and a clean install is
+validated — all gated by CI. No new features
+([DECISIONS.md D2](DECISIONS.md#d2--trust-before-features-m1-comes-first)).
 
-## Service Cutover Tracker — built
+**In scope**
+- Reconcile all docs to a single source of truth: LineCheck→MainLine sweep,
+  collection-count truth (24), honest offline/topology labeling, stale
+  `TODO(auth)` cleanup, `AGENTS.md` reduced to a pointer.
+- Expand `scripts/smoke_test.sh` to cover the self-documented gaps (segments
+  existence, tank, open→resolve) and the newer collections (calibrations,
+  service_visits).
+- Add a headless-browser smoke test of the critical field path (scan tag → log
+  check → flag punch → LOTO), dev-only tooling.
+- CI: GitHub Actions running the suites, plus a hardened local pre-push gate.
+- Deploy validation on an ARM cloud VM (clean install + seed + backup/restore).
+- Release plumbing: reconcile the CHANGELOG, tag **v0.9.0**, and finish the auth
+  effort's checkpoint 6 (remind the maintainer to drop the temporary VPS
+  basic_auth gate; delete `SESSION-NOTES.md`).
 
-Landed alongside Phase 2 ([ADR 0006](adr/0006-service-connections-third-subject.md)):
-on a waterline replacement job the schedule and the PR risk live in the
-services, not the pipe, and "can we prove customer N was noticed before we
-shut their water off" is a dispute that a timestamped, photographed
-door-hanger log ends. First non-equipment check subject — the deliberate
-pilot for Phase 5 locations and Phase 6 segments.
+**Out of scope**
+- Any new feature or new collection. Phase 4, the Punch List report, and Phase 5
+  all wait for M2+.
+- The formal API v1 version bump (that is M3 — [D12](DECISIONS.md#d12--api-v1-reconciliation--version-bump-sequenced-to-m3-v10)).
+  M1 only makes the *documentation* of the current collection set truthful.
+- Accepting ADR 0010, building any parked schema's UI, or a general offline
+  layer.
 
-- [x] `services` collection; checks and punch items take a service as their
-      subject (exactly-one rule extended server-side); six service phases
-      seeded as `subject_kind='service'` templates from
-      `seed/service_templates.json`.
-- [x] Service page at `/s/{id}` (derived phase standing, check ledger,
-      punch flow); cutover board ordered by station with derived phase
-      chips and the stuck-phase / open-punch / "noticed but not tied over
-      > N days" filters; print-friendly board CSS.
-- [x] Service CSV import (address/station/account/customer/meter/size,
-      forgiving synonyms, duplicate-safe re-import).
-- [x] Batch notice mode: walk the block, one notice check per service,
-      each with its own door-hanger photo; per-row retry keeps a dead
-      spot from losing anything.
-- [x] Optional meter-box QR labels on the existing label sheet.
-- **PII rule**: customer name/phone never render on public pages and never ride
-  in URLs or QR codes. Migration `1789000020` moved them into auth-gated
-  `service_contacts` and removed them from public `services`; protection is now
-  structural rather than a `fields=` convention. The service importer/client
-  auth reconciliation remains unfinished at the current snapshot.
-- **Paid-tier boundary**: the compiled district-facing **Cutover Status
-  Report** (per-service status, outage durations, notice-evidence index)
-  and any customer-notification automation are sidecar deliverables; the
-  free tier keeps the full field workflow and the print-friendly board.
-- **Future work, recorded honestly**: a true offline queue for the field
-  tier (batch notice today holds state client-side and retries per row —
-  resilient to dead spots, but not a queue that survives closing the tab).
+**Definition of done (testable)**
+- [ ] `grep -ri "linecheck" docs/ *.md` returns only historical/superseded
+      references explicitly labeled as such (ADR 0014's own record); no doc names
+      LineCheck as the *current or future owner* of any scope.
+- [ ] Every doc that states a collection count states **24** (application
+      collections); none says 16 or 18 as the current total.
+- [ ] `scripts/smoke_test.sh` passes with new assertions for: `segments` in the
+      existence loop, a tank leak-test seed/workflow assertion, and an
+      open→resolve behavior assertion; run count is documented in the script
+      header and matches actual passes.
+- [ ] A browser smoke test exists under `scripts/` and passes headless against a
+      freshly seeded instance, exercising the critical field path; it is
+      git-ignored dev tooling and adds nothing to `pb_public/`.
+- [ ] A GitHub Actions workflow runs both suites on push/PR and is green; the
+      pre-push hook runs the same gate locally.
+- [ ] `docs/DEPLOY.md` contains a completed ARM-VM validation record (clean
+      install, migrations+seed applied, backup/restore verified) with the
+      topology honestly labeled (LAN/single-VPS supported; Pi/replica
+      unvalidated).
+- [ ] Repo tagged `v0.9.0` with release notes; `SESSION-NOTES.md` deleted in the
+      release commit; a `CHANGELOG.md` exists covering the release.
 
-## LOTO Status Board — built
+Tasks: [`010`](tasks/010-docs-reconcile-stale-references.md) ·
+[`020`](tasks/020-docs-reconcile-status-and-contract-truth.md) ·
+[`030`](tasks/030-expand-smoke-test.md) ·
+[`040`](tasks/040-browser-ui-smoke-test.md) ·
+[`050`](tasks/050-ci-pipeline.md) ·
+[`060`](tasks/060-deploy-validation-arm-vm.md) ·
+[`070`](tasks/070-release-v0.9.0.md)
 
-Landed alongside Phase 2 ([ADR 0007](adr/0007-loto-visibility-staleness-asymmetry.md)):
-during commissioning the plant is half-live — some systems energized, some
-locked out, multiple trades working around each other — and the QR code
-already on every piece of equipment should answer, before anything else,
-*is this locked out, by whom, since when*. Scan the thing before you touch
-the thing.
+---
 
-- [x] `loto_events` — append-only apply/release ledger, same immutability
-      enforcement as checks. Lockout state is derived (an apply with no
-      release referencing it); group LOTO shows every active lock.
-- [x] Tag-page banner above everything else; apply flow that demands the
-      photo of the hung lock (atomic, server-enforced); release flow that
-      demands picking the lock and justifying a holder-mismatch release.
-- [x] Project board: active locks by system, oldest first, lock age
-      visible (old locks are how equipment gets forgotten in a half-state).
-- [x] The staleness asymmetry (the ADR's core): event logging queues
-      offline and syncs later; displayed status never pretends — amber
-      "STATUS MAY BE STALE" past 10 minutes, "No locks recorded as of
-      {time}" instead of any affirmative all-clear, no green state.
-- **Never part of the energy-control decision**: no interlocks, no release
-  permissions, no "safe to work" indicators — rejected permanently
-  (ARCHITECTURE.md §7). The app records; the written procedure decides.
-- **Free tier permanently — safety visibility is never paywalled.**
-  Future hosted-tier work is derivation on top: notification digests
-  ("lock active > 7 days on RAS-PMP-2"), cross-project boards.
+## M2 — Shutdown Runbooks + Punch List → **v0.10.0**
 
-## Phase 3 — signatures and turnover (built; ADR 0010 pending formal acceptance)
+**Goal.** Ship the first new feature since hardening — the Phase 4 tie-in
+shutdown runbook execution UI — plus the on-mission Punch List report.
 
-The implementation is committed and review-hardened; ADR 0010 stays **Proposed**
-only on the formal contract decision (the two collections sit as `delta` in
-[API.md](API.md)) and auth-lockdown finalization (ADR 0011).
+**In scope**
+- **Phase 4 shutdown runbooks.** The tie-in shutdown runbook in
+  `seed/shutdown_runbook_tie_in.json` (offsets, hold points, roles) gets real
+  `shutdowns` / `shutdown_steps` / roles collections and an execution UI. **UI
+  bar (decided):** zero navigation taps, glove-sized touch targets — used at
+  2 AM, in rain, under schedule pressure.
+- **Punch List report (idea B1).** A project/system roll-up of A/B/C punch items
+  as a print-friendly board and a free CSV, serving "what punch items are
+  blocking this system?" ([D17](DECISIONS.md#d17--punch-list-report-idea-b1-adopted-into-m2-pending-gap-confirmation)).
+  Free tier, never paywalled.
 
-- [x] `turnover_packages` + `signatures` — two append-only collections. A
-      package is a **frozen snapshot** (manifest + standing verdict +
-      `sha256-canon-v1` content hash), assembled **server-side** in `pb_hooks`
-      (`POST /api/turnover/build`) so a client can't forge the manifest; a
-      re-issue supersedes the prior package for its scope.
-- [x] `sign.html` — auth-gated signing of a package or a check: typed name is
-      the signature, optional drawn mark, per-role frozen statement, and the
-      "not a qualified e-signature" caveat (review C4).
-- [x] `turnover.html` — the free print-friendly board: build packages, current
-      vs superseded marking, per-package signatures + outstanding roles + drift
-      warning, and the **ready-to-witness** list (checks with `witness_required`
-      and no witness signature yet — review C5).
-- [x] `lc-auth.js` + `login.html` — the shared auth helper the signing flow
-      needs (ADR 0011 §6): token + `auth-refresh`, `?next=` preserved.
-- The *compiled* multi-hundred-tag hyperlinked turnover binder stays the
-  flagship **paid** deliverable; the free tier prints the HTML board.
-- **Still open:** the broader ADR 0011 frontend re-plumb of the existing office
-  pages, and the formal API-contract version bump for the two collections.
+**Out of scope**
+- Any energy-control decision support (interlocks, release permissions, "safe to
+  work" indicators) — permanently rejected (`ARCHITECTURE.md` rejected list).
+- Loading the shutdown runbook into the flat-checklist engine — it needs its own
+  collections (offsets/hold points/roles can't live in a flat checklist).
+- Paid deliverables (a compiled shutdown report is sidecar work).
 
-## Phase 4 — shutdown runbooks
+**Definition of done (testable)**
+- [ ] An accepted ADR defines the shutdown collections and the append-only
+      execution model **before** the migration (the design task's output).
+- [ ] Migrations create the shutdown collections; a fresh DB + smoke test pass.
+- [ ] An operator can execute the seeded tie-in runbook end to end from the UI,
+      producing append-only step records; executed steps are never edited.
+- [ ] The Punch List report renders print-friendly and exports CSV for a system
+      and a project, grouped by A/B/C severity with the fixed color language.
+- [ ] Docs updated (ARCHITECTURE, ROADMAP checkbox, landing page if
+      user-visible); tagged v0.10.0.
 
-Execution UI for the tie-in shutdown runbook already captured in `seed/`.
-UI bar (decided): zero navigation taps, glove-sized targets — used at 2 AM,
-in rain, under schedule pressure.
+**Task status.** Only the design/ADR task ([`080`](tasks/080-phase4-shutdown-runbook-design-adr.md))
+and the Punch List task ([`090`](tasks/090-punch-list-report.md)) are written
+now. The remaining Phase 4 **build** tasks are written after `080` is accepted
+(they depend on domain decisions deliberately not guessed here) — see the
+roadmap-maintenance workflow in `CLAUDE.md`.
 
-## Phase 5 — recurrence and location subjects
+---
 
-Compliance logs (chlorine residuals, SWPPP walks) from the seeded templates.
+## M3 — Stranger-Ready → **v1.0.0**
 
-## Phase 6 — segment acceptance (schema/library built; execution and ownership open)
+**Goal.** Close the gap between "the maintainer can run it" and "a stranger can
+adopt and self-host it" ([DECISIONS.md D19](DECISIONS.md#d19--v10-stranger-ready-bar)).
 
-The additive foundation has landed: `segments` is the fourth check subject,
-the pressure/gravity phase enums and templates are seeded, and pending checks
-can resolve through a later linked check (`1789000023`–`1789000025`). The
-segment import, page, board, QR route, open→resolve execution flow, and
-acceptance package are **not built**.
+**In scope**
+- **Onboarding docs.** A getting-started path a stranger follows unaided:
+  install → seed → import their equipment → first check, with screenshots.
+- **Stable release discipline.** Semver tags, `CHANGELOG.md` maintained, a
+  documented upgrade/migration path, and the **API v1 contract reconciled and
+  version-bumped** for the added collections and auth/PII semantics
+  ([D12](DECISIONS.md#d12--api-v1-reconciliation--version-bump-sequenced-to-m3-v10);
+  open-questions #7).
+- **Raspberry Pi validation.** The hard-constraint promise proven on real Pi
+  hardware and recorded in `DEPLOY.md` (the acceptance checklist already in this
+  file's Pi track).
+- **Accessibility + polish.** Field pages verified on a cheap Android; an a11y
+  pass; an offline-behavior honesty audit across all pages (not just LOTO).
 
-This scope now overlaps the local LineCheck repository's explicit pressure-test
-and linear-acceptance mission. Do not continue LoopCheck segment UI work until
-the maintainer decides future ownership and migration strategy; see
-[`product-boundary.md`](product-boundary.md) and
-[`overlap-and-migrations.md`](overlap-and-migrations.md).
+**Out of scope**
+- New feature modules (Phase 5 and parked scope are post-1.0).
+- The paid sidecar existing (v1.0 is the *free core* being stranger-ready).
 
-Deliverable: a per-segment acceptance package (hydro + disinfection +
-passing bac-t = segment accepted), generated by the same PDF engine.
-Deeply W/WW-specific with near-zero competition; ships as a module of the
-commissioning tool, not a standalone product.
+**Definition of done (testable)**
+- [ ] A new operator can go from `git clone` to a logged check following only the
+      onboarding doc, verified by a fresh run.
+- [ ] `docs/API.md` is a versioned contract with no "delta pending" collections;
+      the version bump is recorded in an ADR.
+- [ ] `DEPLOY.md` contains a real Pi validation record (model + OS) satisfying
+      the Pi acceptance checklist.
+- [ ] An accessibility/offline-honesty audit is recorded with issues fixed or
+      ticketed; `CHANGELOG.md` and a `v1.0.0` tag exist.
 
-Design input recorded on the append-only constraint (CLAUDE.md): a bac-t
-sample is the one record whose result is pending an external party — the
-lab result arrives as an appended event, never an edit, and a failed
-sample loops back to re-flush/re-chlorinate as new records.
+---
 
-## Raspberry Pi validation (parallel track — deferred 2026-07, hardware shortage)
+## Post-1.0 — planned modules
 
-Self-hosting on a Pi in the commissioning trailer is a core promise (hard
-constraint #3: "must run well on a Raspberry Pi server"), and it stays one.
-The maintainer's Pi order is caught in a supply shortage (weeks out), so the
-**hardware validation** is deferred — deliberately, and without anxiety,
-because the Pi was never a build dependency:
+Defined, not yet scheduled; broken into tasks when reached.
 
-- PocketBase ships official `linux/armv7` and `linux/arm64` binaries;
-  `scripts/setup.sh` has detected both architectures since the first commit.
-- Everything that makes a Pi viable is enforced by construction, not by
-  testing: single binary, embedded SQLite, kilobyte pages, no build step,
-  no CDN. The hardware test confirms the bet; it does not place it.
+- **Phase 5 — recurrence & location subjects.** Compliance logs (chlorine
+  residuals, SWPPP walks) from the already-seeded templates; recurrence cadence
+  schema already shipped. Location becomes a check subject the way service did.
+- **Free JSON turnover manifest (idea B5).** The open-core keystone: a complete
+  free structured export of a turnover snapshot so the paid PDF is
+  presentation-only. Coupled to unfreezing ADR 0010
+  ([D6](DECISIONS.md#d6--adr-0010-signatures--turnover-stays-proposed-and-frozen),
+  [D18](DECISIONS.md#d18--parked-and-rejected-ideas-do-not-re-propose-without-new-evidence)).
 
-**Interim step (cheap, do before the Pi arrives):** run the acceptance list
-below on an ARM cloud VM (Hetzner CAX11 / AWS Graviton / Oracle free-tier
-Ampere). That exercises the one thing the x86 droplet cannot — the actual
-ARM binary path — for a few dollars.
+---
 
-**Acceptance criteria (the Pi test, one evening when hardware lands):**
+## Later / Ideas (parking lot)
 
-- [ ] Fresh Pi OS: `git clone` + `scripts/setup.sh` fetches the right
-      binary (test armv7 *and* arm64 userlands if practical).
-- [ ] First `serve`: all migrations + the seed library apply cleanly.
-- [ ] DEPLOY.md Option A followed **verbatim** (systemd unit); survives a
-      reboot and a pulled power cord.
-- [ ] Seeded demo (`scripts/seed_demo.sh`): tag page reachable from a phone
-      over LAN Wi-Fi in ~1 s; the 60-label QR sheet renders and prints.
-- [ ] A handful of simultaneous phone scans plus a check submission — no
-      SQLite lock trouble at trailer-crew concurrency.
-- [ ] Stop-copy-start backup per DEPLOY.md, restore verified on another box.
-- [ ] Update DEPLOY.md with anything the hardware teaches; note the tested
-      Pi model + OS in the doc.
+Not scheduled. Recorded so they aren't re-proposed as new; promote only on real
+demand or a new decision. Rationale for each is in
+[DECISIONS.md D7, D8, D18](DECISIONS.md).
 
-Until then, the $6 droplet remains the reference deployment and nothing
-else in this roadmap waits on this track.
+- **"Walk the system" batch-check mode (B2)** — batch the same check across a
+  system's tags. Revisit after M2 proves the glove-sized UI pattern.
+- **Field-tier offline app-shell / service worker (B3)** — rejected this cycle;
+  blocked on the offline-guarantee decision (open-questions #8). Honest
+  online-required labeling beats a half-built offline layer.
+- **Ledger-integrity / provenance view (B4)** — overlaps frozen hash work (ADR
+  0010); would pre-commit hash semantics.
+- **Equipment preservation UI (ADR 0015)** — parked; ownership vs TrenchNote
+  unresolved (open-questions #3).
+- **Vendor field service visit UI (ADR 0017)** — parked; schema frozen.
+- **open→resolve / tank leak-test UI (ADR 0012)** — parked; build on real demand.
+- **Cross-product handoff manifests / lifecycle events** — blocked on a portable
+  identity scheme (open-questions #4); `docs/ecosystem-contracts.md` stays
+  PROPOSED and non-binding.
 
-## Auth reconciliation (parallel track, before internet exposure)
-
-The selective backend lockdown and service-contact PII split have landed
-(`1789000019`/`1789000020`), even though ADR 0011 still says Proposed. The
-required next work is reconciliation, not a blanket lockdown: committed office
-pages must consistently authenticate, `segments` must receive the intended
-rule tier, the service importer must write protected contacts, and the smoke
-test must assert the full access matrix. Public field reads and the deliberate
-accountless check/punch-flag/LOTO paths remain load-bearing.
-
-## The paid tier (separate repository, sidecar)
-
-Bindery LoopCheck exists locally as a separate read-only sidecar with its own
-database and weekly readiness workflow. Further office-facing modules remain
-planned: notifications (including warranty-expiry alerts) and compiled
-deliverables (the turnover binder and compiled Warranty Log & Closeout
-Package). Per the boundary ADR, paid software can never
-gate, degrade, or be required for any field workflow; a LoopCheck instance
-with zero paid code present is the fully supported product; and any schema
-the paid tier needs lands *here*, AGPL, for everyone, first.
-
-## Explicitly not planned
+## Explicitly not planned (permanent)
 
 Forms designer / conditional checklists · stored status fields · npm, build
-steps, CDNs · vendor API integrations · being an ERP. See ARCHITECTURE.md §7.
+steps, CDNs in the app · vendor API integrations · being an ERP · any
+energy-control decision support in the LOTO module. See `ARCHITECTURE.md` §7
+(rejected ideas).
+
+---
+
+## Raspberry Pi validation (parallel track — deferred, hardware shortage)
+
+Self-hosting on a Pi in the commissioning trailer is hard constraint #3 and
+stays a core promise. The maintainer's Pi order is caught in a supply shortage,
+so **hardware validation** is deferred — deliberately, because the Pi was never a
+build dependency: PocketBase ships official `linux/armv7` and `linux/arm64`
+binaries, `scripts/setup.sh` detects both, and everything that makes a Pi viable
+(single binary, embedded SQLite, no build step, no CDN) is enforced by
+construction.
+
+**Interim (M1, cheap, doable now):** the ARM cloud-VM validation in task `060`
+exercises the actual ARM binary path for a few dollars.
+
+**Pi acceptance checklist (M3, one evening when hardware lands):**
+- [ ] Fresh Pi OS: `git clone` + `scripts/setup.sh` fetches the right binary
+      (armv7 *and* arm64 if practical).
+- [ ] First `serve`: all migrations + the seed library apply cleanly.
+- [ ] `DEPLOY.md` Option A (systemd) followed verbatim; survives reboot and a
+      pulled power cord.
+- [ ] Seeded demo reachable from a phone over LAN Wi-Fi in ~1 s; the QR label
+      sheet renders and prints.
+- [ ] Several simultaneous phone scans + a check submission — no SQLite lock
+      trouble at trailer-crew concurrency.
+- [ ] Stop-copy-start backup per `DEPLOY.md`, restore verified on another box.
+- [ ] `DEPLOY.md` updated with the tested Pi model + OS.
+
+---
+
+## Open questions
+
+The full architecture-decision backlog is [`open-questions.md`](open-questions.md).
+Status of each, per the 2026-07-21 planning session:
+
+| # | Question | Disposition |
+|---|---|---|
+| 1 | Service-cutover ownership | **Decided** — stays in LoopCheck, frozen ([D9](DECISIONS.md#d9--service-cutover-stays-in-loopcheck-semantics-frozen)) |
+| 2 | Continue Phase 6 segments? | **Decided** — no; MainLine owns ([D10](DECISIONS.md#d10--segment-acceptance-is-owned-by-mainline-correction-of-record)) |
+| 3 | Preservation ownership | **Open** — resolve boundary vs TrenchNote before any preservation UI ([D7](DECISIONS.md#d7--preservation-adr-0015-and-vendor-visits-adr-0017-uis-are-parked)) |
+| 4 | Portable identity scheme | **Deferred** — gate before first handoff ([D11](DECISIONS.md#d11--portable-identity-scheme-deferred)) |
+| 5 | Accept ADR 0010? | **Deferred** — stays Proposed/frozen ([D6](DECISIONS.md#d6--adr-0010-signatures--turnover-stays-proposed-and-frozen)) |
+| 6 | Auth access matrix | **Resolved** — ADR 0011 Accepted |
+| 7 | API v1 reconciliation | **Scheduled** — M3 ([D12](DECISIONS.md#d12--api-v1-reconciliation--version-bump-sequenced-to-m3-v10)) |
+| 8 | Offline guarantee | **Doc now, code deferred** ([D13](DECISIONS.md#d13--offline-document-guarantees-now-build-no-second-queue)) |
+| 9 | Min free turnover artifact | **Deferred** with #5; principle recorded (B5) |
+| 10 | Deployment topology | **Doc now** (label honestly), Pi validation M3 ([D14](DECISIONS.md#d14--deployment-topology-labeling)) |
+
+**Unresolved for the maintainer to answer eventually** (not blocking M1): #3
+(preservation ownership) and #4 (identity scheme) both need a maintainer/domain
+decision before the corresponding work can start; the roadmap parks that work
+until then.
+
+### Planning-session open questions (2026-07-21)
+
+Decisions I made with a reasonable default but that the maintainer may want to
+revisit — none block M1:
+
+1. **First tag = `v0.9.0`.** Chosen to match the version the auth effort already
+   proposed (SESSION-NOTES) and because the product is feature-broad. If you'd
+   rather the first public tag be `v1.0.0-rc` or `v0.1.0`, say so before task
+   `070`.
+2. **`AGENTS.md` kept as a thin pointer** (D5) rather than deleted. If you no
+   longer run Codex sessions at all, deleting it may be cleaner than maintaining
+   even a pointer.
+3. **Browser-test tooling defaults to Playwright (a Node dev dependency).** It is
+   dev-only and isolated (D16), but if you'd prefer to avoid any Node/npm in the
+   repo even for tests, task `040` says to stop and ask — flag it now and I'll
+   respec that task around a lighter tool (e.g. a curl-plus-DOM-scrape approach)
+   before it runs.
+4. **No `docs/ARCHITECTURE.md` created.** The root `ARCHITECTURE.md` is
+   authoritative and already includes a diagram (D4). If you specifically wanted
+   a separate high-level architecture page for newcomers, I can add one that
+   *links to* the root rather than duplicating it.

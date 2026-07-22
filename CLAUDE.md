@@ -310,3 +310,64 @@ task.
 Work task by task. After each task, stop and show the maintainer for review
 before moving on — especially anything touching the data model or the hard
 constraints above.
+
+## Roadmap, decisions, and the task queue
+
+The plan lives in three files. Read them before starting work:
+
+- **[docs/ROADMAP.md](docs/ROADMAP.md)** — the vision and the milestone sequence
+  (M1 Harden & Reconcile → M2 Shutdown Runbooks + Punch List → M3 Stranger-Ready,
+  then post-1.0 modules and a Later/Ideas parking lot). Milestones are named by
+  goal and mapped to a semver tag; the first tag is v0.9.0.
+- **[docs/DECISIONS.md](docs/DECISIONS.md)** — the roadmap/scope/sequencing/cut
+  decision log (`D`-numbered). It records *what we chose to build, in what order,
+  and what we deliberately are not building*, and cross-links the ADRs. Do not
+  relitigate a decision recorded here without new evidence.
+- **[docs/tasks/](docs/tasks/)** — one self-contained implementation prompt per
+  task, numbered to encode order, each with a `Status:` line
+  (`TODO | IN PROGRESS | DONE | BLOCKED (reason)`).
+
+Precedence when docs disagree: **the code is truth** (docs-as-code rule). Among
+docs, `CLAUDE.md` holds the constraints, `docs/adr/` holds structural decisions,
+`docs/DECISIONS.md` holds scope/sequencing decisions, `docs/ROADMAP.md` holds the
+sequence. There is **one** architecture document: the root `ARCHITECTURE.md`
+(never create a second one).
+
+### Execution workflow (a normal coding session)
+
+1. **Find the task.** Scan `docs/tasks/` status lines and pick the
+   **lowest-numbered task whose `Status:` is not `DONE`**. Respect `BLOCKED`
+   reasons — if the lowest is blocked, act on the block or move to the next
+   genuinely actionable task; do not silently skip a blocker.
+2. **Do exactly that task**, to its acceptance criteria, and **nothing more**.
+   Do not exceed its scope or "improve" things it tells you to leave alone.
+3. **If the task is ambiguous or conflicts with the code**, stop, describe the
+   conflict, and propose a task/roadmap edit — do not improvise around it.
+4. **Finish per the docs-as-code rule**: build and tests pass, docs updated,
+   then update the task's `Status:` line and tick any `docs/ROADMAP.md`
+   milestone checkboxes the task closes out.
+5. **Commit** authored as the maintainer (no AI-attribution trailer), with the
+   message the task suggests.
+
+### Roadmap-maintenance workflow (when a milestone's tasks are all DONE)
+
+When every task in the current milestone is `DONE`, the next session is a
+**planning session, not a coding session**:
+
+1. Re-read `docs/ROADMAP.md` and `docs/DECISIONS.md`.
+2. Break the next milestone into new numbered task files in `docs/tasks/` using
+   the exact template in `docs/tasks/README.md` (Status line, Context, Scope,
+   Specification, Acceptance criteria, Guardrails, Definition of done).
+3. Run a short ideation pass over the next milestone (new-feature, cut, and
+   integration ideas), **checked against `docs/DECISIONS.md`** so already-rejected
+   or parked ideas are not re-proposed as new.
+4. **Present the new tasks and ideas to the maintainer for approval before
+   writing the build tasks**, and only then resume coding sessions.
+
+Some milestones front-load a **design/ADR task** (e.g. Phase 4's shutdown
+runbooks — task `080`) precisely because their build tasks depend on domain
+decisions that must be interviewed from the maintainer, not guessed. Write those
+build tasks only after the design task's ADR is accepted.
+
+If you discover mid-task that the roadmap itself is wrong or incomplete, **stop,
+describe the conflict, and propose a roadmap edit** rather than improvising.
