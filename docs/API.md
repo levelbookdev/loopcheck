@@ -75,6 +75,16 @@ Field-level shapes are defined by the migrations in `pb_migrations/` and
 explained in [ARCHITECTURE.md](../ARCHITECTURE.md). Load-bearing semantics
 for API clients:
 
+- **Auth-refusal status codes are per-operation, not a uniform 401/403.** This
+  is standard PocketBase behavior worth stating because it trips up auth
+  probes: a rule-denied **list** returns `200` with an empty `items` array
+  (never 401), a denied **view** returns `404`, a denied **create** returns
+  `400`, and a denied **update/delete** returns `403` (or `404`). A client
+  detecting "am I still authenticated?" must therefore inspect the *data* on a
+  read, not the status — an expired token reads exactly like a guest. The core
+  frontend detects expiry via the `auth-refresh` endpoint for this reason
+  (ADR 0011 §6), and `scripts/smoke_test.sh` asserts denials on data presence
+  plus a paired positive, never on a bare status code.
 - **`checks`, `check_items`, `attachments`, `calibrations`,
   `calibration_points`, and `service_visits` are append-only**
   (ADR 0001, hard constraint #2). No client — premium, third-party, or
