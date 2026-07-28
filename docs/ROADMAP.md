@@ -122,7 +122,7 @@ validated — all gated by CI. No new features
   layer.
 
 **Definition of done (testable)**
-- [ ] `grep -ri "linecheck" docs/ *.md` returns only historical/superseded
+- [x] `grep -ri "linecheck" docs/ *.md` returns only historical/superseded
       references explicitly labeled as such (ADR 0014's own record); no doc names
       LineCheck as the *current or future owner* of any scope.
 - [ ] Every doc that states a collection count states **24** (application

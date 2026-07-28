@@ -21,7 +21,7 @@ flowchart LR
     LC --- E
     LC --- F
     LC --- H
-    LINE["LineCheck: linear acceptance authority"] --- E
+    LINE["MainLine: linear acceptance authority (future module)"] --- E
     LINE --- F
     LINE --- G
 ```
@@ -29,8 +29,14 @@ flowchart LR
 The overlapping boxes are deliberate lifecycle boundaries, not permission to
 duplicate authoritative facts. Installation means different things in each
 context: TrenchNote may record that a physical item left stock/was consumed;
-LoopCheck records whether installed plant equipment passed checkout; LineCheck
-records whether installed pipe/service work passed its acceptance sequence.
+LoopCheck records whether installed plant equipment passed checkout; MainLine
+would record whether installed pipe passed its acceptance sequence.
+
+**Service connections are LoopCheck's, permanently** — notice through
+restoration ([DECISIONS.md D9](DECISIONS.md#d9--service-cutover-stays-in-loopcheck-semantics-frozen)). Only segment/linear acceptance
+sits with MainLine, and there only as an unscheduled future module
+([D10](DECISIONS.md#d10--segment-acceptance-is-owned-by-mainline-correction-of-record));
+this scope was briefly LineCheck's, and LineCheck is archived.
 
 ## Stage ownership and evidence
 
@@ -41,22 +47,24 @@ records whether installed pipe/service work passed its acceptance sequence.
 | Stored and preserved | TrenchNote while custody/storage is the concern | Location/custodian movements and preservation inspections. | `asset.released_for_installation` with latest relevant evidence references. |
 | Released/issued/consumed | TrenchNote | Append-only movement/consumption event identifying job/destination or installation reference. | Project + asset/material external reference and release event id. |
 | Plant equipment installed | LoopCheck | Tag identity plus installation-phase check and punch evidence. | `plant_asset.installation_checked` for startup coordination. |
-| Linear infrastructure installed | LineCheck | Segment/service identity and installation/pre-test evidence defined by project requirements. | Test-ready lifecycle event. |
+| Linear infrastructure installed | MainLine (future module) | Segment identity and installation/pre-test evidence defined by project requirements. Service connections stay LoopCheck's. | Test-ready lifecycle event. |
 | Plant equipment checked out | LoopCheck | Append-only checks/items, test-equipment references, open blockers, derived phase standing. | `plant_asset.checkout_phase_passed`; consumers retain LoopCheck provenance. |
-| Pipeline/service tested | LineCheck | Pressure/gravity tests, readings, calculations, evidence, witnesses, locked snapshots. | `linear_subject.test_accepted` with method/version and evidence references. |
-| Started/placed in service | LoopCheck for plant systems; LineCheck for linear/service subjects | Domain-specific startup or clearance evidence. | An explicit event consumed by the neighboring system only when needed. |
-| Accepted | Producing domain core | Plant signoff in LoopCheck; segment/service acceptance in LineCheck. | Versioned acceptance event, never inferred by reading another database. |
-| Turned over | LoopCheck for plant assets/systems; LineCheck for linear packages | Frozen basic package/index in the core; compiled portfolio/binder may be paid. | Handoff manifest with source record/evidence references. |
+| Pipeline segment tested | MainLine (future module) | Pressure/gravity tests, readings, calculations, evidence, witnesses, locked snapshots. | `linear_subject.test_accepted` with method/version and evidence references. |
+| Started/placed in service | LoopCheck for plant systems and service connections; MainLine for pipeline segments | Domain-specific startup or clearance evidence. | An explicit event consumed by the neighboring system only when needed. |
+| Accepted | Producing domain core | Plant signoff and service cutover in LoopCheck; segment acceptance in MainLine. | Versioned acceptance event, never inferred by reading another database. |
+| Turned over | LoopCheck for plant assets/systems and services; MainLine for linear packages | Frozen basic package/index in the core; compiled portfolio/binder may be paid. | Handoff manifest with source record/evidence references. |
 
 ## Current deviations
 
-- **CURRENT:** LoopCheck owns and executes service cutover from notice through
-  restoration.
+- **CURRENT (settled, not a deviation):** LoopCheck owns and executes service
+  cutover from notice through restoration — permanently, per D9.
 - **CURRENT schema/library only:** LoopCheck contains `segments`, segment test
-  phases/templates, and open-to-resolve checks.
-- **CURRENT sibling direction:** LineCheck is pre-alpha but explicitly owns a
-  pressure-test segment vertical slice and plans flushing, disinfection,
-  sampling, clearance, and segment packages.
+  phases/templates, and open-to-resolve checks, frozen at maintenance-only with
+  no execution UI.
+- **FUTURE sibling direction:** MainLine would own segment testing and
+  acceptance (flushing, disinfection, sampling, clearance, segment packages) as
+  an unscheduled future module. Nothing is scheduled and no migration is
+  planned.
 - **UNKNOWN:** No versioned lifecycle-event or handoff-manifest exchange is
   implemented between the local product repositories.
 

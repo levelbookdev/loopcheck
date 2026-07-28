@@ -4,43 +4,31 @@ These are unresolved decisions, not implementation tasks. Recommendations are
 provisional and every row identifies the latest point at which delay remains
 safe.
 
-## 1. Which product owns service cutover?
+## 1. Which product owns service cutover? — **RESOLVED (2026-07-18)**
 
-- **Why it matters:** LoopCheck has a full implementation; the intended
-  ecosystem assigns linear service acceptance/restoration to LineCheck.
-- **Options:** keep permanently in LoopCheck; move future work to LineCheck
-  with legacy LoopCheck support; dual-write/share ownership.
-- **Current evidence:** ADR 0006 and current UI make LoopCheck authoritative
-  today; local LineCheck is pre-alpha and does not yet implement service
-  cutover.
-- **Recommendation:** LineCheck owns future records after feature parity and a
-  lossless migration; reject steady-state dual-write.
-- **Validate:** field workflow parity, PII, offline behavior, QR compatibility,
-  record/evidence reconciliation.
-- **Decision owner:** Maintainer/product owner for LoopCheck and LineCheck.
-- **Latest safe decision point:** before expanding LoopCheck service semantics
-  or designing the LineCheck service model.
+- **Resolution:** **LoopCheck, permanently**
+  ([DECISIONS.md D9](DECISIONS.md#d9--service-cutover-stays-in-loopcheck-semantics-frozen)). Service cutover — notice through
+  restoration — is not moving to any sibling. ADR 0006 and the shipped UI stay
+  authoritative, and LoopCheck may continue to evolve service semantics.
+- **Note on the earlier framing:** this question originally assumed linear
+  service acceptance would move to LineCheck. LineCheck is archived, and the
+  scope that did move (segment/linear acceptance only — see question 2) went to
+  MainLine. Service was never part of that move.
 
-## 2. Should LoopCheck continue Phase 6 segment work?
+## 2. Should LoopCheck continue Phase 6 segment work? — **RESOLVED (2026-07-18)**
 
-- **DECIDED (2026-07-14):** No. The maintainer moved linear/segment acceptance
-  to **LineCheck**. LoopCheck stops at the landed schema (frozen,
+- **Resolution:** No. Linear/segment acceptance is **not LoopCheck's bounded
+  context**; it belongs to **MainLine** as an unscheduled future module
+  ([DECISIONS.md D10](DECISIONS.md#d10--segment-acceptance-is-owned-by-mainline-correction-of-record)),
+  because MainLine already models alignments, stations, and append-only test
+  ledgers with derived acceptance. LoopCheck stops at the landed schema (frozen,
   maintenance-only — the shipped migrations stay, not ripped out); **no segment
   execution UI, import, or route is built in LoopCheck.** ADR 0014 is superseded
-  and records this. The recommendation below is the one that was adopted.
-- **Why it matters:** schema/templates have landed while LineCheck is centered
-  on the same acceptance domain.
-- **Options:** complete in LoopCheck; stop and move ownership to LineCheck;
-  intentionally split certain segment types.
-- **Current evidence:** LoopCheck has no complete segment UI; LineCheck plans a
-  richer test/calculation/evidence model.
-- **Recommendation:** stop LoopCheck UI work and make LineCheck the target
-  owner; preserve the landed schema pending migration policy.
-- **Validate:** whether any plant-internal segment genuinely belongs to
-  LoopCheck and whether LineCheck contract covers it.
-- **Decision owner:** Maintainer/domain architect.
-- **Latest safe decision point:** before a segment import, QR route, execution
-  page, or production data is created in LoopCheck.
+  and records this.
+- **Migration:** none planned. Cross-product record migrations are frozen until
+  there are real users.
+- **Note on the decision path:** the move was briefly assigned to **LineCheck**
+  (2026-07-14) before LineCheck was archived; that assignment is historical.
 
 ## 3. Where does equipment preservation change ownership?
 

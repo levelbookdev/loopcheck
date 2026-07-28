@@ -69,7 +69,7 @@ signatures               (subject_collection, subject_id → package XOR check) 
 | `tags`                | One piece of equipment, keyed by P&ID `tag_number`.            | editable   |
 | `services`            | One customer service connection, keyed by street `address`.    | editable   |
 | `service_contacts`    | Auth-gated customer name/phone, one-to-one with a service.      | editable   |
-| `segments`            | One station-to-station pipe test subject, keyed by `segment_id` per project. **Frozen / maintenance-only** — linear acceptance moved to LineCheck (ADR 0014 superseded, 2026-07-14); schema stays, no LoopCheck UI. | editable |
+| `segments`            | One station-to-station pipe test subject, keyed by `segment_id` per project. **Frozen / maintenance-only** — linear acceptance moved to MainLine (ADR 0014 superseded, 2026-07-18); schema stays, no LoopCheck UI. | editable |
 | `checklist_templates` | A named checklist for one tag_type + phase (or a process log). | editable   |
 | `template_items`      | One ordered line: text + response_type + unit + confirm_per_spec + spec_reference. | editable   |
 | `checks`              | One checklist event against a tag XOR system XOR service XOR segment. | **append-only** |

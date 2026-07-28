@@ -1,6 +1,6 @@
 # 010 — Docs reconciliation: kill the LineCheck→MainLine drift and the AGENTS.md copy
 
-Status: TODO
+Status: DONE
 Milestone: M1 Harden & Reconcile (v0.9.0)
 Depends on: none
 

@@ -1,24 +1,33 @@
 # ADR 0014 — Segment acceptance records: pipeline segments as the fourth subject kind
 
-**Status:** superseded — ownership moved to LineCheck (maintainer decision,
-2026-07-14) · **Date:** 2026-07-11
+**Status:** superseded — ownership moved to **MainLine** (maintainer decision,
+2026-07-18) · **Date:** 2026-07-11
 
-**Decision outcome (2026-07-14):** the maintainer decided that pipeline/segment
-(linear) acceptance is **LineCheck's bounded context, not LoopCheck's**. This
-ADR is therefore **not accepted**; LoopCheck stops here. Concretely:
+**Owner correction (2026-07-18).** This ADR was first superseded on 2026-07-14
+in favour of **LineCheck**. LineCheck has since been **archived**, and the scope
+folded into **MainLine** as an unscheduled future module — MainLine already
+models alignments, stations, and append-only test ledgers with derived
+acceptance. The current, correct answer is therefore **MainLine owns future
+segment/linear acceptance**; every LineCheck mention below is retained only as
+the historical record of the decision path. See
+[DECISIONS.md D10](../DECISIONS.md#d10--segment-acceptance-is-owned-by-mainline-correction-of-record)
+and MainLine's `ROADMAP.md`, "Future module: segment testing & acceptance."
+
+**Decision outcome:** the maintainer decided that pipeline/segment (linear)
+acceptance is **not LoopCheck's bounded context**. This ADR is therefore **not
+accepted**; LoopCheck stops here. Concretely:
 
 - **Frozen at the landed schema, maintenance-only.** Migrations
   `1789000023`–`1789000025` (open→resolve schema, the `segments` collection +
   four-way subject XOR, segment phases, and the segment seed templates) already
-  shipped to `origin` (commit `b0cbea5`) and **stay** — per
-  `docs/overlap-and-migrations.md`, landed records "cannot be relabeled as
-  LineCheck data," so the schema is maintained, not ripped out. No further
-  LoopCheck expansion on it.
+  shipped to `origin` (commit `b0cbea5`) and **stay** — landed records cannot be
+  relabeled as another product's data, so the schema is maintained, not ripped
+  out. No further LoopCheck expansion on it.
 - **The segment execution UI is cancelled in LoopCheck** — the segment
   page/board/resolve UI/CSV import/acceptance package described below will **not**
-  be built here. LineCheck becomes the authority; the eventual move happens
-  deliberately, after LineCheck has equivalent capability and a versioned
-  importer (`docs/architecture-status.md`, `docs/open-questions.md`).
+  be built here. MainLine becomes the future authority; per D10 there is **no
+  migration to plan** — cross-product record migrations are frozen until there
+  are real users.
 - **The open→resolve schema (ADR 0012) is unaffected** — `result: "pending"` and
   `checks.resolves` are general-purpose and already used by other LoopCheck
   records (e.g. the tank leak test); only the *segment* application moves.
@@ -26,7 +35,8 @@ ADR is therefore **not accepted**; LoopCheck stops here. Concretely:
 Everything below is the original proposal, retained as the historical record of
 what was designed. It describes an ADR-first intent that implementation briefly
 outran; it is **not** the current direction. The four "open questions" at the
-end are now **LineCheck's** to answer, not LoopCheck's.
+end are **no longer LoopCheck's** to answer; they carry over to MainLine's own
+design if and when that module is built.
 
 Phase 6. Extends the subject-kind recipe
 ([ADR 0006](0006-service-connections-third-subject.md)) a fourth time and is
@@ -166,13 +176,14 @@ confirms the number against the contract (the existing pattern).
   acceptance-package print view. Task-by-task with review, per the working
   style.
 
-## Open questions (now LineCheck's, per the 2026-07-14 ownership move)
+## Open questions (no longer LoopCheck's, per the ownership move)
 
 These were the design questions this proposal left for the maintainer. With
-linear acceptance moving to LineCheck, they carry over to LineCheck's own design
-rather than being resolved in LoopCheck. Retained for continuity so LineCheck
-inherits the thinking; the interim answers noted here reflect only what the
-now-frozen LoopCheck schema happened to assume, not a LoopCheck commitment.
+linear acceptance out of LoopCheck's bounded context, they carry over to
+**MainLine's** own design if that future module is built, rather than being
+resolved here. Retained for continuity so the thinking is inherited; the interim
+answers noted below reflect only what the now-frozen LoopCheck schema happened
+to assume, not a LoopCheck commitment.
 
 1. **Segment-type set.** `pressure_main` / `force_main` / `gravity_sewer` —
    enough, or split (e.g. `reclaimed_main`, `raw_water`)? Drives the seed.

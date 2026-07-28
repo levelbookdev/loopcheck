@@ -21,8 +21,8 @@ implementation and decision state differ.
 | API versioning | `DECIDED`, `CURRENT` drift | `docs/API.md` calls 16 collections v1; committed schema has 18 and selective auth. | Reconcile contract, define additive vs breaking policy, publish compatibility fixtures. | Existing clients/sidecar may silently mis-handle rules or fields. | Decide version bump for auth/PII split and status of segments in the contract. |
 | Cross-product handoffs | `PROPOSED` | No implemented manifest/event exchange found. | Versioned exports/events with provenance; no direct DB coupling. | Premature shapes create permanent identifiers and duplicate masters. | Approve bounded contexts, stable ids, first concrete handoff, and ownership. |
 | Paid/core boundary | `DECIDED`, `CURRENT` sidecar | ADR 0003; LoopCheck-Lookahead has separate DB and read-only HTTP consumption. | Core owns field facts/basic export; paid owns optional aggregation and compilation. | High legal/product risk if premium gains private access or required field features. | Clarify whether sidecar service-account role needs mechanical read-only enforcement. |
-| Service-cutover ownership | `CURRENT` LoopCheck; `PROPOSED` LineCheck | Complete LoopCheck workflow from notice through restoration. | LineCheck becomes future owner of linear service acceptance/cutover. | Immediate move would strand users/evidence; dual-write creates split authority. | Approve ownership, minimum LineCheck readiness, and migration compatibility window. |
-| Segment-acceptance ownership | `DECIDED` — LineCheck (2026-07-14) | LoopCheck has segments/templates but no complete UI; LineCheck owns pre-alpha pressure-test slice. | **Adopted:** LoopCheck expansion stopped; LineCheck is authoritative; landed schema frozen (maintenance-only, not ripped out), references migrated deliberately after LineCheck parity + versioned importer. | Building both now hardens incompatible semantics. | **Resolved** — ADR 0014 superseded; no LoopCheck segment UI/import/route to be built. |
+| Service-cutover ownership | `RESOLVED` — stays in LoopCheck (2026-07-18) | Complete LoopCheck workflow from notice through restoration. | **Settled:** service cutover is LoopCheck's permanently; it does not move to a sibling. | — | **Resolved** — [DECISIONS.md D9](DECISIONS.md#d9--service-cutover-stays-in-loopcheck-semantics-frozen); no migration planned. |
+| Segment-acceptance ownership | `DECIDED` — MainLine (2026-07-18) | LoopCheck has segments/templates but no execution UI; MainLine already models alignments, stations, and append-only test ledgers. | **Adopted:** LoopCheck expansion stopped; MainLine is the future authority as an unscheduled module; landed LoopCheck schema frozen (maintenance-only, not ripped out). Cross-product record migrations are frozen until there are real users. | Building both now hardens incompatible semantics. | **Resolved** — ADR 0014 superseded; [DECISIONS.md D10](DECISIONS.md#d10--segment-acceptance-is-owned-by-mainline-correction-of-record); no LoopCheck segment UI/import/route to be built. (Briefly scoped to LineCheck on 2026-07-14; LineCheck is archived.) |
 | Deployment topology | `CURRENT` LAN/VPS docs; `PROPOSED` replica | Single PocketBase deployment; Caddy/systemd guidance; Pi/replica claims not hardware-validated. | Independently self-hostable core; optional managed/replica operations. | Data-loss/security risk if aspirational topology is treated as tested. | Validate Pi and restore/replication procedure before calling it supported. |
 | Authentication | `RESOLVED` (2026-07-20) | Selective lockdown + PII split + closing `segments` rule committed (`…19`/`…20`/`…33`); office pages authenticate via `lc-auth.js`; smoke test asserts the matrix across three tiers. | Preserve public scan/read and accountless flag/check/LOTO paths while authenticating office work/signatures. | — | **Resolved** — ADR 0011 Accepted; every access-matrix cell asserted; README/DEPLOY internet-exposure warning removed. |
 
@@ -30,9 +30,11 @@ implementation and decision state differ.
 
 Before major refactoring, the safest gates are:
 
-1. reconcile authentication rules, client token use, and PII/service import;
+1. ~~reconcile authentication rules, client token use, and PII/service
+   import;~~ **done** — ADR 0011 Accepted;
 2. reconcile the public API contract with all committed migrations;
-3. decide linear-infrastructure ownership before more segment/service work;
+3. ~~decide linear-infrastructure ownership before more segment/service
+   work;~~ **done** — D9/D10;
 4. approve signature/hash semantics before landing active Phase 3 work;
 5. expand the smoke test to the current collection set and new invariants;
 6. define the first concrete handoff only after identifiers and authority are

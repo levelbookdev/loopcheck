@@ -27,7 +27,7 @@ once.
 | [0010](0010-signatures-and-turnover-package.md) | Signatures & the turnover package: a signed, frozen snapshot over the append-only ledger | proposed |
 | [0011](0011-auth-lockdown.md) | Auth lockdown: a small public allowlist, everything else signed in | Accepted |
 | [0012](0012-open-resolve-duration-tests.md) | Open→resolve records: duration/reliability tests and bac-t samples as a linked pair of append-only checks | accepted |
-| [0014](0014-segment-acceptance-records.md) | Segment acceptance records: pipeline segments as the fourth subject kind | superseded — moved to LineCheck (2026-07-14) |
+| [0014](0014-segment-acceptance-records.md) | Segment acceptance records: pipeline segments as the fourth subject kind | superseded — moved to MainLine (2026-07-18) |
 | [0013](0013-training-as-a-signable-milestone.md) | Training as a signable milestone check, not only a closeout deliverable | proposed |
 | [0015](0015-stored-equipment-preservation-log.md) | Stored-equipment preservation log (recurring, tag-subject) | accepted |
 | [0016](0016-purpose-built-instrument-calibration-records.md) | Instrument calibration uses a purpose-built as-found/as-left ledger | accepted |
