@@ -23,6 +23,13 @@ Established 2026-07-28 by inspecting the running host:
 - The deployed commit is not an ancestor of current `main` (its hash and message
   are absent from the repository's history entirely), so treat the droplet's
   checkout as untrusted and re-point it rather than fast-forwarding.
+- **The droplet's git remote points at the wrong repository.** Its `origin` is
+  the pre-org-migration personal repo (`mds08011/loopcheck`), not
+  `levelbookdev/loopcheck`. That old repo still exists and still accepts reads,
+  with no activity since 2026-07-15 — so a plain `git pull` on the droplet
+  **succeeds and changes almost nothing**, which is the worst possible failure
+  mode: it looks like the deployment updated. The remote must be re-pointed (or
+  the checkout replaced) before any pull.
 
 The gate was removed briefly during a supervised verification and an anonymous
 `POST /api/collections/projects/records` returned **200** — the original
@@ -55,9 +62,13 @@ maintainer's action, taken only after steps 1–4 below all pass.
    (~60 tags, checks, punch items). Take a copy of `pb_data/` off the box before
    any migration runs, per the backup section of `DEPLOY.md`. A migration set
    this far behind will apply ~23 migrations in one pass.
-2. **Update the checkout** to a commit at or after `d073a99`. Because the
-   deployed commit is not in `main`'s history, prefer re-cloning or a hard reset
-   onto `origin/main` over a merge.
+2. **Fix the remote, then update the checkout** to a commit at or after
+   `d073a99`. Confirm `git remote -v` names `levelbookdev/loopcheck` before
+   pulling anything — if it still names `mds08011/loopcheck`, a pull will appear
+   to succeed while bringing in nothing. Because the deployed commit is not in
+   `main`'s history, prefer re-cloning fresh over a merge; a hard reset onto the
+   corrected `origin/main` is the alternative.
+   Verify afterwards that `ls pb_migrations/*.js | wc -l` reports 34, not 11.
 3. **Restart the service** and confirm migrations applied cleanly — the log must
    show no migration error, and the live collection set must be the full 24.
 4. **Verify behind the gate first** (the gate is still up at this point, so use
