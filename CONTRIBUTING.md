@@ -41,9 +41,10 @@ your work doesn't stall on paperwork.
   **pre-push hook** (`git config core.hooksPath .githooks`), so a push runs
   it automatically; a doc-only or emergency push can bypass it with
   `SKIP_SMOKE=1 git push`.
-- The sixteen collections are a published API surface
-  ([docs/API.md](docs/API.md)) — breaking changes need an ADR *and* a
-  contract version bump, not just a migration.
+- The collections are a published API surface ([docs/API.md](docs/API.md)) —
+  sixteen published as v1, 24 committed in total (the extra eight marked
+  *delta*). Breaking changes need an ADR *and* a contract version bump, not
+  just a migration.
 - `seed/` is the maintainer-authored domain library (real water/wastewater
   checkout practice). Content changes there need domain review by the
   maintainer — checklist wording is engineering, not copy-editing.

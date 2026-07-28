@@ -63,8 +63,9 @@ workflow**. See migrations `1789000023`, `1789000024`, `1789000025`,
 
 ## Current collections
 
-**CURRENT.** A fresh database from committed migrations contains 18
-application collections, excluding PocketBase system/auth collections:
+**CURRENT (revised 2026-07-28).** A fresh database from committed migrations
+contains **24 application collections**, excluding PocketBase system/auth
+collections (`users` is the auth collection and is additional):
 
 - Project/equipment: `projects`, `systems`, `tags`, `segments`
 - Templates: `checklist_templates`, `template_items`
@@ -73,12 +74,16 @@ application collections, excluding PocketBase system/auth collections:
 - Service cutover and protected PII: `services`, `service_contacts`
 - Warranty and closeout: `warranties`, `closeout_requirements`,
   `closeout_log`, `warranty_claims`
+- Instrument calibration: `test_standards`, `calibrations`,
+  `calibration_points`
+- Vendor service visits: `service_visits`
+- Signatures and turnover: `turnover_packages`, `signatures`
 
-The authoritative schema is the ordered migration set in `pb_migrations/`.
-The baseline inspection found `ARCHITECTURE.md` and `docs/API.md` still
-enumerating the older sixteen-collection shape; this documentation session
-reconciled the architecture inventory and added an explicit implementation
-delta to the still-unresolved v1 contract.
+The authoritative schema is the ordered migration set in `pb_migrations/`; the
+count above is verifiable with `grep -c "new Collection(" pb_migrations/*.js`.
+Of these, **16 are published as API contract v1 and 8 are marked delta**
+pending a version bump — that bump is a deliberate M3 decision, not an
+oversight. See [`API.md`](API.md).
 
 ## Authoritative facts, derived states, and mutability
 
@@ -130,16 +135,24 @@ The two limitations recorded at the original snapshot are **both resolved**:
 
 ## Offline behavior
 
-**CURRENT.** LoopCheck is not generally offline-first. There is no committed
-service worker, application-shell cache, IndexedDB data layer, or durable
-general write queue.
+**CURRENT.** LoopCheck is not generally offline-first, and this is a deliberate
+choice, not a gap awaiting a fix ([DECISIONS.md D13](DECISIONS.md#d13--offline-document-guarantees-now-build-no-second-queue)):
+a half-built offline layer is more dangerous than honest labeling, and a general
+durable queue needs an idempotency decision first. There is no committed service
+worker, application-shell cache, or IndexedDB data layer.
 
-The one implemented exception is the LOTO section of `pb_public/tag.html`:
-it caches the last successful LOTO read in `localStorage`, queues apply/release
-events (including photos when browser storage permits), retries later, and
-shows stale-data warnings after ten minutes. `notice_batch.html` retains
-in-tab progress and supports per-row retry but does not survive closing the
-tab. Other fetch-dependent pages need connectivity.
+Per-workflow guarantees — this is the honest list:
+
+| Workflow | Offline guarantee |
+| --- | --- |
+| LOTO apply/release (`tag.html`) | **Durable.** Caches the last successful read in `localStorage`, queues events (with photos where storage permits), retries later, and shows a stale-data warning after ten minutes. Never presents a confident status it cannot verify (ADR 0007). |
+| Instrument calibration capture (`calibration.html`) | **Durable.** A `localStorage` outbox retried on reconnect; the capture route is idempotent via `client_token`. |
+| Batch notice logging (`notice_batch.html`) | **Tab-local only.** Keeps progress and supports per-row retry, but does not survive closing the tab. |
+| Everything else | **Online required.** Check logging, punch flagging, imports, boards, and all office pages need connectivity. |
+
+The two durable outboxes are per-page `localStorage`, not a shared queue — the
+sibling products' IndexedDB/FIFO guarantees do not apply here, so each page is
+audited on its own.
 
 ## Import and export behavior
 
@@ -176,10 +189,18 @@ is script- and documentation-driven.
 
 ## Deployment status and limitations
 
-**CURRENT.** `docs/DEPLOY.md` documents a LAN host and an internet-facing VPS,
-plus backups and a proposed primary/replica arrangement. The committed setup
-script selects and downloads PocketBase, and the repository includes a Windows
-binary locally.
+**CURRENT.** Topology support labels ([DECISIONS.md D14](DECISIONS.md#d14--deployment-topology-labeling)):
+
+| Topology | Label |
+| --- | --- |
+| Single LAN host | **Supported** — documented in `docs/DEPLOY.md`. |
+| Single internet-facing VPS (Caddy + systemd) | **Supported** — documented, and no longer blocked by the auth reconciliation. |
+| Raspberry Pi | **Unvalidated.** Hard constraint #3 targets it, but it has not been exercised on real hardware; Pi validation is an M3 item. |
+| VPS primary + Pi replica (Litestream) | **Unvalidated design direction**, not a support claim. |
+
+`docs/DEPLOY.md` documents the two supported options plus backups. The committed
+setup script selects and downloads PocketBase, and the repository includes a
+Windows binary locally.
 
 The baseline deployment guide's warning that all rules were Phase-1 permissive
 was stale and has been corrected; the selective lockdown is committed. As of the

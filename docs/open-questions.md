@@ -94,8 +94,10 @@ safe.
 ## 7. How should API v1 be reconciled?
 
 - **Why it matters:** published contract v1 originally covered sixteen broadly
-  permissive collections; committed code has eighteen and selective auth. The
-  API document now exposes that delta but cannot approve its own version.
+  permissive collections; committed code has **24** (16 v1 + 8 delta) and
+  selective auth. The API document now exposes that delta but cannot approve its
+  own version. The auth/PII half is settled (ADR 0011, Accepted); what remains
+  open is the **collection-set** version bump, sequenced to M3 (D12).
 - **Options:** version bump for auth/PII changes; declare compatible v1
   additions with corrected rules; temporarily exclude segments from contract.
 - **Current evidence:** ADR 0003 requires ADR + version bump for breaking

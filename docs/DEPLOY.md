@@ -249,9 +249,16 @@ something you believe in.
 
 ## Proposed resilience topology: VPS primary + trailer Pi replica
 
-This section is a design direction, not a validated support claim. Raspberry
-Pi performance and the complete replication/restore path remain to be tested;
-the single-host LAN/VPS instructions above are the current documented
+> **UNVALIDATED — design direction, not a support claim**
+> ([DECISIONS.md D14](DECISIONS.md#d14--deployment-topology-labeling)).
+> **Supported today:** a single LAN host, or a single internet-facing VPS behind
+> Caddy/systemd — both documented above.
+> **Unvalidated:** Raspberry Pi performance (hard constraint #3 targets it, but
+> it has not been exercised on real hardware — an M3 item) and the complete
+> primary/replica replication and restore path described below.
+
+Raspberry Pi performance and the complete replication/restore path remain to be
+tested; the single-host LAN/VPS instructions above are the current documented
 deployment options.
 
 The target setup once you have a Pi to spare: one writable instance, one

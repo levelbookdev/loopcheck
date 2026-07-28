@@ -138,8 +138,10 @@ migrate((app) => {
     // (Honesty caveat on every signing surface, LOTO-style: identity is only
     // as strong as the deployment's access controls — enforced fully once the
     // auth lockdown lands.)
-    // TODO(auth): this AUTH rule is live now via Migration H's model; it is
-    // the one create in this module that is gated from day one.
+    // AUTH from day one: this collection was created after the lockdown, so it
+    // follows Migration H's model directly -- the one create in this module that
+    // has always been gated (ADR 0011 §7: a signature attests identity, so it
+    // requires an account).
     createRule: AUTH,
 
     // APPEND-ONLY: a signature is never edited or deleted. A correction is a

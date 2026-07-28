@@ -6,8 +6,8 @@
 // (1789000019) had already rewritten the permissive Phase-1 rules, so it landed
 // with the Phase-1 shape — public list/view/create/update — and a `TODO(auth)`
 // that the lockdown had by then already answered for every comparable
-// collection. It is the last world-writable collection in the schema, and the
-// reason the README still warns against exposing `main` to the internet.
+// collection. It was the last world-writable collection in the schema, and the
+// last blocker in the README's internet-exposure warning (since removed).
 //
 // Maintainer ruling (2026-07-19): segments lock to auth, matching `tags`.
 // Reads stay PUBLIC — a segment is field-facing subject data like a tag, and

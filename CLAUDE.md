@@ -265,19 +265,47 @@ block (grey).
   reading the code.
 - Design tokens in `app.css`: one action accent (safety orange), system fonts
   for zero webfont bytes, monospace for tag numbers, severity color language.
-- **The sixteen collections are a published API contract** (`docs/API.md`,
-  ADR 0003). Breaking changes to their shapes, semantics, or rules need an
-  ADR and a contract version bump — not just a migration. Premium is a
-  sidecar on that contract; capabilities it needs land in core first.
+- **The collections are a published API contract** (`docs/API.md`, ADR 0003).
+  Sixteen are published as **v1**; the committed schema now has **24**, the
+  extra eight marked *delta* pending a contract version bump (an M3 decision).
+  Breaking changes to any of their shapes, semantics, or rules need an ADR and a
+  contract version bump — not just a migration. Premium is a sidecar on that
+  contract; capabilities it needs land in core first.
 
 ## Security posture
 
-Phase 1 API rules are permissive (public list/view/create; update where a
-lifecycle needs it) for local testing. **Every permissive rule carries a
-`TODO(auth)` comment** marking the rule that becomes `@request.auth.id != ""`
-before LoopCheck is exposed to the internet. Deletes are already admin-only.
-The append-only collections (`checks`, `check_items`, `attachments`) reject
-updates and deletes regardless of auth.
+The auth lockdown is **landed and accepted** ([ADR 0011](docs/adr/0011-auth-lockdown.md),
+migrations `1789000019` / `1789000020` / `1789000033`). It is deliberately
+**not** a uniform "require auth everywhere" sweep — that would break hard
+constraint #1. The current posture:
+
+- **Public, no account** — everything a scanned QR needs: tag/service/segment
+  reads, the check ledger, punch visibility, template and equipment data, and
+  LOTO safety visibility (never gated, ADR 0007).
+- **Public writes, deliberately** — the narrow accountless field paths: logging
+  a check (`checks`/`check_items`), flagging a punch item, LOTO apply/release,
+  instrument-calibration and service-visit capture, and an attachment whose
+  parent is one of those. Free ≠ anonymous elsewhere, but these must never hit
+  a wall.
+- **Requires an account** — all office/setup/lifecycle writes (projects,
+  systems, tags, templates, services, segments, warranties, closeout), punch
+  *closure*, turnover build/sign, and all office/PII reads
+  (`warranties`, `closeout_*`, `warranty_claims`, `service_contacts`).
+- **Superuser only** — every delete, everywhere.
+- **Regardless of auth** — the append-only ledgers (`checks`, `check_items`,
+  `attachments`, `closeout_log`, `loto_events`, `calibrations`,
+  `calibration_points`, `service_visits`, `turnover_packages`, `signatures`)
+  reject updates and deletes. No self-signup; accounts are operator-created.
+
+Customer PII (`customer_name`, `customer_phone`) lives **only** in the
+auth-gated `service_contacts` — `services` is structurally PII-free, which is
+what makes the PII rule enforceable rather than conventional.
+
+The per-collection matrix is in [`docs/API.md`](docs/API.md), and
+`scripts/smoke_test.sh` asserts it across guest, user, and superuser tiers.
+`TODO(auth)` comments still appearing in `pb_migrations/` are **historical
+records of what a migration shipped**, not instructions — the live rule is
+whatever the latest migration set establishes.
 
 `docs/` is served publicly by GitHub Pages — nothing sensitive or
 premium-related may live in it.

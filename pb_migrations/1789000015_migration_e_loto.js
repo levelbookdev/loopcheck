@@ -27,11 +27,11 @@ migrate((app) => {
     type: "base",
     name: "loto_events",
 
-    // TODO(auth): before internet exposure, the "" rules become
-    //   @request.auth.id != ""
-    // and the createRule below gets the same prefix ANDed on. NOTE for the
-    // auth ADR: logging an apply/release must stay accountless (hard
-    // constraint #1) — the electrician at the isolation point has no login.
+    // HISTORICAL (auth): the note here asked the auth ADR to keep LOTO logging
+    // accountless, and ADR 0011 (Accepted) did exactly that -- the electrician
+    // at the isolation point has no login, and safety visibility is never gated
+    // (ADR 0007). These rules are unchanged by the lockdown: reads public,
+    // apply/release accountless, append-only. See docs/API.md.
     listRule: "",
     viewRule: "",
 
@@ -125,9 +125,10 @@ migrate((app) => {
   //            removal), released_by_note is mandatory — the justification
   //            rides into the immutable record.
   //
-  // TODO(auth): before internet exposure this gains the
-  //   @request.auth.id != "" &&
-  // prefix — but see the accountless-field-tier note above.
+  // HISTORICAL (auth): no auth prefix was ever added -- per the
+  // accountless-field-tier note above, ADR 0011 left this createRule alone. It
+  // is a pure SHAPE rule (apply needs a photo; release must reference a real
+  // apply on the same tag, with a note if the holder differs).
   loto.createRule =
     '(action = "apply" && photo != "" && applies_to = "") ||' +
     ' (action = "release" && applies_to != ""' +

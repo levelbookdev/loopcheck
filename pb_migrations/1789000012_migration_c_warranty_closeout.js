@@ -22,8 +22,11 @@ migrate((app) => {
     type: "base",
     name: "warranties",
 
-    // TODO(auth): before internet exposure, change every "" rule to:
-    //   @request.auth.id != ""
+    // HISTORICAL (auth): the rules below are what THIS migration shipped.
+
+    // The auth lockdown has since landed -- migrations 1789000019 / 1789000020 /
+
+    // 1789000033 (ADR 0011, Accepted) set the live rules. See docs/API.md.
     listRule: "",
     viewRule: "",
     createRule: "",
@@ -79,8 +82,11 @@ migrate((app) => {
     type: "base",
     name: "closeout_requirements",
 
-    // TODO(auth): before internet exposure, change every "" rule to:
-    //   @request.auth.id != ""
+    // HISTORICAL (auth): the rules below are what THIS migration shipped.
+
+    // The auth lockdown has since landed -- migrations 1789000019 / 1789000020 /
+
+    // 1789000033 (ADR 0011, Accepted) set the live rules. See docs/API.md.
     listRule: "",
     viewRule: "",
     createRule: "",
@@ -137,8 +143,11 @@ migrate((app) => {
     type: "base",
     name: "closeout_log",
 
-    // TODO(auth): before internet exposure, change every "" rule to:
-    //   @request.auth.id != ""
+    // HISTORICAL (auth): the rules below are what THIS migration shipped.
+
+    // The auth lockdown has since landed -- migrations 1789000019 / 1789000020 /
+
+    // 1789000033 (ADR 0011, Accepted) set the live rules. See docs/API.md.
     listRule: "",
     viewRule: "",
     createRule: "",
@@ -177,9 +186,10 @@ migrate((app) => {
     type: "base",
     name: "warranty_claims",
 
-    // TODO(auth): before internet exposure, change the "" rules to:
-    //   @request.auth.id != ""
-    // (and AND the auth check into the updateRule below).
+    // HISTORICAL (auth): the rules below are what THIS migration shipped.
+    // The auth lockdown has since landed -- migrations 1789000019 / 1789000020 /
+    // 1789000033 (ADR 0011, Accepted) set the live rules; for this collection it
+    // ANDed the auth check into the close-once updateRule. See docs/API.md.
     listRule: "",
     viewRule: "",
     createRule: "",

@@ -1,6 +1,6 @@
 # 020 — Docs reconciliation: collection count, honest offline/topology labels, stale TODO(auth)
 
-Status: TODO
+Status: DONE
 Milestone: M1 Harden & Reconcile (v0.9.0)
 Depends on: 010
 

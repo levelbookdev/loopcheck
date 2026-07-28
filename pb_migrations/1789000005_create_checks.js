@@ -19,10 +19,12 @@ migrate((app) => {
     type: "base",
     name: "checks",
 
-    // TODO(auth): before internet exposure, the "" rules become
-    //   @request.auth.id != ""
-    // and the createRule below becomes
-    //   @request.auth.id != "" && (<the same XOR expression>)
+    // HISTORICAL (auth): the rules below are what THIS migration shipped.
+    // The auth lockdown has since landed -- migrations 1789000019 / 1789000020 /
+    // 1789000033 (ADR 0011, Accepted) set the live rules. Note the lockdown
+    // deliberately did NOT gate these: logging a check stays accountless (the
+    // no-install field tier, hard constraint #1), and the XOR createRule below
+    // is a SHAPE rule, not an auth rule. See ADR 0011 §3 and docs/API.md.
     listRule: "",
     viewRule: "",
 

@@ -15,8 +15,11 @@ migrate((app) => {
     type: "base",
     name: "systems",
 
-    // TODO(auth): before internet exposure, change every "" rule to:
-    //   @request.auth.id != ""
+    // HISTORICAL (auth): the rules below are what THIS migration shipped.
+
+    // The auth lockdown has since landed -- migrations 1789000019 / 1789000020 /
+
+    // 1789000033 (ADR 0011, Accepted) set the live rules. See docs/API.md.
     listRule: "",
     viewRule: "",
     createRule: "",

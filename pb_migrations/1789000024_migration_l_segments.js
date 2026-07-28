@@ -21,9 +21,11 @@ migrate((app) => {
   const segments = new Collection({
     type: "base",
     name: "segments",
-    // TODO(auth): before internet exposure the field-facing "" rules become
-    //   @request.auth.id != ""   (segments are office/engineering-facing; the
-    //   auth-lockdown ADR decides the exact tier).
+    // HISTORICAL (auth): the rules below are what THIS migration shipped, and
+    // they were the last world-writable ones in the schema -- this collection
+    // was created AFTER the lockdown (1789000019), so it missed it. Migration
+    // 1789000033 (ADR 0011, Accepted) closed that gap: create/update now require
+    // auth, reads stay public like tags. See docs/API.md.
     listRule: "",
     viewRule: "",
     createRule: "",

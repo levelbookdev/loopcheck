@@ -125,7 +125,7 @@ validated — all gated by CI. No new features
 - [x] `grep -ri "linecheck" docs/ *.md` returns only historical/superseded
       references explicitly labeled as such (ADR 0014's own record); no doc names
       LineCheck as the *current or future owner* of any scope.
-- [ ] Every doc that states a collection count states **24** (application
+- [x] Every doc that states a collection count states **24** (application
       collections); none says 16 or 18 as the current total.
 - [ ] `scripts/smoke_test.sh` passes with new assertions for: `segments` in the
       existence loop, a tank leak-test seed/workflow assertion, and an

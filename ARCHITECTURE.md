@@ -649,8 +649,9 @@ risk alerts, dashboards) is a **sidecar in a separate private repo** that
 talks to the core's public REST API like any third party — no private
 doors, no in-process hooks, read-only in v1. The original sixteen collections
 were published as API contract v1 ([docs/API.md](docs/API.md)); the committed
-PII/auth changes and three added collections have outrun that document's approval
-state and require contract reconciliation. Breaking changes still need an ADR
+schema now has twenty-four, so **eight are marked *delta*** pending a version
+bump. The PII/auth semantics are settled (ADR 0011, Accepted); the collection-set
+version bump is deliberately sequenced to M3. Breaking changes still need an ADR
 and a contract version bump. Full decision and the
 alternatives rejected (PocketBase hook layer, shared database):
 [ADR 0003](docs/adr/0003-core-premium-sidecar-boundary.md). External

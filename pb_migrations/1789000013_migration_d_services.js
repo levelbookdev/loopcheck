@@ -36,8 +36,11 @@ migrate((app) => {
     type: "base",
     name: "services",
 
-    // TODO(auth): before internet exposure, change every "" rule to:
-    //   @request.auth.id != ""
+    // HISTORICAL (auth): the rules below are what THIS migration shipped.
+
+    // The auth lockdown has since landed -- migrations 1789000019 / 1789000020 /
+
+    // 1789000033 (ADR 0011, Accepted) set the live rules. See docs/API.md.
     // The auth lockdown ADR must ALSO solve field-level PII protection —
     // collection rules cannot hide individual fields, so customer_name and
     // customer_phone stay a UI/convention rule until then (ADR 0006).
@@ -104,7 +107,10 @@ migrate((app) => {
   // EXACTLY ONE SUBJECT, now three-way: tag XOR system XOR service. Same
   // reasoning as ADR 0001 — the ledger is append-only, so a malformed
   // record would be permanent; the server-side rule is the gate.
-  // TODO(auth): the lockdown prepends @request.auth.id != "" (see ADR 0001).
+  // HISTORICAL (auth): this anticipated the lockdown prepending an auth check.
+  // It did NOT -- ADR 0011 §3 kept check creation accountless (the field tier),
+  // so this stayed a pure XOR shape rule. Migration 1789000024 later widened it
+  // to four subjects.
   checks.createRule =
     '(tag != "" && system = "" && service = "") || ' +
     '(tag = "" && system != "" && service = "") || ' +
@@ -131,7 +137,8 @@ migrate((app) => {
   // A punch item targets a service XOR the tag/system pair (tag+system
   // coexist because system is the equipment rollup; a service has no
   // system). Unlike checks, all-blank stays legal — a general project
-  // punch item. TODO(auth): same lockdown note as above.
+  // punch item. HISTORICAL (auth): same as above -- punch FLAGGING stayed
+  // accountless (ADR 0011 §3); only closing a punch item requires auth.
   punch.createRule = 'service = "" || (tag = "" && system = "")';
 
   const punchIndexes = punch.indexes;

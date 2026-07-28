@@ -17,8 +17,9 @@ migrate((app) => {
     // In PocketBase rules, "" (empty string) means PUBLIC — anyone can call
     // it — while null means LOCKED to admins only.
     //
-    // TODO(auth): before LoopCheck is exposed to the internet, change every
-    // "" rule below to: @request.auth.id != ""
+    // HISTORICAL (auth): the rules below are what THIS migration shipped.
+    // The auth lockdown has since landed -- migrations 1789000019 / 1789000020 /
+    // 1789000033 (ADR 0011, Accepted) set the live rules. See docs/API.md.
     listRule: "",
     viewRule: "",
     createRule: "",
