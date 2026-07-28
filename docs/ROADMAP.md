@@ -147,6 +147,7 @@ Tasks: [`010`](tasks/010-docs-reconcile-stale-references.md) ·
 [`020`](tasks/020-docs-reconcile-status-and-contract-truth.md) ·
 [`030`](tasks/030-expand-smoke-test.md) ·
 [`040`](tasks/040-browser-ui-smoke-test.md) ·
+[`045`](tasks/045-normalize-line-endings.md) ·
 [`050`](tasks/050-ci-pipeline.md) ·
 [`060`](tasks/060-deploy-validation-arm-vm.md) ·
 [`065`](tasks/065-landing-page-truth-and-pages.md) ·

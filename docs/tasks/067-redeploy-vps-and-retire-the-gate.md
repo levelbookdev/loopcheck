@@ -1,6 +1,7 @@
 # 067 — Bring the VPS up to `main`, then retire the temporary gate
 
-Status: TODO
+Status: DONE (2026-07-28 — deployment brought up to `4f2ef0f`; gate retired;
+12/12 external checks passed)
 Milestone: M1 Harden & Reconcile (v0.9.0)
 Depends on: none (but do not start before the deployment can be taken briefly offline)
 

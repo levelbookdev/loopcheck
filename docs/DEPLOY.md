@@ -18,55 +18,36 @@ backups, no containers.
 > yet), and any deployment still needs an immediately claimed superuser and a
 > network exposure review.
 
-> **Temporary exposure lockdown (added 2026-07-15).** An internet-reachable
-> pre-release deployment was found serving the app, the `/_/` admin login, and
-> live collection reads (e.g. the tag ledger) to anonymous visitors — exactly
-> the exposure the auth-status note above warns against. As a stop-gap until the
-> access-matrix reconciliation is finished, HTTP **Basic authentication** was
-> added to the site's Caddy vhost, in front of the whole reverse proxy, so it
-> gates every path (the app, `/api/*`, and `/_/`) with a single bcrypt-hashed
-> credential. This is **not** the application's real auth and it is not a
-> substitute for it — it is a blunt "nobody gets in" gate that buys time. It
-> intentionally also blocks the public no-install field tier (QR `/t/{tag}`
-> reads); that trade-off is acceptable only because the box holds pre-release
-> demo data. **This gate is removed only when the auth reconciliation flagged in
-> [`README.md`](../README.md) ("Maturity and current scope") is complete and
-> verified** — at which point delete the `basic_auth` block (a timestamped
-> `Caddyfile.bak.*` backup was left beside the live config for a one-line
-> revert) and `systemctl reload caddy`. The credential lives only in the
-> deployed Caddyfile as a hash; it is deliberately kept out of this repository.
+> **Exposure lockdown — RESOLVED 2026-07-28 (historical record).** On
+> 2026-07-15 an internet-reachable pre-release deployment was found serving the
+> app, the `/_/` admin login, and live anonymous collection reads. HTTP Basic
+> authentication was added to the Caddy vhost as a blunt stop-gap; it gated
+> every path, including the public no-install field tier.
 >
-> **DO NOT REMOVE THE GATE YET — the condition was stated wrong (corrected
-> 2026-07-28).** The original condition ("remove once the auth reconciliation in
-> README is complete") describes the **repository**. The gate protects a
-> **deployment**, and those are not the same thing. Removing it on repo state
-> alone is unsafe, and was tried on 2026-07-28: the gate came off for about two
-> minutes, an external check immediately showed an anonymous `POST` to
-> `projects` returning `200`, and the gate was restored.
+> Retiring it needed more than "the repository is reconciled". A first attempt
+> on 2026-07-28 removed the gate on repo state alone; an external check
+> immediately showed an anonymous `POST` to `projects` returning `200`, and the
+> gate was restored within about two minutes. The cause: **the deployment was 23
+> migrations behind the repository** (11 of 34, no `lc-auth.js`, and no
+> `services` / `warranties` / `loto_events` / `segments` at all), so it still ran
+> the original Phase-1 permissive rules. Compounding it, the droplet's git remote
+> still pointed at the pre-org-migration repository, so a plain `git pull` would
+> have appeared to succeed while changing nothing.
 >
-> The cause: **the deployed instance is far behind `main`.** It was running 11
-> migrations (through `1789000010`) against the repo's 34, with no `lc-auth.js`,
-> so it still had the original Phase-1 all-permissive rules — no auth lockdown,
-> no PII split, no `segments`/`loto_events`/`warranties` at all. The basic_auth
-> gate is therefore not a redundant belt-and-braces measure; **it is the only
-> thing protecting a world-writable instance.**
+> The droplet was then brought up to `main`: data backed up off-box first, the
+> tree replaced from a clean `git archive` of the deployed commit (line endings
+> normalised — the repo stores CRLF and has no `.gitattributes`), the untracked
+> binary and `pb_data` carried across, verified behind the gate, and only then
+> opened. Twelve external checks passed: the field tier and `/t/{tag}` work
+> anonymously, anonymous writes to `projects` and `segments` are refused, the
+> office and PII collections **exist and return zero rows** to a guest, and no
+> `customer_name` appears in any anonymous response.
 >
-> **The corrected removal condition — all four, in order:**
-> 1. The reconciled code is **deployed** (`git pull` on the droplet to a commit
->    at or after `d073a99`, ADR 0011's migrations applied).
-> 2. The migrations actually ran: the live collection set matches the repo
->    (24 application collections), verified against the running instance.
-> 3. `scripts/smoke_test.sh` passes **against that deployment's code**, not just
->    locally.
-> 4. Only then remove the `basic_auth` block, reload, and **re-verify from
->    outside** — anonymous `/t/{tag}` reads work; anonymous `POST` to `projects`
->    or `segments` is refused; `warranties`/`closeout_*`/`service_contacts`
->    return nothing to a guest; no `customer_name` in any anonymous response.
->
-> Beware false confidence in step 4: a collection that does not exist on a stale
-> deployment also "returns nothing to a guest". Assert that office collections
-> exist **and** are empty to an anonymous caller, or the check passes for the
-> wrong reason.
+> **Two lessons worth keeping.** "The repo is reconciled" and "the deployment is
+> reconciled" are different claims, and only the second one makes a gate
+> removable. And when verifying, assert that a protected collection **exists** as
+> well as being empty — a collection that is simply absent looks identical to a
+> properly gated one, so the check can pass for entirely the wrong reason.
 
 ## First-boot hardening (any internet-reachable box)
 
