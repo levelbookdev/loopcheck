@@ -1,6 +1,6 @@
 # 030 — Expand the smoke test to the current collection set and known gaps
 
-Status: TODO
+Status: DONE
 Milestone: M1 Harden & Reconcile (v0.9.0)
 Depends on: none
 

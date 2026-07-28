@@ -28,6 +28,10 @@
 #          LC_TEST_PORT=8500 ./scripts/smoke_test.sh
 # Exit:    0 = all assertions passed;  1 = a regression;  2 = setup failure.
 #
+# Assertion count: 89 as of 2026-07-28. If you add or remove assertions, update
+# this number -- it is the cheap check that a section did not silently stop
+# running (a helper returning empty makes assertions vanish, not fail loudly).
+#
 # Needs: the pocketbase binary in the repo root (scripts/setup.sh), curl,
 # and GNU date (seed_demo.sh's requirement).
 
@@ -226,11 +230,11 @@ echo "  up (migrations applied with no fatal error)"
 
 # ---- 2. every expected collection exists ------------------------------------
 echo "==> all migrations present (collection set)"
-for c in projects systems tags checklist_templates template_items \
+for c in projects systems tags segments checklist_templates template_items \
          checks check_items punch_items test_equipment attachments \
          warranties closeout_requirements closeout_log warranty_claims \
          services service_contacts loto_events test_standards calibrations \
-         calibration_points; do
+         calibration_points service_visits turnover_packages signatures; do
   code=$(http_status GET "$BASE/api/collections/$c/records?perPage=1")
   if [ "$code" = "200" ]; then ok "collection $c"; else bad "collection $c (HTTP $code)"; fi
 done
@@ -239,6 +243,22 @@ done
 echo "==> domain library seeded by migration"
 atleast "checklist_templates" 26 "$(total checklist_templates)"
 atleast "template_items"      197 "$(total template_items)"
+# The tank leak test (migration 1789000028) loads from its OWN seed file and its
+# own loader, because the early loader (1789000009) runs before migration
+# 1789000027 opens the `tank` tag_type and `leak_test` phase enums. That
+# ordering is exactly the kind of thing that breaks silently in combination, so
+# assert the template landed AND that its items came with it.
+TANK_TPL=$(first_id checklist_templates "&filter=(template_key='tank.leakTest')")
+if [ -n "$TANK_TPL" ]; then ok "tank leak-test template seeded"; else bad "tank leak-test template MISSING (migration 1789000028)"; fi
+nonzero "tank leak-test template items" \
+  "$(total template_items "&filter=(template='$TANK_TPL')")"
+# Its phase/tag_type enum values really exist on the template (not silently ""):
+# NOTE: filter strings here must contain NO SPACES -- curl sends the query raw,
+# and a literal space breaks the request (you get an empty body, which the
+# assertion helpers report as "expected a positive count, got ''"). `&&` is
+# percent-encoded as %26%26 so it is not read as a query-parameter separator.
+nonzero "tank template keyed to tag_type=tank, phase=leak_test" \
+  "$(total checklist_templates "&filter=(tag_type='tank'%26%26phase='leak_test')")"
 
 # ---- 4. run the real demo seed ----------------------------------------------
 echo "==> creating demo user + running scripts/seed_demo.sh"
@@ -367,6 +387,81 @@ PUNCH_ID=$(curl -s -X POST "$BASE/api/collections/punch_items/records" \
   | sed -n 's/.*"id":"\([a-z0-9]\{15\}\)".*/\1/p' | head -1)
 rejected "ordinary user CANNOT delete (deletes are admin-only)" "$(auth_delete_status punch_items "$PUNCH_ID")"
 accepted "superuser CAN delete (the distinct admin tier)"        "$(su_delete_status   punch_items "$PUNCH_ID")"
+
+# ---- 8b. open->resolve: a linked PAIR, never a mutation (ADR 0012) -----------
+# The open half is signed now with result='pending' (a 48-hr tank leak test, a
+# bac-t sample awaiting the lab); the resolve half lands later carrying the
+# pass/fail and pointing back via `resolves`. The whole point is that resolving
+# does NOT edit the open record -- if it did, the ledger would be mutable and
+# hard constraint #2 would be broken. So: create the pair, then prove the open
+# record is byte-for-byte what it was.
+echo "==> open->resolve is an append-only PAIR, not an edit (ADR 0012)"
+OPEN_TAG=$(first_id tags)
+OPEN_ID=$(curl -s -X POST "$BASE/api/collections/checks/records" \
+  -H "Content-Type: application/json" \
+  -d "{\"tag\":\"$OPEN_TAG\",\"result\":\"pending\",\"phase\":\"leak_test\",\"performed_by\":\"smoke open\"}" \
+  | sed -n 's/.*"id":"\([a-z0-9]\{15\}\)".*/\1/p' | head -1)
+if [ -n "$OPEN_ID" ]; then ok "open check created (result=pending)"; else bad "could not create the pending open check"; fi
+# Snapshot the open record BEFORE the resolve lands.
+OPEN_BEFORE=$(curl -s "$BASE/api/collections/checks/records/$OPEN_ID")
+accepted "resolve check created, pointing back via resolves" \
+  "$(anon_post_status checks "{\"tag\":\"$OPEN_TAG\",\"result\":\"pass\",\"phase\":\"leak_test\",\"resolves\":\"$OPEN_ID\",\"performed_by\":\"smoke resolve\"}")"
+OPEN_AFTER=$(curl -s "$BASE/api/collections/checks/records/$OPEN_ID")
+# The load-bearing assertion: the open record is unchanged. `updated` is an
+# onUpdate autodate, so ANY write to the row moves it -- comparing the whole
+# body therefore catches a mutation even if `result` itself were left alone.
+# Guard first: if both fetches failed, the two bodies would be identically
+# empty and the comparison would pass while proving nothing.
+case "$OPEN_BEFORE" in
+  *"\"id\":\"$OPEN_ID\""*) ;;
+  *) bad "could not read the open record back -- the non-mutation check below would be vacuous" ;;
+esac
+if [ "$OPEN_BEFORE" = "$OPEN_AFTER" ]; then
+  ok "open record NOT mutated by its resolution (append-only holds)"
+else
+  bad "open record CHANGED when resolved -- append-only VIOLATED"
+fi
+# And it is still pending: the resolution carries the verdict, the open half
+# never acquires one.
+nonzero "open check still result=pending after resolution" \
+  "$(total checks "&filter=(id='$OPEN_ID'%26%26result='pending')")"
+# The link is real and queryable from the resolve side.
+nonzero "resolve check linked by resolves" \
+  "$(total checks "&filter=(resolves='$OPEN_ID')")"
+
+# ---- 8c. the newer collections are ruled as docs/API.md says -----------------
+# calibrations / calibration_points are CAPTURE-ROUTE-ONLY (createRule null):
+# the atomic POST /api/calibrations/capture writes them server-side after
+# validating, so a direct client create must be refused even WITH a token.
+# (Their PATCH refusals are asserted in section 6.)
+echo "==> newer collections match the published contract (ADR 0016 / 0017)"
+rejected "direct calibrations create refused (capture route only)" \
+  "$(auth_post_status calibrations "{\"tag\":\"$(first_id tags)\",\"result\":\"pass\"}")"
+rejected "direct calibration_points create refused (capture route only)" \
+  "$(auth_post_status calibration_points "{\"expected\":1,\"as_found\":1,\"as_left\":1}")"
+# test_standards is an ordinary office registry: guest refused, user allowed.
+# The payload must be COMPLETE and valid (name/serial/cert_date/cert_due_date are
+# all required) -- otherwise the guest create would 400 on validation and the
+# "denied" assertion would pass without auth having anything to do with it. The
+# paired positive below is what proves the guest refusal is the auth rule.
+TS_BODY='{"name":"Smoke Standard","serial":"SMOKE-%s","cert_date":"2026-01-01","cert_due_date":"2027-01-01"}'
+rejected "anon test_standards create denied" \
+  "$(anon_post_status test_standards "$(printf "$TS_BODY" 1)")"
+accepted "user test_standards create allowed (same valid payload)" \
+  "$(auth_post_status test_standards "$(printf "$TS_BODY" 2)")"
+# service_visits create is PUBLIC (accountless field tier, ADR 0017) but shape-
+# ruled: exactly one of tag XOR system, and it must belong to the same project.
+# Both halves are asserted -- the accountless path works, and the shape rule
+# still rejects a cross-project record.
+SV_TAG=$(first_id tags)
+SV_PROJ=$(curl -s "$BASE/api/collections/tags/records/$SV_TAG?fields=project" \
+  | sed -n 's/.*"project":"\([a-z0-9]\{15\}\)".*/\1/p' | head -1)
+accepted "anon service_visits create (accountless field tier)" \
+  "$(anon_post_status service_visits "{\"project\":\"$SV_PROJ\",\"tag\":\"$SV_TAG\",\"vendor_company\":\"Smoke Vendor\",\"rep_name\":\"S. Tester\",\"date\":\"2026-07-01\",\"purpose\":\"startup_assistance\",\"summary\":\"smoke test visit\",\"client_token\":\"smoke-sv-token-000001\"}")"
+rejected "service_visits rejects tag AND system together (shape rule)" \
+  "$(anon_post_status service_visits "{\"project\":\"$SV_PROJ\",\"tag\":\"$SV_TAG\",\"system\":\"$(first_id systems)\",\"vendor_company\":\"Smoke Vendor\",\"rep_name\":\"S. Tester\",\"date\":\"2026-07-01\",\"purpose\":\"other\",\"summary\":\"invalid two-subject visit\",\"client_token\":\"smoke-sv-token-000002\"}")"
+rejected "service_visits reject PATCH (append-only)" \
+  "$(patch_status service_visits "$(first_id service_visits)" '{"summary":"tampered"}')"
 
 # ---- 9. field-level PII: the back-relation expand a guest must not pierce -----
 # The collection rule hides service_contacts as a list/view (section 7). The

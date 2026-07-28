@@ -169,19 +169,21 @@ renderer and no committed versioned cross-product handoff manifest.
 **CURRENT.** `scripts/smoke_test.sh` is the only committed automated test
 suite. It boots a throwaway PocketBase database, applies migrations, runs the
 demo seed through REST, tests selected collection/rule invariants, verifies
-PII/auth boundaries, and checks the `/t/` and `/s/` routes. As of the
-2026-07-20 revision it also asserts the ADR 0011 access matrix across all three
-tiers — guest denial, authenticated-user reads/writes, the user-vs-superuser
-delete boundary, segment-create in both directions, and the field-level PII
-back-relation expand (70 assertions total). `.githooks/pre-push` runs it when
-the binary is present.
+PII/auth boundaries, and checks the `/t/` and `/s/` routes. It asserts the
+ADR 0011 access matrix across all three tiers — guest denial,
+authenticated-user reads/writes, the user-vs-superuser delete boundary,
+segment-create in both directions, and the field-level PII back-relation
+expand. As of the 2026-07-28 revision it also covers all 24 collections in the
+existence loop, the tank leak-test seed, the ADR 0012 open→resolve pair
+(asserting the open record is **not** mutated by its resolution), and the
+newer collections' contract rules — capture-route-only creates for
+`calibrations`/`calibration_points`, the auth boundary on `test_standards`, and
+the accountless-but-shape-ruled `service_visits` create.
+**89 assertions total**, a count the script header also records.
+`.githooks/pre-push` runs it when the binary is present.
 
 Known coverage gaps at this snapshot:
 
-- the expected-collection existence loop omits `segments` (its create is
-  exercised by the matrix section, but not the existence loop);
-- tank seeds/workflows are not asserted;
-- open-to-resolve behavior is not asserted;
 - there are no unit, browser, accessibility, documentation, or link tests.
 
 There is no committed CI configuration or environment template. Runtime setup
