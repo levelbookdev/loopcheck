@@ -36,13 +36,37 @@ backups, no containers.
 > revert) and `systemctl reload caddy`. The credential lives only in the
 > deployed Caddyfile as a hash; it is deliberately kept out of this repository.
 >
-> **Removal condition met (2026-07-20).** The auth reconciliation (ADR 0011) is
-> complete and asserted by the smoke test, so this stop-gap gate can now be
-> removed. That is a **live-server action for the operator**, not a repo change:
-> delete the `basic_auth` block, `systemctl reload caddy`, then re-verify from
-> outside that the public field tier (`/t/{tag}`) reads work anonymously while
-> office/PII reads and writes are refused without a token. This note stays here
-> until that removal is done and confirmed.
+> **DO NOT REMOVE THE GATE YET — the condition was stated wrong (corrected
+> 2026-07-28).** The original condition ("remove once the auth reconciliation in
+> README is complete") describes the **repository**. The gate protects a
+> **deployment**, and those are not the same thing. Removing it on repo state
+> alone is unsafe, and was tried on 2026-07-28: the gate came off for about two
+> minutes, an external check immediately showed an anonymous `POST` to
+> `projects` returning `200`, and the gate was restored.
+>
+> The cause: **the deployed instance is far behind `main`.** It was running 11
+> migrations (through `1789000010`) against the repo's 34, with no `lc-auth.js`,
+> so it still had the original Phase-1 all-permissive rules — no auth lockdown,
+> no PII split, no `segments`/`loto_events`/`warranties` at all. The basic_auth
+> gate is therefore not a redundant belt-and-braces measure; **it is the only
+> thing protecting a world-writable instance.**
+>
+> **The corrected removal condition — all four, in order:**
+> 1. The reconciled code is **deployed** (`git pull` on the droplet to a commit
+>    at or after `d073a99`, ADR 0011's migrations applied).
+> 2. The migrations actually ran: the live collection set matches the repo
+>    (24 application collections), verified against the running instance.
+> 3. `scripts/smoke_test.sh` passes **against that deployment's code**, not just
+>    locally.
+> 4. Only then remove the `basic_auth` block, reload, and **re-verify from
+>    outside** — anonymous `/t/{tag}` reads work; anonymous `POST` to `projects`
+>    or `segments` is refused; `warranties`/`closeout_*`/`service_contacts`
+>    return nothing to a guest; no `customer_name` in any anonymous response.
+>
+> Beware false confidence in step 4: a collection that does not exist on a stale
+> deployment also "returns nothing to a guest". Assert that office collections
+> exist **and** are empty to an anonymous caller, or the check passes for the
+> wrong reason.
 
 ## First-boot hardening (any internet-reachable box)
 
