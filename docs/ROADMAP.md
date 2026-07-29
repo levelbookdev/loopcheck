@@ -149,6 +149,8 @@ Tasks: [`010`](tasks/010-docs-reconcile-stale-references.md) ·
 [`040`](tasks/040-browser-ui-smoke-test.md) ·
 [`045`](tasks/045-normalize-line-endings.md) ·
 [`050`](tasks/050-ci-pipeline.md) ·
+[`055`](tasks/055-bump-actions-node20.md) ·
+[`057`](tasks/057-verify-download-checksum.md) ·
 [`060`](tasks/060-deploy-validation-arm-vm.md) ·
 [`065`](tasks/065-landing-page-truth-and-pages.md) ·
 [`066`](tasks/066-deployment-update-path.md) ·

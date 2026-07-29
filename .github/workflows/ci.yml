@@ -42,14 +42,14 @@ jobs:
 
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # The binary is not committed (see .gitignore) — scripts/setup.sh fetches
       # the right build for the runner's OS/arch. Cached per version so the
       # common case is a restore, not a download.
       - name: Cache the PocketBase binary
         id: pb-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: pocketbase
           key: pocketbase-${{ runner.os }}-${{ runner.arch }}-${{ env.PB_VERSION }}
@@ -85,7 +85,7 @@ jobs:
       # version is pinned by scripts/browser/package-lock.json; the browser
       # binary is downloaded here and cached, never committed.
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
@@ -100,7 +100,7 @@ jobs:
       # requires.
       - name: Cache the Playwright browser
         id: pw-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('scripts/browser/package-lock.json') }}
