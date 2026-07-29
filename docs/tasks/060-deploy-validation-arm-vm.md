@@ -28,10 +28,11 @@ credentials or provisioning tooling exist on this machine (`doctl`, `hcloud`,
 cloud resources without explicit approval. A copy-pasteable runbook is in
 `DEPLOY.md` for the live run.
 
-**Finding, reported not fixed:** `scripts/setup.sh` does not verify the
-downloaded release against the published `checksums.txt`. HTTPS authenticates the
-host, not the artifact. Left alone because this is a validation task guarded
-against patching scripts.
+**Finding, reported not fixed here — since fixed by task `057`:**
+`scripts/setup.sh` did not verify the downloaded release against the published
+`checksums.txt`. HTTPS authenticates the host, not the artifact. Left alone in
+this task because it is a validation task guarded against patching scripts; the
+fix landed separately.
 
 ## Context
 

@@ -1,8 +1,33 @@
 # 057 — Verify the PocketBase download against its published checksum
 
-Status: TODO
+Status: DONE (2026-07-28 — all three paths tested, incl. deliberate corruption)
 Milestone: M1 Harden & Reconcile (v0.9.0)
 Depends on: none
+
+## Outcome
+
+`scripts/setup.sh` now verifies the download before extracting. Tested, not
+assumed:
+
+| Path | Result |
+|---|---|
+| Valid download | `Checksum verified (sha256 aad897c0…)`, exit 0 |
+| **Corrupted artifact** | `FATAL: checksum mismatch`, both digests printed, **file deleted**, exit 1 |
+| `checksums.txt` unreachable | Loud `WARNING`, continues — a skip is visible, never silent |
+| No SHA-256 tool | Loud `WARNING` naming the missing tools |
+
+The corruption test used the real script with only the `curl` download stubbed,
+so the verification code path exercised is the shipped one.
+
+**A bug in the first draft, caught by that test:** when `sha256sum` existed but
+failed (unreadable file), `ACTUAL` came back empty and the script announced
+*"neither sha256sum nor shasum is available"* — on a machine where it was
+installed and working. That would send the next person hunting for a missing
+tool that isn't missing. "No tool" and "tool failed" are now distinct: the first
+warns and continues, the second is fatal, because a hashing tool that cannot read
+a file we just downloaded means the download is broken.
+
+CI exercises the happy path on every run — it calls `setup.sh` on a cold cache.
 
 ## Context
 

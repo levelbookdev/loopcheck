@@ -323,14 +323,25 @@ curl -s -o /dev/null -w '%{http_code}\n' http://<host>/t/<a-seeded-tag>   # expe
 Finally exercise backup → restore per **Backups** onto a second box, and confirm
 the tag count matches the source.
 
-### Finding (not fixed here): the installer does not verify checksums
+### Installer integrity — resolved 2026-07-28
 
-`scripts/setup.sh` downloads the release zip over HTTPS but does **not** verify
-it against the `checksums.txt` the project publishes, even though that file
-exists and covers every architecture. HTTPS authenticates the host, not the
-artifact. Adding a `sha256` check would be a small change to the install path
-and is deliberately **not** made here — task `060` is a validation task and is
-guarded against silently patching scripts. Recorded so it is not lost.
+This section previously recorded a finding that `scripts/setup.sh` downloaded the
+release zip without verifying it. **That is fixed** (task `057`): the installer
+now computes the SHA-256 of the download and compares it against the
+`checksums.txt` the project publishes for every architecture. HTTPS
+authenticates the host, not the artifact, so this closes the gap between "the
+transfer succeeded" and "these are the bytes upstream published".
+
+Behaviour, so an operator knows what to expect:
+
+- **Match** — prints `Checksum verified (sha256 …)` and continues.
+- **Mismatch** — refuses, prints both the expected and actual digests, **deletes
+  the artifact**, and exits non-zero. A failed download is never left on disk
+  where a later run could treat it as usable.
+- **Cannot verify** — if `checksums.txt` is unreachable (offline or mirrored
+  install) or no SHA-256 tool exists, it prints a loud warning naming the reason
+  and continues. A skip is always visible; a silent skip would read as
+  protection while providing none.
 
 ### Topology labels
 
