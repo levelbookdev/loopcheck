@@ -74,7 +74,9 @@ same false-confidence trap that made a stale deployment look protected.
 ## Acceptance criteria
 
 - [x] `.github/workflows/ci.yml` exists, triggers on push/PR, fetches PocketBase,
-      and runs the smoke test, failing the job if it fails.
+      and runs the smoke test, failing the job if it fails. **Verified green on a
+      real run** (2026-07-28, run `30468377854`): PocketBase 0.39.6 fetched and
+      version-asserted, `89 passed, 0 failed` on `ubuntu-latest`.
 - [ ] *(deferred to `040`)* The same workflow also runs the browser test and
       fails the job if it fails.
 - [ ] The workflow is valid YAML and its steps reference real script paths that
