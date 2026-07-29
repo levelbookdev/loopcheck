@@ -52,7 +52,12 @@ jobs:
         uses: actions/cache@v6
         with:
           path: pocketbase
-          key: pocketbase-${{ runner.os }}-${{ runner.arch }}-${{ env.PB_VERSION }}
+          # Keyed on setup.sh as well as the version: a cache hit SKIPS the
+          # installer entirely, so without this a change to setup.sh (its
+          # architecture mapping, or the checksum verification added in task 057)
+          # would never actually run in CI. Including the script means any edit to
+          # it forces a genuine download-and-verify on the next run.
+          key: pocketbase-${{ runner.os }}-${{ runner.arch }}-${{ env.PB_VERSION }}-${{ hashFiles('scripts/setup.sh') }}
 
       - name: Fetch PocketBase
         if: steps.pb-cache.outputs.cache-hit != 'true'

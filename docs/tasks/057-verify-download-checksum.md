@@ -27,7 +27,13 @@ tool that isn't missing. "No tool" and "tool failed" are now distinct: the first
 warns and continues, the second is fatal, because a hashing tool that cannot read
 a file we just downloaded means the download is broken.
 
-CI exercises the happy path on every run — it calls `setup.sh` on a cold cache.
+**One more thing the first pass got wrong.** The claim "CI exercises this on
+every run" was false: a PocketBase cache hit skips `setup.sh` entirely, so the
+verification never executed on Linux. The cache key now includes
+`hashFiles('scripts/setup.sh')`, so any change to the installer forces a real
+download-and-verify on the next run — which is precisely when you want it
+exercised. Confirmed by the run that followed, which fetched rather than restored
+and printed `Checksum verified`.
 
 ## Context
 
