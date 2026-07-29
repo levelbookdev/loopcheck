@@ -1,0 +1,85 @@
+name: CI
+
+# The remote half of the gate (DECISIONS.md D15 — CI runs both locally and in
+# GitHub Actions). The local half is .githooks/pre-push, which runs the same
+# script; this workflow is the backstop for when the hook is bypassed
+# (SKIP_SMOKE=1), absent on a fresh clone, or skipped because the machine has no
+# PocketBase binary.
+#
+# Deliberately one job on one OS. Private-repo Actions minutes are finite and
+# this is a correctness gate, not a release pipeline.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A newer push supersedes an in-flight run on the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Combined smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      # Pinned deliberately, not "latest". docs/API.md states the contract is
+      # tested against 0.39.6 and that a PocketBase upgrade which changes REST
+      # behavior is a breaking change — so CI must test the version we claim to
+      # support. Bumping this is an intentional act that comes with re-reading
+      # the release notes, not a silent drift.
+      PB_VERSION: 0.39.6
+      # Fixed port: the runner is clean, and a stable port makes a failure
+      # reproducible locally with the same command.
+      LC_TEST_PORT: 8399
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      # The binary is not committed (see .gitignore) — scripts/setup.sh fetches
+      # the right build for the runner's OS/arch. Cached per version so the
+      # common case is a restore, not a download.
+      - name: Cache the PocketBase binary
+        id: pb-cache
+        uses: actions/cache@v4
+        with:
+          path: pocketbase
+          key: pocketbase-${{ runner.os }}-${{ runner.arch }}-${{ env.PB_VERSION }}
+
+      - name: Fetch PocketBase
+        if: steps.pb-cache.outputs.cache-hit != 'true'
+        run: sh scripts/setup.sh
+
+      - name: Confirm the pinned version is what we got
+        run: |
+          chmod +x ./pocketbase
+          ./pocketbase --version
+          ./pocketbase --version | grep -q "$PB_VERSION" || {
+            echo "::error::PocketBase version mismatch — expected $PB_VERSION"; exit 1; }
+
+      # The gate itself. Boots a throwaway database from pb_migrations/, runs the
+      # full demo seed through REST, and asserts the combined stack: every
+      # migration applies, every module's seed populates, the append-only and
+      # close-once rules hold, and the ADR 0011 access matrix behaves across
+      # guest / user / superuser. Non-zero exit fails the job.
+      # Note on debugging a red build: there is deliberately no "upload the
+      # server log" step. smoke_test.sh removes its throwaway data directory in
+      # an EXIT trap, so serve.log/seed.log are gone by the time a later step
+      # could read them — a step that tried would silently find nothing and look
+      # like it had checked. The per-assertion PASS/FAIL output above is the
+      # diagnostic, and the same command reproduces it locally:
+      #   LC_TEST_PORT=8399 sh scripts/smoke_test.sh
+      - name: Run the combined smoke test
+        run: sh scripts/smoke_test.sh
+
+      # TODO(040): the headless-browser smoke test of the critical field path is
+      # not built yet. When task 040 lands, add its install + run steps here so
+      # this job fails if either suite fails. Tracked in docs/tasks/040-*.md.

@@ -41,6 +41,31 @@ your work doesn't stall on paperwork.
   **pre-push hook** (`git config core.hooksPath .githooks`), so a push runs
   it automatically; a doc-only or emergency push can bypass it with
   `SKIP_SMOKE=1 git push`.
+
+### The test gate, local and remote
+
+The same script is the gate in both places
+([DECISIONS.md D15](docs/DECISIONS.md#d15--ci-runs-both-locally-and-in-github-actions)):
+
+| | What runs it | Behaviour |
+|---|---|---|
+| **Local** | `.githooks/pre-push` | Runs `scripts/smoke_test.sh` on every push. Skips with a message if the PocketBase binary isn't downloaded yet, so a fresh clone can still push docs. Bypass with `SKIP_SMOKE=1 git push`. A real failure blocks the push. |
+| **Remote** | `.github/workflows/ci.yml` | Runs the same script on every push and PR to `main`, on `ubuntu-latest`. This is the backstop for a bypassed, absent, or skipped local hook. |
+
+Run the gate yourself exactly as CI does:
+
+```sh
+./scripts/setup.sh                          # once — fetches the PocketBase binary
+LC_TEST_PORT=8399 sh scripts/smoke_test.sh  # 89 assertions
+```
+
+CI **pins** `PB_VERSION` to the version `docs/API.md` names as the tested one,
+rather than tracking latest — a PocketBase upgrade that changes REST behaviour is
+a breaking change to the published contract, so moving the pin is a deliberate
+act, not drift.
+
+The headless-browser test of the critical field path is not built yet; task
+`040` adds it and wires it into both gates.
 - The collections are a published API surface ([docs/API.md](docs/API.md)) —
   sixteen published as v1, 24 committed in total (the extra eight marked
   *delta*). Breaking changes need an ADR *and* a contract version bump, not

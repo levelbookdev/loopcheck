@@ -34,6 +34,12 @@ if [ ! -f "$ROOT/pocketbase" ] && [ ! -f "$ROOT/pocketbase.exe" ]; then
   exit 0
 fi
 
+# TODO(040): when the headless-browser field-path test lands, run it here too --
+# only if its tooling is installed, else print a skip note and carry on. It is
+# deliberately not stubbed now: a check for tooling that does not exist yet would
+# always report "skipped", which reads like coverage rather than absence. The
+# same extension point is marked in .github/workflows/ci.yml.
+
 echo "pre-push: running the combined smoke test (SKIP_SMOKE=1 to bypass)..." >&2
 # Invoke via sh so a lost executable bit on a fresh Windows clone can't
 # break the gate. A less-common default port keeps a running dev server

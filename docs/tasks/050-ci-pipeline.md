@@ -1,6 +1,9 @@
 # 050 — CI: GitHub Actions backstop + hardened local pre-push gate
 
-Status: TODO
+Status: PARTIALLY DONE (2026-07-28) — smoke-test gate landed local + remote.
+The browser-test half is deferred to `040`, which owns the tooling; both gates
+carry a marked `TODO(040)` extension point. Set to `DONE` when `040` wires its
+suite in.
 Milestone: M1 Harden & Reconcile (v0.9.0)
 Depends on: 030, 040
 
@@ -55,11 +58,25 @@ be installed in CI, not committed.
 3. **Docs.** One short section documenting: what CI runs, how to run the same
    gate locally, and how to enable the local browser test.
 
+## Progress note (2026-07-28)
+
+This task declares `Depends on: 030, 040`, but `040` was still `TODO` when the
+CI work was done. The smoke-test gate is independently valuable — 89 assertions
+that previously ran only when someone remembered — so it landed first rather
+than waiting. The browser half could not land: **the suite it would invoke does
+not exist yet.**
+
+Both gates carry an explicit `TODO(040)` at the exact insertion point. Neither
+stubs a tooling check, deliberately: a check for tooling that does not exist
+always reports "skipped", which reads like coverage rather than absence — the
+same false-confidence trap that made a stale deployment look protected.
+
 ## Acceptance criteria
 
-- [ ] `.github/workflows/ci.yml` exists, triggers on push/PR, fetches PocketBase,
-      and runs both the smoke test and the browser test, failing the job if
-      either fails.
+- [x] `.github/workflows/ci.yml` exists, triggers on push/PR, fetches PocketBase,
+      and runs the smoke test, failing the job if it fails.
+- [ ] *(deferred to `040`)* The same workflow also runs the browser test and
+      fails the job if it fails.
 - [ ] The workflow is valid YAML and its steps reference real script paths that
       exist in the repo.
 - [ ] `.githooks/pre-push` runs both suites when able, skips gracefully with a
