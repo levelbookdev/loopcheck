@@ -1,8 +1,37 @@
 # 060 — Deploy validation on an ARM cloud VM (interim for the Pi promise)
 
-Status: TODO
+Status: IN PROGRESS — in-repo verification done and recorded; the live ARM run is
+handed to the maintainer (no ARM hardware, no cloud credentials, and the
+guardrail forbids creating paid resources unasked). Set to `DONE` when the
+runbook in `DEPLOY.md` has been executed and the record replaced with real
+results.
 Milestone: M1 Harden & Reconcile (v0.9.0)
 Depends on: 010, 020
+
+## Outcome so far (2026-07-28)
+
+**Verified, genuinely run:** the part of the ARM path most likely to be silently
+broken — the installer's architecture mapping and the artifact it would fetch.
+`setup.sh` maps `aarch64`/`arm64` and `armv7*`/`armv6*` correctly; PocketBase
+0.39.6 publishes both `linux_arm64` and `linux_armv7`; the exact URLs `setup.sh`
+constructs resolve (HTTP 206 on ranged requests); upstream checksums cover both.
+
+**Not verified, and not claimed:** that the ARM binary runs, that migrations and
+the seed apply on ARM, systemd behaviour, reboot survival, network reachability,
+backup→restore, and anything about Pi *performance* — the "runs well" half of
+hard constraint #3 is entirely unmeasured.
+
+**Why it stopped here:** the existing droplet is `x86_64` (Ubuntu 24.04), which
+by this task's own reasoning cannot exercise `linux/arm64`. No ARM provider
+credentials or provisioning tooling exist on this machine (`doctl`, `hcloud`,
+`aws`, `multipass`, `docker` all absent), and the guardrail forbids creating paid
+cloud resources without explicit approval. A copy-pasteable runbook is in
+`DEPLOY.md` for the live run.
+
+**Finding, reported not fixed:** `scripts/setup.sh` does not verify the
+downloaded release against the published `checksums.txt`. HTTPS authenticates the
+host, not the artifact. Left alone because this is a validation task guarded
+against patching scripts.
 
 ## Context
 

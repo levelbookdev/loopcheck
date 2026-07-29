@@ -264,6 +264,81 @@ fresh `pb_data/` (or use the admin UI restore), start PocketBase, and open a
 minutes, and the recovery procedure is now something you've done rather than
 something you believe in.
 
+## ARM validation record
+
+Hard constraint #3 promises LoopCheck "runs well on a Raspberry Pi server."
+That promise has **not** been proven on ARM hardware. This section records
+exactly what has and has not been checked, so the gap is visible rather than
+assumed ([DECISIONS.md D14](DECISIONS.md#d14--deployment-topology-labeling)).
+
+### Verified — 2026-07-28, without ARM hardware
+
+These were actually run and are reproducible from any machine. They cover the
+part of the ARM path most likely to be silently wrong: the binary the installer
+selects and where it fetches it from.
+
+| Check | Result |
+|---|---|
+| `scripts/setup.sh` maps `aarch64`/`arm64` → `arm64`, and `armv7*`/`armv6*` → `armv7` | **PASS** — mapping present and correct for both 64-bit Pis and older 32-bit ones |
+| PocketBase 0.39.6 publishes the assets that mapping implies | **PASS** — `pocketbase_0.39.6_linux_arm64.zip` and `..._linux_armv7.zip` both exist in the upstream release |
+| The exact download URL `setup.sh` constructs resolves for ARM | **PASS** — `HTTP 206` on a ranged request for both `linux_arm64` and `linux_armv7` |
+| Upstream publishes checksums covering the ARM assets | **PASS** — both appear in `checksums.txt` |
+
+### Not verified — requires real ARM hardware or an ARM VM
+
+Nothing below has been run. **Do not treat any of it as passing.**
+
+- The ARM binary actually starts and serves.
+- Migrations and the seed library apply cleanly on ARM.
+- The Option A systemd unit starts, survives `systemctl restart`, and survives a
+  reboot.
+- A tag page is reachable over the network and the QR label sheet renders.
+- Stop-copy-start backup, restored onto a second box, with data intact.
+- Anything about **performance** on a Pi — the "runs well" half of the constraint
+  is entirely unmeasured.
+
+### Runbook for the live run
+
+On a fresh ARM64 box (Hetzner CAX11, AWS Graviton `t4g`, or Oracle free-tier
+Ampere — DigitalOcean has no ARM droplet type), run the steps below and replace
+the table above with real results.
+
+```sh
+uname -m                       # expect aarch64 — otherwise you are not on ARM
+git clone <repo> loopcheck && cd loopcheck
+./scripts/setup.sh             # must fetch ..._linux_arm64.zip, not amd64
+./pocketbase --version         # expect 0.39.6
+sh scripts/smoke_test.sh       # 89 assertions — proves migrations + seed on ARM
+```
+
+Then follow **Option A** verbatim for the systemd unit, and confirm:
+
+```sh
+sudo systemctl restart loopcheck && systemctl is-active loopcheck
+sudo reboot                    # then, after it comes back:
+systemctl is-active loopcheck  # expect: active
+curl -s -o /dev/null -w '%{http_code}\n' http://<host>/t/<a-seeded-tag>   # expect 200
+```
+
+Finally exercise backup → restore per **Backups** onto a second box, and confirm
+the tag count matches the source.
+
+### Finding (not fixed here): the installer does not verify checksums
+
+`scripts/setup.sh` downloads the release zip over HTTPS but does **not** verify
+it against the `checksums.txt` the project publishes, even though that file
+exists and covers every architecture. HTTPS authenticates the host, not the
+artifact. Adding a `sha256` check would be a small change to the install path
+and is deliberately **not** made here — task `060` is a validation task and is
+guarded against silently patching scripts. Recorded so it is not lost.
+
+### Topology labels
+
+Unchanged and restated for one-glance clarity: **single LAN host** and **single
+internet-facing VPS** are supported and documented. **Raspberry Pi** and the
+**primary/replica** arrangement below are **unvalidated**. Real Pi validation is
+an M3 item and this interim record does not satisfy it.
+
 ## Proposed resilience topology: VPS primary + trailer Pi replica
 
 > **UNVALIDATED — design direction, not a support claim**
