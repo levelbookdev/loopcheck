@@ -1,0 +1,13 @@
+{
+  "name": "loopcheck-browser-test",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Dev-only headless-browser smoke of LoopCheck's critical field path. NOT part of the shipped app: nothing here is vendored into pb_public/ or loaded by any page (DECISIONS.md D16). Hard constraint #3's no-build-step and page-weight budget govern pb_public/, not this harness.",
+  "scripts": {
+    "test": "node field_path.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.49.1"
+  }
+}

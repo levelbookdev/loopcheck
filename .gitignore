@@ -47,3 +47,14 @@ Thumbs.db
 # Covers pb_data_caltest/ and any other pb_data_<suffix>/ test instances.
 pb_data_caltest/
 pb_data_*/
+
+# ---- Dev-only browser-test tooling (task 040, DECISIONS.md D16) -------------
+# Playwright and its downloaded browsers are DEV tooling for
+# scripts/browser_test.sh. They are never vendored into pb_public/, never a
+# runtime dependency, and never shipped to a field deployment. The manifest and
+# lockfile ARE committed (so the version is pinned); the installed bytes are not.
+node_modules/
+scripts/browser/node_modules/
+# Playwright's browser downloads, if a local cache dir is ever used.
+.playwright/
+ms-playwright/

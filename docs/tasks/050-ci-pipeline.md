@@ -1,9 +1,8 @@
 # 050 — CI: GitHub Actions backstop + hardened local pre-push gate
 
-Status: PARTIALLY DONE (2026-07-28) — smoke-test gate landed local + remote.
-The browser-test half is deferred to `040`, which owns the tooling; both gates
-carry a marked `TODO(040)` extension point. Set to `DONE` when `040` wires its
-suite in.
+Status: DONE (2026-07-28) — both suites run in CI and in the pre-push hook.
+The smoke-test half landed first, ahead of `040`; `040` then wired its browser
+suite into both gates and the `TODO(040)` placeholders were removed.
 Milestone: M1 Harden & Reconcile (v0.9.0)
 Depends on: 030, 040
 
@@ -77,8 +76,9 @@ same false-confidence trap that made a stale deployment look protected.
       and runs the smoke test, failing the job if it fails. **Verified green on a
       real run** (2026-07-28, run `30468377854`): PocketBase 0.39.6 fetched and
       version-asserted, `89 passed, 0 failed` on `ubuntu-latest`.
-- [ ] *(deferred to `040`)* The same workflow also runs the browser test and
-      fails the job if it fails.
+- [x] The same workflow also runs the browser test and fails the job if it
+      fails — added once `040` landed (Node + `npm ci` + cached Chromium +
+      `scripts/browser_test.sh`).
 - [ ] The workflow is valid YAML and its steps reference real script paths that
       exist in the repo.
 - [ ] `.githooks/pre-push` runs both suites when able, skips gracefully with a

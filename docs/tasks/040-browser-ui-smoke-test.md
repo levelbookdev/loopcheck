@@ -1,8 +1,36 @@
 # 040 — Headless-browser smoke test of the critical field path
 
-Status: TODO
+Status: DONE (2026-07-28 — 7 assertions green; wired into both gates)
 Milestone: M1 Harden & Reconcile (v0.9.0)
 Depends on: 030
+
+## Outcome
+
+`scripts/browser_test.sh` boots its own seeded throwaway instance (separate data
+dir and port from the REST suite) and runs `scripts/browser/field_path.mjs`
+headless: **7 passed, 0 failed**, exit 0.
+
+Two false failures during construction are worth knowing about, because both
+would have been read as product bugs:
+
+- **`networkidle` is not "loaded".** `tag.html`'s `load()` runs several
+  sequential fetches, so the page briefly renders a convincing partial — header
+  and LOTO heading present, checkout standing and the honesty line absent.
+  Asserting then reported a missing safety line on a page that renders it
+  correctly. The suite now waits on the component's own `state !== 'loading'`.
+- **The tag number is outside `<main>`.** It lives in `<header class="bar">`, so
+  reading `main`'s text missed it. The suite reads the whole body.
+
+Both are recorded in the script's comments so the next reader does not re-derive
+them. A third gotcha, already predicted by the task, held true: synthetic events
+do not drive Alpine `x-model`; the suite sets state via `Alpine.$data()` and
+calls the component's own method.
+
+Also note the subject tag is **chosen**, not hardcoded: it picks a tag whose
+`tag_type` actually has a checklist template. The first tag alphabetically was an
+`analyzer`, which has none, so the check-flow assertion could not run at all.
+
+**No product bug was found** — nothing under `pb_public/` changed.
 
 ## Context
 

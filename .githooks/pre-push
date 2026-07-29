@@ -34,21 +34,33 @@ if [ ! -f "$ROOT/pocketbase" ] && [ ! -f "$ROOT/pocketbase.exe" ]; then
   exit 0
 fi
 
-# TODO(040): when the headless-browser field-path test lands, run it here too --
-# only if its tooling is installed, else print a skip note and carry on. It is
-# deliberately not stubbed now: a check for tooling that does not exist yet would
-# always report "skipped", which reads like coverage rather than absence. The
-# same extension point is marked in .github/workflows/ci.yml.
-
 echo "pre-push: running the combined smoke test (SKIP_SMOKE=1 to bypass)..." >&2
 # Invoke via sh so a lost executable bit on a fresh Windows clone can't
 # break the gate. A less-common default port keeps a running dev server
 # from failing it; override with LC_TEST_PORT if it ever collides.
-if LC_TEST_PORT="${LC_TEST_PORT:-8477}" sh "$ROOT/scripts/smoke_test.sh"; then
+if ! LC_TEST_PORT="${LC_TEST_PORT:-8477}" sh "$ROOT/scripts/smoke_test.sh"; then
+  echo "" >&2
+  echo "pre-push: smoke test FAILED -- push blocked." >&2
+  echo "          fix the regression, or bypass with:  SKIP_SMOKE=1 git push" >&2
+  exit 1
+fi
+
+# ---- second gate: the rendered field path (task 040) ------------------------
+# Dev-only tooling, so it is OPTIONAL locally: a machine without node or without
+# the installed harness still gets the REST gate and a clear note about what it
+# is missing. CI always runs both, so nothing reaches main unchecked either way.
+if ! command -v node >/dev/null 2>&1 || [ ! -d "$ROOT/scripts/browser/node_modules" ]; then
+  echo "pre-push: browser field-path test skipped (tooling not installed)." >&2
+  echo "          enable it with:  cd scripts/browser && npm ci && npx playwright install chromium" >&2
   exit 0
 fi
 
-echo "" >&2
-echo "pre-push: smoke test FAILED -- push blocked." >&2
-echo "          fix the regression, or bypass with:  SKIP_SMOKE=1 git push" >&2
-exit 1
+echo "pre-push: running the browser field-path smoke..." >&2
+if ! sh "$ROOT/scripts/browser_test.sh"; then
+  echo "" >&2
+  echo "pre-push: browser field-path test FAILED -- push blocked." >&2
+  echo "          the field tier renders wrong; bypass with:  SKIP_SMOKE=1 git push" >&2
+  exit 1
+fi
+
+exit 0

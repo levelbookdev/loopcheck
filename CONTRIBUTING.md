@@ -47,25 +47,43 @@ your work doesn't stall on paperwork.
 The same script is the gate in both places
 ([DECISIONS.md D15](docs/DECISIONS.md#d15--ci-runs-both-locally-and-in-github-actions)):
 
-| | What runs it | Behaviour |
-|---|---|---|
-| **Local** | `.githooks/pre-push` | Runs `scripts/smoke_test.sh` on every push. Skips with a message if the PocketBase binary isn't downloaded yet, so a fresh clone can still push docs. Bypass with `SKIP_SMOKE=1 git push`. A real failure blocks the push. |
-| **Remote** | `.github/workflows/ci.yml` | Runs the same script on every push and PR to `main`, on `ubuntu-latest`. This is the backstop for a bypassed, absent, or skipped local hook. |
+There are **two suites**, and they cover different failure modes:
 
-Run the gate yourself exactly as CI does:
+| Suite | What it proves |
+|---|---|
+| `scripts/smoke_test.sh` | The REST surface: every migration applies, each module's seed populates, append-only and close-once rules hold, and the ADR 0011 access matrix behaves across guest / user / superuser. **89 assertions.** |
+| `scripts/browser_test.sh` | The *rendered* field path: `/t/{tag}` serves a populated page, the LOTO honesty line and freshness stamp are present (ADR 0007), an accountless punch flag reads back, and a logged check appears in the ledger. **7 assertions.** The REST suite cannot see any of this — a broken Alpine binding would leave it green while the field tier is dead. |
+
+| | What runs them | Behaviour |
+|---|---|---|
+| **Local** | `.githooks/pre-push` | Runs the REST suite on every push; runs the browser suite too when its tooling is installed, and says so when it isn't. Either failing blocks the push. Bypass with `SKIP_SMOKE=1 git push`. |
+| **Remote** | `.github/workflows/ci.yml` | Runs **both** on every push and PR to `main`. The backstop for a bypassed, absent, or skipped local hook. |
+
+Run them yourself exactly as CI does:
 
 ```sh
 ./scripts/setup.sh                          # once — fetches the PocketBase binary
-LC_TEST_PORT=8399 sh scripts/smoke_test.sh  # 89 assertions
+LC_TEST_PORT=8399 sh scripts/smoke_test.sh  # REST suite
 ```
+
+```sh
+cd scripts/browser && npm ci && npx playwright install chromium && cd ../..
+sh scripts/browser_test.sh                  # browser suite (boots its own seeded instance)
+```
+
+Both boot their own throwaway database from `pb_migrations/` and delete it on
+exit — they never touch your `pb_data/`. Point the browser suite at an instance
+that is already running with `LC_BASE=https://host sh scripts/browser_test.sh`.
+
+The browser tooling is **dev-only** ([D16](docs/DECISIONS.md#d16--browser-test-tooling-is-dev-only-and-isolated)):
+Playwright and its browser download are git-ignored, never vendored into
+`pb_public/`, and never a runtime dependency. Hard constraint #3's no-build-step
+and page-weight budget govern the shipped app, not the test harness.
 
 CI **pins** `PB_VERSION` to the version `docs/API.md` names as the tested one,
 rather than tracking latest — a PocketBase upgrade that changes REST behaviour is
 a breaking change to the published contract, so moving the pin is a deliberate
 act, not drift.
-
-The headless-browser test of the critical field path is not built yet; task
-`040` adds it and wires it into both gates.
 - The collections are a published API surface ([docs/API.md](docs/API.md)) —
   sixteen published as v1, 24 committed in total (the extra eight marked
   *delta*). Breaking changes need an ADR *and* a contract version bump, not

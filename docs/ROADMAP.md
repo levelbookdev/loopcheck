@@ -79,8 +79,8 @@ this is the index.
   formally accepted; no further work this cycle.
 - **Selective auth + PII split** ([ADR 0011](adr/0011-auth-lockdown.md), **Accepted**) —
   public scan/reads and the deliberate accountless flag/check/LOTO/calibration
-  creates survive; office writes and PII reads require an account; 70-assertion
-  smoke test asserts the matrix across guest/user/superuser.
+  creates survive; office writes and PII reads require an account; the
+  89-assertion smoke test asserts the matrix across guest/user/superuser.
 
 **Shipped schema without UI (deliberately parked, not roadmap items):** segment
 acceptance (owned by MainLine — [D10](DECISIONS.md#d10--segment-acceptance-is-owned-by-mainline-correction-of-record)),
@@ -131,10 +131,10 @@ validated — all gated by CI. No new features
       existence loop, a tank leak-test seed/workflow assertion, and an
       open→resolve behavior assertion; run count is documented in the script
       header and matches actual passes.
-- [ ] A browser smoke test exists under `scripts/` and passes headless against a
+- [x] A browser smoke test exists under `scripts/` and passes headless against a
       freshly seeded instance, exercising the critical field path; it is
       git-ignored dev tooling and adds nothing to `pb_public/`.
-- [ ] A GitHub Actions workflow runs both suites on push/PR and is green; the
+- [x] A GitHub Actions workflow runs both suites on push/PR and is green; the
       pre-push hook runs the same gate locally.
 - [ ] `docs/DEPLOY.md` contains a completed ARM-VM validation record (clean
       install, migrations+seed applied, backup/restore verified) with the

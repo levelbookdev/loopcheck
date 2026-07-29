@@ -80,6 +80,38 @@ jobs:
       - name: Run the combined smoke test
         run: sh scripts/smoke_test.sh
 
-      # TODO(040): the headless-browser smoke test of the critical field path is
-      # not built yet. When task 040 lands, add its install + run steps here so
-      # this job fails if either suite fails. Tracked in docs/tasks/040-*.md.
+      # ---- second suite: the rendered field path (task 040) -------------------
+      # Dev-only tooling, never vendored into pb_public/ (D16). Playwright's
+      # version is pinned by scripts/browser/package-lock.json; the browser
+      # binary is downloaded here and cached, never committed.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: scripts/browser/package-lock.json
+
+      - name: Install the browser-test tooling
+        working-directory: scripts/browser
+        run: npm ci
+
+      # Keyed on the lockfile: a Playwright bump invalidates the cache and
+      # re-downloads the matching browser build, which is the pairing Playwright
+      # requires.
+      - name: Cache the Playwright browser
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('scripts/browser/package-lock.json') }}
+
+      - name: Install Chromium
+        working-directory: scripts/browser
+        # --with-deps pulls the shared libraries a headless Chromium needs on a
+        # bare runner; without them the launch fails with a missing-.so error.
+        run: npx playwright install --with-deps chromium
+
+      # Boots its own throwaway seeded instance (separate data dir and port from
+      # the smoke test) and drives the four field-path assertions.
+      - name: Run the browser field-path smoke
+        run: sh scripts/browser_test.sh
