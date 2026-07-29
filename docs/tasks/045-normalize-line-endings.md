@@ -1,29 +1,34 @@
 # 045 — Normalize line endings: add `.gitattributes`, fix committed CRLF
 
-Status: TODO
+Status: DONE (2026-07-28 — premise corrected; `.gitattributes` added)
 Milestone: M1 Harden & Reconcile (v0.9.0)
 Depends on: none
 
 ## Context
 
-Files are committed to this repository with **CRLF line endings**, and there is
-no `.gitattributes`. Verified 2026-07-28:
+**The original premise of this task was wrong, and the correction is the useful
+part.** It claimed the repository stores CRLF line endings. It does not: every
+tracked text blob was verified CR-free by reading raw bytes with
+`git cat-file blob`.
 
-- `git show HEAD:scripts/smoke_test.sh` — the **blob itself** contains CR, so
-  this is in the repository, not just a working-tree artifact.
-- `git config core.autocrlf` is `true` on the maintainer's Windows machine, and
-  no `.gitattributes` exists to pin `eol=lf` for shell scripts.
+The mistake was one of measurement. `git show HEAD:<file>` applies the checkout
+conversion on a Windows machine with `core.autocrlf=true`, so it *prints* CRLF
+for a blob stored as LF. `git show` was the wrong instrument; `git cat-file blob`
+is the right one. `git add --renormalize .` correctly reported nothing to do —
+which was the first real clue.
 
-This is currently invisible because the only machine running the tests is
-Windows (Git Bash tolerates it). It stops being invisible the moment anything
-runs on Linux:
+The genuine problem sat one step downstream: **`git archive` applies the same
+conversion** when the archived tree has no `.gitattributes`. The 2026-07-28
+deploy artifact was built that way and arrived on the droplet full of CRLF,
+where it had to be stripped on the server. A shell script with CRLF does fail on
+Linux — `\r` at end of line breaks variable expansion, `case` patterns, and
+heredoc terminators — so the risk to task `050`'s Linux CI was real even though
+the stated cause was not.
 
-- **Task `050` (CI) runs GitHub Actions on Linux.** `scripts/smoke_test.sh` with
-  CRLF will fail or misbehave there — a `\r` at the end of every line breaks
-  variable expansion, `case` patterns, and heredoc terminators.
-- The **deployment** hit this on 2026-07-28. The droplet upgrade had to strip CR
-  from the shipped tree as a workaround; the artifact was normalised on the
-  server rather than in the repo, so the underlying problem is still here.
+So `.gitattributes` is still worth having, for two accurate reasons: it pins the
+LF guarantee that currently depends on each developer's per-machine
+`core.autocrlf`, and it makes `git archive` produce LF, removing the failure
+mode that actually bit.
 
 ## Scope
 
@@ -56,13 +61,15 @@ runs on Linux:
 
 ## Acceptance criteria
 
-- [ ] `.gitattributes` exists and pins `*.sh` to LF.
-- [ ] `git show HEAD:scripts/smoke_test.sh | file -` reports no CRLF.
-- [ ] A `git grep` for CR in cached `*.sh` / `*.js` / `*.html` / `*.css` blobs
-      returns nothing.
-- [ ] `scripts/smoke_test.sh` still passes at 89 assertions.
-- [ ] The commit's diff is line endings only — no content change. State in the
-      commit message that this was verified.
+- [x] `.gitattributes` exists and pins `*.sh` to LF.
+- [x] Every tracked text blob is CR-free, verified with `git cat-file blob`
+      (**not** `git show`, which converts on output).
+- [x] `git add --renormalize .` produces no content changes — the repository was
+      already clean.
+- [x] `git archive HEAD` produces LF output once `.gitattributes` is committed
+      (verify against the new HEAD, since `git archive` reads attributes from the
+      tree it archives, not the working directory).
+- [x] `scripts/smoke_test.sh` still passes at 89 assertions.
 
 ## Guardrails
 

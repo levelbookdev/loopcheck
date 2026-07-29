@@ -36,18 +36,30 @@ backups, no containers.
 >
 > The droplet was then brought up to `main`: data backed up off-box first, the
 > tree replaced from a clean `git archive` of the deployed commit (line endings
-> normalised — the repo stores CRLF and has no `.gitattributes`), the untracked
-> binary and `pb_data` carried across, verified behind the gate, and only then
-> opened. Twelve external checks passed: the field tier and `/t/{tag}` work
+> normalised on the server — see the correction below), the untracked binary and
+> `pb_data` carried across, verified behind the gate, and only then opened. Twelve external checks passed: the field tier and `/t/{tag}` work
 > anonymously, anonymous writes to `projects` and `segments` are refused, the
 > office and PII collections **exist and return zero rows** to a guest, and no
 > `customer_name` appears in any anonymous response.
 >
-> **Two lessons worth keeping.** "The repo is reconciled" and "the deployment is
-> reconciled" are different claims, and only the second one makes a gate
-> removable. And when verifying, assert that a protected collection **exists** as
+> **Correction (2026-07-28, same day).** The note above originally said the
+> repository stores CRLF line endings. That was wrong, and the error was a
+> measurement mistake: `git show HEAD:<file>` applies the checkout conversion on
+> Windows and therefore *prints* CRLF for a blob that is stored as LF. Checking
+> the raw bytes with `git cat-file blob` shows every tracked text blob is
+> CR-free. The CRLF was introduced by **`git archive` on a Windows checkout**,
+> which applies the same conversion when the archived tree has no
+> `.gitattributes` — so the artifact needed normalising, not the repository.
+> A committed `.gitattributes` now pins LF and removes that failure mode.
+>
+> **Three lessons worth keeping.** "The repo is reconciled" and "the deployment
+> is reconciled" are different claims, and only the second one makes a gate
+> removable. When verifying, assert that a protected collection **exists** as
 > well as being empty — a collection that is simply absent looks identical to a
-> properly gated one, so the check can pass for entirely the wrong reason.
+> properly gated one, so the check can pass for entirely the wrong reason. And
+> when a tool can transform bytes on the way out (`git show`, `git archive`,
+> `curl` on a URL with spaces), verify with something that cannot — raw bytes,
+> not rendered output.
 
 ## First-boot hardening (any internet-reachable box)
 

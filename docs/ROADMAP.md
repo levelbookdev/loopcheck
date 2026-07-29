@@ -151,6 +151,7 @@ Tasks: [`010`](tasks/010-docs-reconcile-stale-references.md) ·
 [`050`](tasks/050-ci-pipeline.md) ·
 [`060`](tasks/060-deploy-validation-arm-vm.md) ·
 [`065`](tasks/065-landing-page-truth-and-pages.md) ·
+[`066`](tasks/066-deployment-update-path.md) ·
 [`067`](tasks/067-redeploy-vps-and-retire-the-gate.md) ·
 [`070`](tasks/070-release-v0.9.0.md)
 

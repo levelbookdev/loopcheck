@@ -1,0 +1,38 @@
+# Line endings. The repository is authored on Windows but runs on Linux (the
+# VPS, a Raspberry Pi, GitHub Actions), so the committed bytes must be LF.
+#
+# They already are: every tracked text blob was verified CR-free on 2026-07-28.
+# That good state currently depends on each developer's `core.autocrlf`, which
+# is a per-machine setting that travels with nobody. This file makes the
+# guarantee explicit and portable instead of incidental.
+#
+# It also fixes a concrete failure: `git archive` reads these attributes from
+# the tree being archived, and without them it applies the Windows checkout
+# conversion — so a deploy artifact built on Windows arrives full of CRLF, and a
+# shell script with CRLF fails on Linux (`\r` at end of line breaks variable
+# expansion, `case` patterns, and heredoc markers). The 2026-07-28 deployment
+# hit exactly that and had to strip CR on the server.
+
+* text=auto eol=lf
+
+# Shell scripts are the files that actually break. Pin them explicitly.
+*.sh text eol=lf
+
+# Served and executed text — keep LF so the deployed bytes match the repo.
+*.js   text eol=lf
+*.html text eol=lf
+*.css  text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+
+# Binary assets: never touched, never diffed as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
