@@ -1,8 +1,24 @@
 # 055 — Bump GitHub Actions off the deprecated Node 20 runtime
 
-Status: TODO
+Status: DONE (2026-07-28 — run `30471431474` green, annotation gone)
 Milestone: M1 Harden & Reconcile (v0.9.0)
 Depends on: 050
+
+## Outcome
+
+Bumped to `checkout@v7`, `setup-node@v7`, `cache@v6`. **The majors guessed in
+this task's spec (v5) were wrong** — checking rather than assuming was the point
+of that instruction, and it paid.
+
+Release notes reviewed: all three majors are ESM migrations plus dependency
+updates, with no change to the inputs this workflow uses. `checkout@v7` adds a
+fork-PR restriction scoped to `pull_request_target` / `workflow_run`; this
+workflow uses plain `pull_request`, so it is unaffected.
+
+Verified on run `30471431474`: green, **no annotations at all** (the deprecation
+notice is gone, which is the thing being fixed — a green run alone would not have
+proved it), both suites still passing at 89 and 7, and all three caches
+restoring rather than re-downloading.
 
 ## Context
 
