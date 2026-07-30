@@ -1,11 +1,40 @@
 # 066 — Fix the documented deployment update path
 
-Status: TODO — unblocked and simplified (2026-07-28). `065` resolved as
-**Branch A: the repo is public**, so `git clone` / `git pull` now work with no
-credentials and the existing DEPLOY.md instructions become achievable as written.
-What remains is real: the droplet has no `.git` at all.
+Status: DONE (2026-07-30 — droplet restored to a real git checkout; the
+documented update path now runs verbatim)
 Milestone: M1 Harden & Reconcile (v0.9.0)
 Depends on: 065 — **resolved, Branch A**
+
+## Outcome
+
+The droplet at `/opt/loopcheck/app` is a genuine git checkout again:
+`origin` = `levelbookdev/loopcheck`, `HEAD` = `fa290a5` on `main`, 34 migrations,
+`lc-auth.js` present. Verified `sudo -u loopcheck git pull` runs verbatim and
+reports honestly (`Already up to date.`, 0 commits behind).
+
+Sequence used: back up `pb_data` off the tree, `git clone` the now-public repo
+alongside, carry across the two untracked runtime pieces (`pb_data` and the
+`pocketbase` binary), swap directories, restart, verify. Data intact — 60 tags,
+15 checks, 25 punch items, unchanged. All 24 collections respond; the app serves
+externally at `app.ringout.app` including the `/t/{tag}` QR route.
+
+**The public repo made this the simple path.** Task `067` had to ship a
+`git archive` from a Windows machine, which arrived full of CRLF and needed
+normalizing on the server. Cloning directly on Linux gave native LF —
+`0` CR bytes in `scripts/smoke_test.sh` — with no conversion step at all.
+
+Two things this run taught, folded into DEPLOY.md rather than left here:
+
+- **Run git as `loopcheck`, not root.** The checkout is owned by the service
+  account and git refuses to operate on another user's repo ("dubious
+  ownership"). Cost a step on the first attempt.
+- **`/api/collections` returns 401 unauthenticated** — that is the lockdown
+  working, not a fault, but it looks like a failure when verifying an update.
+  DEPLOY.md now says so and gives per-collection checks instead.
+
+DEPLOY.md's `## Updating` section also gained a verification block, because a
+pull that succeeds while changing nothing is exactly how this deployment drifted
+23 migrations behind in the first place.
 
 ## What `065` changed for this task (2026-07-28)
 

@@ -1,12 +1,27 @@
 # 060 — Deploy validation on an ARM cloud VM (interim for the Pi promise)
 
-Status: IN PROGRESS — in-repo verification done and recorded; the live ARM run is
-handed to the maintainer (no ARM hardware, no cloud credentials, and the
-guardrail forbids creating paid resources unasked). Set to `DONE` when the
-runbook in `DEPLOY.md` has been executed and the record replaced with real
-results.
-Milestone: M1 Harden & Reconcile (v0.9.0)
+Status: DEFERRED TO M3 (2026-07-30, maintainer decision). The in-repo half is
+done and recorded in `DEPLOY.md`; the live ARM run moves to M3 to sit alongside
+the real Raspberry Pi validation. It no longer gates `070` or the v0.9.0 tag.
+Milestone: **M3** (moved out of M1 Harden & Reconcile)
 Depends on: 010, 020
+
+## Why it moved
+
+This task is the *interim proxy* for a Pi promise that M3 validates properly on
+real hardware. Holding a release for a partial proxy of a test scheduled to be
+done properly later is poor value — particularly when an ARM cloud VM shares the
+instruction set but not the SD card, thermals, or USB power, which is where a Pi
+actually fails.
+
+Nothing is lost by moving it. The verified half (installer architecture mapping,
+ARM asset existence, URL resolution, published checksums) is already recorded in
+`DEPLOY.md`, and the unverified half is stated there in plain terms rather than
+implied by a missing tick. The runbook is written and now works as-is, since the
+repo is public and `git clone` needs no credentials.
+
+The M1 definition-of-done box for an ARM validation record stays **unticked** —
+it asks for a *completed* record, and this one is deliberately half.
 
 ## Outcome so far (2026-07-28)
 

@@ -108,7 +108,10 @@ validated — all gated by CI. No new features
 - Add a headless-browser smoke test of the critical field path (scan tag → log
   check → flag punch → LOTO), dev-only tooling.
 - CI: GitHub Actions running the suites, plus a hardened local pre-push gate.
-- Deploy validation on an ARM cloud VM (clean install + seed + backup/restore).
+- ~~Deploy validation on an ARM cloud VM (clean install + seed + backup/restore).~~
+  **Moved to M3 (2026-07-30)** — it is the interim proxy for the Pi promise M3
+  validates on real hardware, so it belongs there. The in-repo half is verified
+  and recorded in `DEPLOY.md`; see task `060`.
 - Release plumbing: reconcile the CHANGELOG, tag **v0.9.0**, and finish the auth
   effort's checkpoint 6 (remind the maintainer to drop the temporary VPS
   basic_auth gate; delete `SESSION-NOTES.md`).
@@ -216,7 +219,12 @@ adopt and self-host it" ([DECISIONS.md D19](DECISIONS.md#d19--v10-stranger-ready
   open-questions #7).
 - **Raspberry Pi validation.** The hard-constraint promise proven on real Pi
   hardware and recorded in `DEPLOY.md` (the acceptance checklist already in this
-  file's Pi track).
+  file's Pi track). Includes task [`060`](tasks/060-deploy-validation-arm-vm.md),
+  **moved here from M1 (2026-07-30)** — the ARM cloud-VM run is the interim proxy
+  for this promise, so it belongs beside the real thing rather than gating
+  v0.9.0. Its in-repo half (installer architecture mapping, ARM asset existence
+  and checksums) is already verified and recorded in `DEPLOY.md`; the live run is
+  what remains.
 - **Accessibility + polish.** Field pages verified on a cheap Android; an a11y
   pass; an offline-behavior honesty audit across all pages (not just LOTO).
 

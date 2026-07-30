@@ -2,7 +2,7 @@
 
 Status: TODO
 Milestone: M1 Harden & Reconcile (v0.9.0)
-Depends on: 010, 020, 030, 040, 050, 060
+Depends on: 010, 020, 030, 040, 050 (060 deferred to M3, 2026-07-30 — no longer a blocker)
 
 ## Context
 

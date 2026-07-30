@@ -195,6 +195,29 @@ sudo -u loopcheck git pull
 sudo systemctl restart loopcheck    # pending migrations auto-apply on start
 ```
 
+**Then confirm the update actually landed.** An update that appears to succeed
+while changing nothing is the failure mode this deployment has already hit once:
+in July 2026 the droplet sat 23 migrations behind `main` while `git pull`
+reported success, because its remote still pointed at a repository that had
+stopped receiving commits. A clean exit code is not evidence.
+
+```sh
+cd /opt/loopcheck/app
+sudo -u loopcheck git remote -v          # must be levelbookdev/loopcheck
+sudo -u loopcheck git log --oneline -1   # the commit you expected
+ls pb_migrations/*.js | wc -l            # migration count, vs the repo's
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8090/api/health
+```
+
+Two things about running these:
+
+- **Run git as `loopcheck`, not root.** The checkout is owned by the service
+  account, and git refuses to operate on another user's repository
+  ("detected dubious ownership"). `sudo -u loopcheck` is not decoration.
+- `/api/collections` returns **401** to an unauthenticated caller — that is the
+  auth lockdown working, not a fault. To count collections, query individual
+  ones, or authenticate as a superuser.
+
 **Pre-release caveat:** while LoopCheck is pre-1.0, schema changes may amend
 already-applied migration files in place (recorded in ADR 0001). If a pull
 brings edited migrations rather than new ones, wipe and rebuild — stop the
