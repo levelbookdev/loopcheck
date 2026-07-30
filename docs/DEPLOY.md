@@ -299,9 +299,16 @@ Nothing below has been run. **Do not treat any of it as passing.**
 
 ### Runbook for the live run
 
-On a fresh ARM64 box (Hetzner CAX11, AWS Graviton `t4g`, or Oracle free-tier
-Ampere — DigitalOcean has no ARM droplet type), run the steps below and replace
-the table above with real results.
+On a fresh ARM64 box, run the steps below and replace the table above with real
+results. Any `aarch64` host works — Hetzner CAX11, AWS Graviton `t4g`, or Oracle
+free-tier Ampere (`VM.Standard.A1.Flex`). DigitalOcean has no ARM droplet type.
+
+Two things to get right before starting, both covered in
+[`docs/tasks/060`](tasks/060-deploy-validation-arm-vm.md): the repo is private,
+so decide up front how the code reaches the box (deploy key, or ship a
+`git archive` from your dev machine); and if using Oracle, shape the instance
+**down** to roughly 1–2 OCPU / 4 GB — a 24 GB ARM server proves the binary runs
+while flattering the resource question a Pi actually poses.
 
 ```sh
 uname -m                       # expect aarch64 — otherwise you are not on ARM

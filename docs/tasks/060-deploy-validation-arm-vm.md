@@ -51,6 +51,42 @@ and produce the validation runbook + a clearly-marked "pending live run" record,
 then hand the live steps to the maintainer. Do not fabricate results
 (`CLAUDE.md`: report outcomes faithfully).
 
+## Practical notes for the live run (added 2026-07-28)
+
+**Getting the code onto the ARM box.** The runbook says `git clone`, but this
+repository is **private** and a fresh VM has no GitHub credentials — the same
+wall the loopcheck droplet hit during task `067`, where a `git pull` would have
+appeared to succeed while changing nothing. Pick one deliberately:
+
+- **Deploy key** — `ssh-keygen` on the ARM box, add the public key to the repo as
+  a read-only deploy key, clone over SSH. Best if the box will be kept.
+- **Ship from the dev box** — `rsync`/`scp` a clean `git archive` of the commit
+  under test. No credentials on the VM at all; good for a throwaway. Note the
+  ARM box then has no git history, which is fine for a validation run.
+- **Make the repo public** — resolves this and tasks `065`/`066` at once.
+
+**Provider.** Any `aarch64` box works; the architecture is the point, not the
+vendor. Hetzner CAX11 was the first choice but stock fluctuates. **Oracle Cloud
+free-tier Ampere (VM.Standard.A1.Flex)** is the fallback and is also Ampere
+Altra `aarch64`, so it validates the identical binary path.
+
+Two Oracle-specific things that will otherwise cost an hour:
+
+1. **Shape it DOWN.** The free tier allows up to 4 OCPU / 24 GB RAM. A 24 GB
+   ARM server is a *worse* Raspberry Pi stand-in than a small one — it would
+   prove the binary runs while quietly flattering the resource question. Choose
+   roughly **1–2 OCPU and 4 GB** to stay near a Pi 4/5.
+2. **Networking is closed by default, in two places.** Oracle blocks ingress at
+   the VCN security list *and* again in the instance's own `iptables`. The
+   "tag page reachable over the network" step will fail until both are opened.
+   Fixing only one and concluding the app is broken is the easy mistake here.
+
+**Still not a Pi.** Any of these share the instruction set but not the SD card,
+the thermals, or the USB-power flakiness — which is where Pis actually fail. The
+honest claim after this run is "the arm64 build is validated", not "Pi is
+validated". Note also that a Pi on **32-bit** Raspberry Pi OS uses the separate
+`armv7` build, which none of these boxes exercise.
+
 ## Scope
 
 **Touch/create:**
