@@ -4,6 +4,8 @@
 construction.** Open source, self-hostable, and usable from a stock phone
 camera with no app to install.
 
+Overview and screenshots: **[ringout.app](https://ringout.app)**
+
 Every plant asset already has a P&ID tag number such as `PMP-3101`, `FIT-2205`,
 or `MOV-4410`. LoopCheck puts a QR code on that tag. Scanning `/t/{tag_number}`
 shows the asset's checkout ledger and blockers and lets a person in the field

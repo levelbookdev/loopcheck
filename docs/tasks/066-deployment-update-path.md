@@ -1,8 +1,33 @@
 # 066 — Fix the documented deployment update path
 
-Status: TODO
+Status: TODO — unblocked and simplified (2026-07-28). `065` resolved as
+**Branch A: the repo is public**, so `git clone` / `git pull` now work with no
+credentials and the existing DEPLOY.md instructions become achievable as written.
+What remains is real: the droplet has no `.git` at all.
 Milestone: M1 Harden & Reconcile (v0.9.0)
-Depends on: 065 (the branch chosen there decides which fix applies)
+Depends on: 065 — **resolved, Branch A**
+
+## What `065` changed for this task (2026-07-28)
+
+The hard part of this task was the credential problem: the droplet could not
+authenticate to a private repo, which is why task `067` shipped a `git archive`
+artifact instead of a checkout. **The repo is now public**, so:
+
+- `git clone https://github.com/levelbookdev/loopcheck.git` works on the droplet,
+  on a fresh ARM box, and anywhere else, with no deploy key to manage.
+- The **deploy-key** and **artifact-deploy** options below are no longer needed.
+  Pick the straightforward one: restore a real git checkout.
+
+**Still to do, and still a genuine defect:** `/opt/loopcheck/app` contains no
+`.git`, because task `067` replaced the tree with an extracted artifact. Until
+that is fixed, DEPLOY.md's `## Updating` section (`git pull`) remains false for
+the live deployment. The deployed commit is recorded in
+`/opt/loopcheck/app/DEPLOYED_COMMIT`.
+
+Recommended shape now: clone fresh alongside, move `pb_data/` and the untracked
+`pocketbase` binary across, swap directories, restart, and verify the live
+collection count is 24 before trusting it — the same sequence `067` used, minus
+the credential gymnastics.
 
 ## Context
 

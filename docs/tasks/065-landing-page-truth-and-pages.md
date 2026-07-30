@@ -1,8 +1,51 @@
 # 065 — Landing page: make the GitHub Pages claim true
 
-Status: TODO
+Status: DONE (2026-07-28 — Branch A: repo public, Pages live at ringout.app)
 Milestone: M1 Harden & Reconcile (v0.9.0)
 Depends on: none (but see the branch decision below — it needs a maintainer ruling)
+
+## Outcome — Branch A
+
+The maintainer ruled **public**. The CLAUDE.md claims that `docs/` is served
+publicly by GitHub Pages are now **true**, so no doc text needed correcting —
+the infrastructure was brought up to match the documentation rather than the
+reverse.
+
+What landed:
+
+- `levelbookdev/loopcheck` is **public**.
+- GitHub Pages enabled from `main` / `/docs`.
+- Custom domain `ringout.app` set; `protected_domain_state: verified` (the org
+  holds the `_github-pages-challenge-levelbookdev` TXT record).
+- `https://ringout.app/` serves the real landing page (16,824 bytes, valid TLS).
+  It previously served a 5-byte `hehe` placeholder.
+- `docs/index.html` and `docs/CNAME` unchanged, as required.
+
+**Before flipping visibility, the full history was scanned** for anything that
+should not become public: no `.env`/`.pem`/`.key`/credential-shaped file was ever
+committed, no token or private-key patterns appear in any commit, and no public
+IP was ever recorded — the discipline of keeping host and credentials out of the
+repo held. The one item found was commit `f1e2e78`, which replaced invented demo
+firm names that happened to match real companies; the old names remain in
+history. Judged not worth a history rewrite: fictional names, no secrets, no
+customer data.
+
+**DNS corrections needed along the way** (recorded because the same shape will
+recur on any sibling product):
+
+- The apex carried a stray `A` record pointing at the app droplet alongside the
+  four GitHub Pages IPs, so it round-robined between Pages and an app server that
+  had no vhost for it.
+- Removing that also removed the `app` subdomain record, taking the application
+  offline; it was then briefly re-added as a `CNAME` to a Pages host rather than
+  an `A` record to the droplet. The rule worth remembering: **the apex and `www`
+  point at GitHub Pages; `app` is the only name that points at your own server.**
+
+## Consequence for other work
+
+The repo being public removes the credential wall that blocked `git clone` on
+every fresh box — the loopcheck droplet hit it in task `067` and the ARM box in
+`060` would have. See `066`.
 
 ## Context
 
