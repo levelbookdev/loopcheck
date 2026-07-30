@@ -139,11 +139,12 @@ validated — all gated by CI. No new features
       git-ignored dev tooling and adds nothing to `pb_public/`.
 - [x] A GitHub Actions workflow runs both suites on push/PR and is green; the
       pre-push hook runs the same gate locally.
-- [ ] `docs/DEPLOY.md` contains a completed ARM-VM validation record (clean
-      install, migrations+seed applied, backup/restore verified) with the
-      topology honestly labeled (LAN/single-VPS supported; Pi/replica
-      unvalidated).
-- [ ] Repo tagged `v0.9.0` with release notes; `SESSION-NOTES.md` deleted in the
+- [x] `docs/DEPLOY.md` labels topology honestly (LAN/single-VPS supported;
+      Pi/replica unvalidated) and records what ARM verification has and has not
+      been done. *The completed ARM-VM run moved to M3 with task `060`
+      (2026-07-30)* — it is the interim proxy for the Pi promise M3 proves on
+      real hardware, so the full record is required there, not here.
+- [x] Repo tagged `v0.9.0` with release notes; `SESSION-NOTES.md` deleted in the
       release commit; a `CHANGELOG.md` exists covering the release.
 
 Tasks: [`010`](tasks/010-docs-reconcile-stale-references.md) ·
@@ -237,6 +238,10 @@ adopt and self-host it" ([DECISIONS.md D19](DECISIONS.md#d19--v10-stranger-ready
       onboarding doc, verified by a fresh run.
 - [ ] `docs/API.md` is a versioned contract with no "delta pending" collections;
       the version bump is recorded in an ADR.
+- [ ] `docs/DEPLOY.md` contains a **completed ARM-VM validation record** (clean
+      install, migrations+seed applied, systemd survives reboot, backup/restore
+      verified) — task [`060`](tasks/060-deploy-validation-arm-vm.md), moved here
+      from M1. Its in-repo half is already verified; the live run remains.
 - [ ] `DEPLOY.md` contains a real Pi validation record (model + OS) satisfying
       the Pi acceptance checklist.
 - [ ] An accessibility/offline-honesty audit is recorded with issues fixed or

@@ -1,6 +1,32 @@
 # 070 — Release plumbing: CHANGELOG, tag v0.9.0, finish auth checkpoint 6
 
-Status: TODO
+Status: DONE (2026-07-30 — v0.9.0 tagged, CHANGELOG written, M1 closed)
+
+## Outcome
+
+`CHANGELOG.md` created with the v0.9.0 entry; annotated tag `v0.9.0` cut; M1
+definition-of-done boxes ticked.
+
+Two of this task's steps were **already satisfied** and are recorded rather than
+re-performed:
+
+- **`SESSION-NOTES.md` was already deleted** in commit `b42748f`, the final
+  commit of the auth-lockdown effort, as that file's own rules required.
+- **The temporary VPS `basic_auth` gate has already been removed** (task `067`,
+  2026-07-30). This task expected to hand that to the maintainer as a reminder;
+  instead it was done — but only after discovering the deployment was 23
+  migrations behind and would have been world-writable the moment the gate came
+  off. The gate was restored within ~2 minutes, the droplet was upgraded, and the
+  gate was retired properly afterwards. So the release notes record it as done,
+  not pending.
+
+**On the "do not tag if an M1 DoD item is unmet" rule:** the ARM-VM validation
+item was unmet, but only because the maintainer moved task `060` to M3 the same
+day. Leaving the checkbox in M1 would have made M1's definition require something
+no longer in its scope. The checkbox was moved to M3 alongside the task, and the
+M1 item was narrowed to what M1 actually delivered — honest topology labelling
+and a record of what ARM verification has and has not been done. The full
+completed-run requirement still exists, in M3.
 Milestone: M1 Harden & Reconcile (v0.9.0)
 Depends on: 010, 020, 030, 040, 050 (060 deferred to M3, 2026-07-30 — no longer a blocker)
 
