@@ -1,6 +1,6 @@
 # 090 — Punch List report: system/project roll-up (print + free CSV)
 
-Status: TODO (do not start until M1 tasks 010–070 are DONE)
+Status: DONE (2026-08-02 — `pb_public/punchlist.html`, both scopes, print + CSV)
 Milestone: M2 Shutdown Runbooks + Punch List (v0.10.0)
 Depends on: 070 (all of M1)
 
@@ -19,6 +19,30 @@ already show punch information; if one of them already provides a printable,
 CSV-exportable A/B/C roll-up at project scope, this task narrows to filling the
 missing piece (and its scope/acceptance below adjust accordingly). Do not
 duplicate an existing view.
+
+### Gap check result (2026-08-02) — the report is missing; build it
+
+| Page | Punch content today | Item list? | Print? | CSV? |
+| --- | --- | --- | --- | --- |
+| [`system.html`](../../pb_public/system.html) | open A/B/C **counts**, system totals + per-tag badges | no | no | no |
+| [`project.html`](../../pb_public/project.html) | open A/B/C **counts** per system + an "unassigned" block | no | no | no |
+| [`readiness.html`](../../pb_public/readiness.html) | **none** — checkout phases × closeout deliverables only | n/a | yes | no |
+
+Both existing views are **aggregate counters that link away**, never a listing:
+neither renders a punch item's description, assigned party, or status, and
+neither prints or exports. `readiness.html` does not touch `punch_items` at all.
+There is no `punchlist.html`. So all three deliverables (item-level A/B/C
+roll-up, print view, CSV) are missing and this task builds in full — a new
+`pb_public/punchlist.html` taking `?project=` **or** `?system=`, rather than
+bolting a report mode onto two pages whose job is navigation.
+
+**Subject-kind note.** `punch_items` can hang off a tag, a system, a service, a
+segment, or the project alone (four nullable relations, migrations `1789000007`
+/ `1789000013` / `1789000024`). The report renders whichever subject an item
+actually has, so nothing is silently dropped; the CSV keeps the six columns
+specified below, with the non-tag subjects written into `tag_number` under a
+kind prefix (`SVC <address>`, `SEG <segment_id>`) and left blank for
+system-only/project-only items.
 
 ## Scope
 
@@ -69,18 +93,32 @@ duplicate an existing view.
 
 ## Acceptance criteria
 
-- [ ] The gap check is recorded; the feature does not duplicate an existing view.
-- [ ] A system-scope and a project-scope punch roll-up render, grouped A/B/C with
+- [x] The gap check is recorded; the feature does not duplicate an existing view.
+      *(Recorded above; all three deliverables were missing.)*
+- [x] A system-scope and a project-scope punch roll-up render, grouped A/B/C with
       the correct fixed colors, open items by default and an option to include
-      closed.
-- [ ] The view prints cleanly using the existing print-CSS approach.
-- [ ] A free client-side CSV export produces the documented columns for the same
-      roll-up.
-- [ ] The roll-up is derived live from `punch_items` via REST at
+      closed. *(Verified against the demo seed: project scope A 7 / B 10 / C 4 =
+      21 open, 28 with closed; system scope A 3 / B 2 matches `system.html`'s
+      counters for System 10.)*
+- [x] The view prints cleanly using the existing print-CSS approach.
+      *(`@media print` block modeled on `readiness.html`/`cutover.html`;
+      confirmed the rules parse and apply — chrome hidden, items never split.)*
+- [x] A free client-side CSV export produces the documented columns for the same
+      roll-up. *(Header `system,tag_number,severity,description,assigned_party,
+      status`, 21 rows for 21 open items.)*
+- [x] The roll-up is derived live from `punch_items` via REST at
       `window.location.origin`; no new/changed collection; no stored status.
-- [ ] The page renders for a guest (no hard auth redirect); page-weight stays in
-      line with sibling pages (no new heavy dependency, no CDN).
-- [ ] Docs updated if user-visible (landing page/ARCHITECTURE/ROADMAP checkbox).
+- [x] The page renders for a guest (no hard auth redirect); page-weight stays in
+      line with sibling pages (no new heavy dependency, no CDN). *(16 KB of
+      HTML+CSS+JS, Alpine only; verified signed out.)*
+- [x] Docs updated if user-visible (landing page/ARCHITECTURE/ROADMAP checkbox).
+
+**Verification note.** `scripts/smoke_test.sh` passes 89/89 against a fresh DB.
+`scripts/browser_test.sh` was **not** run locally — Node is unavailable in this
+environment — so the field-path suite should be run before the v0.10.0 tag. The
+page was instead exercised in a real browser against a seeded instance (both
+scopes, closed toggle, CSV capture, empty state, missing-parameter error state,
+and a check that the service expand carries `address` only).
 
 ## Guardrails
 

@@ -192,8 +192,9 @@ shutdown runbook execution UI — plus the on-mission Punch List report.
 - [ ] Migrations create the shutdown collections; a fresh DB + smoke test pass.
 - [ ] An operator can execute the seeded tie-in runbook end to end from the UI,
       producing append-only step records; executed steps are never edited.
-- [ ] The Punch List report renders print-friendly and exports CSV for a system
+- [x] The Punch List report renders print-friendly and exports CSV for a system
       and a project, grouped by A/B/C severity with the fixed color language.
+      *(`punchlist.html`, task [`090`](tasks/090-punch-list-report.md), 2026-08-02.)*
 - [ ] Docs updated (ARCHITECTURE, ROADMAP checkbox, landing page if
       user-visible); tagged v0.10.0.
 

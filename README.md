@@ -102,11 +102,11 @@ and sign in through `/login.html` (the field tag/service pages need no account).
   instrument calibration badge/history, LOTO freshness, punch flow, check
   history, and tag-ledger CSV.
 - `/s/{serviceId}`: service-cutover identity, phases, punches, and ledger.
-- Project views: system readiness, readiness matrix, cutover, rotation, LOTO,
-  calibration due, warranty, closeout, imports, and QR labels.
-- Free exports: per-tag ledger CSV, rotation-board CSV, and print-friendly HTML
-  for checks, boards, labels, and closeout packages. There is no committed
-  server PDF renderer.
+- Project views: system readiness, readiness matrix, punch list, cutover,
+  rotation, LOTO, calibration due, warranty, closeout, imports, and QR labels.
+- Free exports: per-tag ledger CSV, rotation-board CSV, punch-list CSV, and
+  print-friendly HTML for checks, boards, labels, and closeout packages. There
+  is no committed server PDF renderer.
 
 LOTO logging and instrument-calibration capture have durable browser outboxes.
 LOTO alone has safety-specific stale-data presentation; the rest of the

@@ -1,7 +1,7 @@
 # 080 — Phase 4 design: shutdown runbook collections + execution model (ADR first)
 
-Status: BLOCKED (do not start until M1 tasks 010–070 are DONE; and this is a
-design/interview task requiring the maintainer — see Context)
+Status: BLOCKED (2026-08-02 — the M1 gate is satisfied at v0.9.0; the remaining
+blocker is the domain interview with the maintainer, see Context)
 
 Milestone: M2 Shutdown Runbooks + Punch List (v0.10.0)
 Depends on: 070 (all of M1)

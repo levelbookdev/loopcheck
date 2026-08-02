@@ -73,6 +73,12 @@
 
       <!-- Startup & commissioning deliverables. -->
       <h2 class="section">Startup &amp; commissioning</h2>
+      <!-- Punch list report — the counts above, expanded into the actual
+           items: A/B/C roll-up, print view, free CSV. -->
+      <a class="card" :href="'/punchlist.html?project=' + project.id">
+        <div class="title">Punch list</div>
+        <div class="sub">Every open item by A/B/C severity across the job — the walkdown sheet, print-ready, free CSV</div>
+      </a>
       <!-- Readiness matrix (forms-library review §3) — the turnover output
            spec: one row per tag folding checkout phases + closeout
            deliverables, dates in every cell. The free print view. -->

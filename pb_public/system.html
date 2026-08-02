@@ -49,6 +49,12 @@
       <p class="meta" x-show="totals.A" style="color:var(--sev-a)">
         <strong x-text="totals.A"></strong> A-item<span x-show="totals.A !== 1">s</span> blocking startup.
       </p>
+      <!-- The counts above are the summary; the punch list report is the
+           actual items, print-ready with a free CSV. -->
+      <a class="card" :href="'/punchlist.html?system=' + systemId">
+        <div class="title">Punch list for this system</div>
+        <div class="sub">Every item by A/B/C severity — print-ready walkdown sheet, free CSV</div>
+      </a>
 
       <h2 class="section">Tags <span x-show="tags.length" x-text="'(' + tags.length + ')'"></span></h2>
       <template x-if="!tags.length">

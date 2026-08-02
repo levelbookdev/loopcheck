@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoopCheck — Punch List</title>
+
+<!--
+  Punch list report — the consolidated answer to LoopCheck's second question,
+  "what punch items are blocking this system?"
+
+  `system.html` and `project.html` already show punch COUNTS by severity, but
+  they are navigation aids: neither lists an item's description, assigned party,
+  or status, and neither prints or exports. This page is the listing — the sheet
+  a PM carries on a walkdown and hands to the engineer.
+
+  Scope comes from the query string, one of:
+    /punchlist.html?project=<projectId>    every punch item on the job
+    /punchlist.html?system=<systemId>      one system's items
+
+  Everything here is DERIVED live from the `punch_items` ledger at render time
+  (constraint #4) — this page owns no schema and writes nothing. Closing a punch
+  item still happens on the tag page and still requires an account (ADR 0011);
+  reading is public, so this page renders for a guest with no sign-in.
+
+  A punch item can hang off a tag, a system, a service, a segment, or the
+  project alone. All five are rendered, so a project-scope report never silently
+  drops records.
+-->
+
+<link rel="stylesheet" href="/app.css">
+<style>
+  /* Severity group heading — the fixed color language, from app.css tokens. */
+  .grp { margin: 26px 0 10px; padding-bottom: 6px; border-bottom: 3px solid currentColor; }
+  .grp .letter { font-size: 26px; font-weight: 800; font-family: ui-monospace, Consolas, monospace; }
+  .grp .what { font-size: 14px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+  .grp .n { float: right; font-family: ui-monospace, Consolas, monospace; font-weight: 800; }
+
+  .punch .subj { font-family: ui-monospace, Consolas, monospace; font-weight: 800; font-size: 15px; }
+  .punch .subj a { color: inherit; }
+  .punch .kind { font-size: 11px; font-weight: 700; letter-spacing: .06em;
+                 text-transform: uppercase; color: var(--steel); margin-left: 6px; }
+  .punch .status-closed { font-weight: 800; color: var(--steel); }
+
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 14px 0; }
+  .toolbar button.go { width: auto; min-width: 190px; margin-top: 0; }
+  .toolbar label { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .toolbar input[type=checkbox] { width: 22px; height: 22px; min-height: 0; }
+
+  .legend { font-size: 12px; color: var(--steel); margin: 10px 0 0; }
+  .legend span { margin-right: 14px; white-space: nowrap; }
+
+  /* Print CSS follows readiness.html / cutover.html: hide chrome, never break
+     an item across pages. The printed sheet IS the free deliverable. */
+  @media print {
+    @page { size: letter portrait; margin: 0.5in; }
+    .noprint { display: none !important; }
+    body { max-width: none; padding: 0; }
+    .punch { break-inside: avoid; margin-bottom: 8px; padding: 8px 10px; }
+    .grp { break-after: avoid; }
+    a { text-decoration: none; }
+  }
+</style>
+<script defer src="/vendor/alpine.min.js"></script>
+</head>
+<body>
+
+<div x-data="punchList()" x-init="load()">
+
+  <header class="bar noprint">
+    <span class="mark"><a href="/">LoopCheck</a></span>
+    <span class="meta">Punch list</span>
+  </header>
+
+  <template x-if="state === 'loading'"><p class="loading">Loading punch list…</p></template>
+  <template x-if="state === 'error'"><div class="error" x-text="errorMsg"></div></template>
+
+  <template x-if="state === 'ready'">
+    <main>
+      <a class="crumb noprint" :href="backHref" x-text="'← ' + backLabel"></a>
+
+      <h1>Punch list</h1>
+      <p class="meta">
+        <span x-text="scopeLabel"></span>
+        <span x-show="project" x-text="' · ' + project.name"></span>
+      </p>
+      <!-- Derived live: say when, so a printed sheet carries its own as-of. -->
+      <p class="meta" x-text="'As of ' + generatedAt + ' · ' + (includeClosed ? 'open and closed items' : 'open items only')"></p>
+
+      <div class="counts">
+        <span class="count sev-A" :class="{zero: !openTotals.A}" x-text="'A ' + openTotals.A"></span>
+        <span class="count sev-B" :class="{zero: !openTotals.B}" x-text="'B ' + openTotals.B"></span>
+        <span class="count sev-C" :class="{zero: !openTotals.C}" x-text="'C ' + openTotals.C"></span>
+        <span class="count" style="color:var(--go)"
+              x-show="!openTotals.A && !openTotals.B && !openTotals.C">clear</span>
+      </div>
+      <p class="meta" x-show="openTotals.A" style="color:var(--sev-a)">
+        <strong x-text="openTotals.A"></strong> A-item<span x-show="openTotals.A !== 1">s</span> blocking startup.
+      </p>
+
+      <div class="toolbar noprint">
+        <button class="go secondary" @click="window.print()">Print this list</button>
+        <button class="go secondary" @click="exportCsv()">Export CSV</button>
+        <label>
+          <input type="checkbox" x-model="includeClosed" @change="reload()">
+          Include closed items
+        </label>
+      </div>
+
+      <template x-if="!items.length">
+        <p class="empty" x-text="includeClosed
+          ? 'No punch items recorded in this scope.'
+          : 'No open punch items in this scope.'"></p>
+      </template>
+
+      <!-- A before B before C, always — the group order is the severity order. -->
+      <template x-for="g in groups" :key="g.sev">
+        <section x-show="g.items.length">
+          <h2 class="grp" :class="'sev-' + g.sev">
+            <span class="letter" x-text="g.sev"></span>
+            <span class="what" x-text="g.what"></span>
+            <span class="n" x-text="g.items.length"></span>
+          </h2>
+
+          <template x-for="p in g.items" :key="p.id">
+            <div class="punch" :class="['sev-' + p.severity, p.status === 'closed' ? 'closed' : '']">
+              <div>
+                <span class="subj">
+                  <template x-if="subject(p).href">
+                    <a :href="subject(p).href" x-text="subject(p).label"></a>
+                  </template>
+                  <template x-if="!subject(p).href">
+                    <span x-text="subject(p).label"></span>
+                  </template>
+                </span>
+                <span class="kind" x-text="subject(p).kind"></span>
+              </div>
+              <div class="desc" x-text="p.description"></div>
+              <div class="line">
+                <span x-text="'Severity ' + p.severity"></span>
+                <span x-show="systemLabel(p)" x-text="' · ' + systemLabel(p)"></span>
+                <span x-show="p.assigned_party" x-text="' · ' + prettyParty(p.assigned_party)"></span>
+                <span x-show="p.created_by" x-text="' · flagged by ' + p.created_by"></span>
+                <span x-text="' · ' + fmtDate(p.created)"></span>
+              </div>
+              <div class="line" x-show="p.status === 'closed'">
+                <span class="status-closed">CLOSED</span>
+                <span x-show="p.closed_at" x-text="' ' + fmtDate(p.closed_at)"></span>
+                <span x-show="p.closed_by" x-text="' by ' + p.closed_by"></span>
+              </div>
+            </div>
+          </template>
+        </section>
+      </template>
+
+      <p class="legend">
+        <span style="color:var(--sev-a)"><strong>A</strong> — blocks startup</span>
+        <span style="color:var(--sev-b)"><strong>B</strong> — blocks substantial completion</span>
+        <span style="color:var(--sev-c)"><strong>C</strong> — cosmetic, does not block</span>
+      </p>
+    </main>
+  </template>
+</div>
+
+<script>
+function punchList() {
+  const PB = window.location.origin;
+  const q = new URLSearchParams(location.search);
+
+  return {
+    projectId: q.get('project') || '',
+    systemId: q.get('system') || '',
+    state: 'loading', errorMsg: '',
+    project: null, system: null,
+    items: [],
+    includeClosed: false,
+    openTotals: { A: 0, B: 0, C: 0 },
+    generatedAt: '',
+
+    get scopeLabel() {
+      return this.systemId
+        ? 'System ' + (this.system?.number || '') + (this.system?.name ? ' — ' + this.system.name : '')
+        : 'Whole project';
+    },
+    get backHref() {
+      return this.systemId ? '/system.html?id=' + this.systemId
+                           : '/project.html?id=' + this.projectId;
+    },
+    get backLabel() {
+      return this.systemId ? (this.system?.number || 'System') : (this.project?.name || 'Project');
+    },
+
+    // A → B → C. The group order IS the severity order; never re-sortable.
+    get groups() {
+      const what = {
+        A: 'Blocks startup',
+        B: 'Blocks substantial completion',
+        C: 'Cosmetic — does not block',
+      };
+      return ['A', 'B', 'C'].map(sev => ({
+        sev, what: what[sev],
+        items: this.items.filter(p => p.severity === sev),
+      }));
+    },
+
+    // A punch item hangs off exactly one subject in practice; check tag first,
+    // because a tag-scoped item ALSO carries its tag's system (see tag.html's
+    // flag(), which copies system down so the counts roll up).
+    subject(p) {
+      const e = p.expand || {};
+      if (e.tag) return { kind: 'tag', label: e.tag.tag_number, href: '/t/' + encodeURIComponent(e.tag.tag_number) };
+      if (e.service) return { kind: 'service', label: e.service.address, href: '/s/' + p.service };
+      if (e.segment) return { kind: 'segment', label: e.segment.segment_id, href: '' };
+      if (e.system) return { kind: 'system-wide', label: e.system.number, href: '/system.html?id=' + p.system };
+      return { kind: 'project-wide', label: '—', href: '' };
+    },
+    // Shown only when the system isn't already the subject line.
+    systemLabel(p) {
+      const s = p.expand?.system;
+      if (!s || !p.tag) return '';
+      return 'System ' + s.number + (s.name ? ' — ' + s.name : '');
+    },
+    prettyParty(v) {
+      return v ? v.charAt(0).toUpperCase() + v.slice(1) : '';
+    },
+    fmtDate(d) {
+      if (!d) return '';
+      return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    },
+
+    async reload() { this.state = 'loading'; await this.load(); },
+
+    async load() {
+      if (!this.projectId && !this.systemId) {
+        this.state = 'error';
+        this.errorMsg = 'No project or system in the URL. Open this report from a project or system page.';
+        return;
+      }
+      try {
+        // System scope: read the system first, both for the heading and to
+        // recover its project for the breadcrumb.
+        if (this.systemId) {
+          const sRes = await fetch(`${PB}/api/collections/systems/records/${this.systemId}`);
+          if (!sRes.ok) throw new Error('system not found (' + sRes.status + ')');
+          this.system = await sRes.json();
+          this.projectId = this.system.project;
+        }
+        try {
+          const pRes = await fetch(`${PB}/api/collections/projects/records/${this.projectId}`);
+          if (pRes.ok) this.project = await pRes.json();
+        } catch (_) { /* breadcrumb only — non-fatal */ }
+
+        // The roll-up itself. Scope is one relation filter; `status` is appended
+        // unless the reader asked for closed items too. Sorted oldest-first
+        // within the fetch; severity grouping happens in `groups` above.
+        //
+        // `expand` pulls each subject's human identifier in one round trip. The
+        // `fields` list is explicit and deliberately narrow: it keeps the
+        // payload small AND it is how the PII rule is enforced on a public page
+        // — only `services.address` is ever requested, never a customer field.
+        // (`services` is structurally PII-free since migration 1789000020, but
+        //  the explicit list keeps that guarantee visible at the call site.)
+        const scope = this.systemId ? `system='${this.systemId}'` : `project='${this.projectId}'`;
+        const filter = encodeURIComponent(
+          this.includeClosed ? scope : `${scope} && status='open'`);
+        const fields = [
+          'id', 'severity', 'status', 'description', 'assigned_party',
+          'created_by', 'created', 'closed_at', 'closed_by',
+          'tag', 'system', 'service', 'segment',
+          'expand.tag.tag_number',
+          'expand.system.number', 'expand.system.name',
+          'expand.service.address',
+          'expand.segment.segment_id',
+        ].join(',');
+        const res = await fetch(
+          `${PB}/api/collections/punch_items/records` +
+          `?filter=(${filter})&expand=tag,system,service,segment` +
+          `&fields=${fields}&sort=created&perPage=1000`);
+        if (!res.ok) throw new Error('punch items unavailable (' + res.status + ')');
+        this.items = (await res.json()).items;
+
+        // Sort within a severity: system number, then subject, so the printed
+        // sheet walks the job in a stable order run to run. Items with no
+        // system (services, segments, project-wide) go last as a block — don't
+        // use a high sentinel string for that, punctuation collates BEFORE
+        // digits and they'd land on top.
+        const coll = new Intl.Collator(undefined, { numeric: true });
+        const sysOf = (p) => p.expand?.system?.number || '';
+        this.items.sort((a, b) => {
+          const as = sysOf(a), bs = sysOf(b);
+          if (!as !== !bs) return as ? -1 : 1;
+          return coll.compare(as, bs) ||
+                 coll.compare(this.subject(a).label, this.subject(b).label) ||
+                 coll.compare(a.created, b.created);
+        });
+
+        // The counts strip always reports OPEN items, whether or not closed
+        // ones are being displayed — "what is blocking me" is the open count.
+        this.openTotals = { A: 0, B: 0, C: 0 };
+        for (const p of this.items) {
+          if (p.status === 'open') this.openTotals[p.severity]++;
+        }
+
+        this.generatedAt = new Date().toLocaleString(undefined,
+          { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+        this.state = 'ready';
+      } catch (err) {
+        this.state = 'error';
+        this.errorMsg = 'Could not load the punch list. (' + err.message + ')';
+      }
+    },
+
+    // Free CSV of exactly what is on screen — same pattern as the per-tag
+    // ledger export (tag.html) and the rotation board. Client-side, no server
+    // round trip, never gated.
+    exportCsv() {
+      const rows = [['system', 'tag_number', 'severity', 'description', 'assigned_party', 'status']];
+      for (const g of this.groups) {
+        for (const p of g.items) {
+          const subj = this.subject(p);
+          // `tag_number` carries the subject identifier. A non-tag subject is
+          // prefixed with its kind so a spreadsheet reader can never mistake a
+          // service address or a segment id for a P&ID tag.
+          const ident =
+            subj.kind === 'tag'     ? subj.label :
+            subj.kind === 'service' ? 'SVC ' + subj.label :
+            subj.kind === 'segment' ? 'SEG ' + subj.label : '';
+          rows.push([
+            p.expand?.system?.number || '',
+            ident,
+            p.severity,
+            p.description || '',
+            p.assigned_party || '',
+            p.status,
+          ]);
+        }
+      }
+      const csv = rows.map(r => r.map(cell => {
+        const s = String(cell ?? '');
+        return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+      }).join(',')).join('\r\n');
+      const scope = this.systemId ? (this.system?.number || 'system')
+                                  : (this.project?.name || 'project');
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'punchlist_' + scope.replace(/\W+/g, '_') + '.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+  };
+}
+</script>
+</body>
+</html>

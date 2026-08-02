@@ -415,6 +415,21 @@ re-imports are safe.
   A pure presentation join: no schema, every cell derived at render from
   records other pages already write. This is the free deliverable; the
   compiled, hyperlinked PDF binder is the paid sidecar (ADR 0003).
+- **Punch list (`punchlist.html`)** answers the second of the three questions
+  as a listing rather than a counter. `system.html` and `project.html` show
+  open A/B/C **counts**; this is the report behind them — every item grouped
+  A → B → C in the fixed color language, with description, subject, assigned
+  party, who flagged it, and (optionally) the closed items too. Scope comes
+  from the query string: `?project=` for the whole job, `?system=` for one
+  system. Like the readiness matrix it is a pure presentation view — no
+  schema, no stored status, derived live from `punch_items` at render, with
+  the as-of time printed on the sheet. A punch item can hang off a tag, a
+  system, a service, a segment, or the project alone, and all five render, so
+  a project-scope report never silently drops records; the service subject is
+  expanded for `address` only, never a customer field (the PII rule). Print
+  CSS makes the walkdown sheet the free deliverable and a client-side CSV
+  exports the same roll-up — a compiled, branded punch report would be
+  sidecar work (ADR 0003).
 - **Service cutover (ADR 0006)** reuses the engine end to end: `service.html`
   mirrors the tag page (derived phase strip, check ledger, punch flow);
   `check.html` takes `?service=` and offers the `subject_kind='service'`

@@ -178,7 +178,12 @@ confirm the roll-up/export does not already exist before building it.
 **Rationale.** It directly serves LoopCheck's second core question ("what punch
 items are blocking this system?") and is high-value per effort. It must stay
 free-tier (never paywalled).
-**Cross-ref.** task `090`.
+**Gap confirmed, built (2026-08-02).** `system.html` and `project.html` carried
+open A/B/C **counts** only — no item listing, no print, no export — and
+`readiness.html` did not read `punch_items` at all, so all three deliverables
+were missing. Built as a new `pb_public/punchlist.html` taking `?project=` or
+`?system=`, rather than a report mode bolted onto two navigation pages.
+**Cross-ref.** task `090` (DONE); `ARCHITECTURE.md` UI section.
 
 ### D18 — Parked and rejected ideas (do not re-propose without new evidence)
 - **B2 "Walk the system" batch-check mode** — PARKED to Later/Ideas. Useful, but
