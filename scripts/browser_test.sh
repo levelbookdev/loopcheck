@@ -22,6 +22,13 @@
 # install chromium), the pocketbase binary (scripts/setup.sh), and curl.
 # The tooling is DEV-ONLY and git-ignored -- it is never vendored into
 # pb_public/ and never becomes a runtime dependency (DECISIONS.md D16).
+#
+# Playwright is pinned to 1.61.1, which is NOT the latest on purpose: 1.62.0
+# raised its floor to node >= 20, and node 18 is what Ubuntu/Pop 24.04 installs
+# from apt. 1.61.1 is the newest release that still runs on node 18 while
+# clearing GHSA-7mvr-c777-76hp (browser downloads without SSL verification,
+# fixed in 1.55.1). Bumping past it means requiring node 20+ locally; CI
+# already runs node 22, so CI alone will not catch that break.
 
 set -eu
 
