@@ -181,9 +181,37 @@ polymorphic `attachments`, idempotent `client_token`. It gains, additively:
 | `result` | select: `complete` / `incomplete` / `deferred` / `informational` | The visit's own outcome, distinct from any check it produced. |
 | `open_items` | text | The verbatim end-of-visit open list ("amp reading, auto/manual, performance test, FLS testing") — the seed for the continuation record in §10. |
 | `summary` | text (exists) | The vendor's own narrative, **verbatim** (R6). |
-| `phase` | select (phase enum), nullable | Which startup phase the visit served, so the rollup can show it in the right column. |
+| `phase` | select (phase enum), **required unless `result = 'informational'`** | Which startup phase the visit served, so the rollup can show it in the right column. **Resolved 2026-08-04 (open question 12, [R12](0018-review-notes.md#r12--service_visitsphase-is-nullable-the-source-argues-it-must-be-required--decided--required-unless-informational-adr-5)): required, not nullable.** On four source reports the phase exists *only* as a five-word free-text note, because the vendor form has no phase field — so a human must assert it at capture, and a nullable field on a capture screen is one that does not get filled. An unphased visit lands in no column of the §3 rollup, which is a silent hole rather than a visible gap. The `informational` escape covers the visit that genuinely serves no phase (a warranty callback, a sales call). |
 | `check` | relation → checks, nullable | Optional link when the GC logged a LoopCheck check covering the same work. |
 | `continues` | relation → service_visits, nullable | The follow-up visit chain (§10). |
+
+**A visit's evidence is many-to-many with tags** (resolved 2026-08-04, open
+question 11, [R11](0018-review-notes.md#r11--vendor-evidence-is-many-to-many-with-tags-not-one-to-one--decided--service_visit_tags-join-adr-5)).
+`service_visits` stays **one visit, one vendor, one trip, `tag` XOR `system`** —
+that is what a visit *is*, and the visit count is a number backcharge and
+schedule arguments actually use. The many-to-many lives in a join:
+
+**`service_visit_tags`** — `service_visit` (relation, required) · `tag`
+(relation, required) · `page_range` (text, nullable) · unique on
+`(service_visit, tag)`.
+
+The source forces this. The unit of record differs per vendor: one vendor's
+service order covers **two machines** as numbered operations under a single
+signature block; another's form covers **four positions** in parallel columns
+with one comment block and one signature line; the system supplier's covers
+**every tag touched that week**. So "attach the report to the tag" is not 1:1
+for the majority of vendors, and splitting one PDF into four visit records
+fabricates four trips that never happened.
+
+`page_range` answers the second half, which matters as much: *which part* of a
+thirty-tag document is the evidence for this tag. Without it the attachment is
+technically present and practically unusable. It is free text (`"12–15"`) — no
+parsing, no validation beyond non-empty; a human wrote it and a human reads it.
+
+The visit's own `tag`/`system` remains the **primary** subject (the one the trip
+was booked against); the join carries every tag the report evidences, including
+the primary. §5's turnover vendor report index is keyed off the join, not the
+primary subject, which is what makes it complete.
 
 **Validation:** `result` is required and is **always entered explicitly by the
 person logging the visit** — never derived, defaulted, or inferred from
@@ -516,6 +544,52 @@ it gets there.
 that is not outstanding work on the outstanding-work list, and make "open punch
 items" — a number people actually manage against — permanently unreliable.
 
+### 14. Template version is an index onto already-frozen content, not a preservation mechanism
+
+**Decided by the maintainer 2026-08-04, resolving open question 10**
+([R10](0018-review-notes.md#r10--template-revision-is-not-captured-on-the-instance--decided--monotonic-version-adr-14)).
+
+**What checking ADR 0010 changed.** R10 assumed the questions could be lost when
+a template is edited. They cannot: `check_items.prompt` already **freezes a copy
+of living template text** at submit (ARCHITECTURE §9, ADR 0002's pattern), §7
+extends the same freezing to the limits, and ADR 0010's manifest allowlist for a
+check already covers its **ordered `check_items`** (`prompt`, `response_type`,
+`value`, `result`). A template edited next year cannot retroactively change what
+a signed check asked. **The content problem is solved and was solved before this
+ADR.** So option (b) — freeze the resolved items onto the check — is not a
+decision to take; it is a description of what already happens. Option (c) —
+forbid editing a template with signed checks — is rejected: it would freeze the
+template library the moment a job goes live, which is the opposite of how a
+library improves.
+
+What is genuinely missing is the **index**, and it is small:
+
+- `checklist_templates` gains **`version`** (integer, default 1), incremented by
+  the server on any change to the template's items — text, order, addition, or
+  removal. Editing a template's *name* does not bump it.
+- `checks` gains **`template_version`** (integer), copied at submit alongside the
+  existing frozen prompts.
+- It enters ADR 0010's per-check manifest allowlist. The ADR's own rule is that
+  what is omitted is what can be tampered without detection, and a version claim
+  nobody hashes is worth nothing as evidence.
+
+**What the index buys that frozen prompts do not.** The frozen items say what
+*was* asked. They cannot distinguish **"this check predates that line"** from
+**"this check skipped that line"** — because a line added to the template later
+is simply absent from the old check either way. That is precisely the class of
+ambiguity this ADR exists to kill, and it is unanswerable without knowing which
+revision the check was complete *for*. Secondary, and cheap once the field
+exists: grouping checks by revision for QA, and flagging a check run against a
+template that has since moved on when deciding whether to re-run.
+
+**Sequencing — this is the one item that cannot wait.** A version cannot be
+retrofitted onto already-signed checks: the information does not exist anywhere
+to reconstruct. It is also **hash-affecting**, so it lands with the other
+manifest additions in the single fold that open question 5 recommends —
+`sha256-canon-v1` is retired into `v2`, or, better, the fold happens before any
+real package is signed and v1 is simply defined to include it. **Decide and land
+this together with open question 5, not after it.**
+
 ## What all of this adds to the frozen turnover package
 
 ADR 0010's manifest gains, per scope:
@@ -595,8 +669,18 @@ change** and must land before the first real package is signed, or behind a
   `signatures.signer_role` enum additions are additive but contract-visible;
   `instrument_settings` is a new collection. All of it needs the ADR-0003
   version bump, which is why M4–M6 sit **after** M3's v1 reconciliation
-  (DECISIONS D12). **`restrictions` (§13) is a second new collection** and joins
-  the same queue; it is additive, so it breaks nothing already published.
+  (DECISIONS D12). **`restrictions` (§13) and `service_visit_tags` (§5) are two
+  further new collections**, and `checklist_templates.version` +
+  `checks.template_version` (§14) two further additive fields; all join the same
+  queue and none breaks anything already published. **`service_visits.phase`
+  becoming required (§5) is the one tightening change** — harmless now with no
+  data, and it must land before the ADR 0017 UI ships or it is a backfill.
+- **Open question 5 is now the critical path, not a loose end.** Three separate
+  manifest additions are hash-affecting — the vendor report index (§5), active
+  restrictions (§13), and `template_version` (§14) — and §14's cannot be
+  retrofitted at all. They should be folded into one canonical scheme in a
+  single pass, before any real package is signed, rather than each retiring
+  `sha256-canon-v1` in turn.
 - **The turnover manifest changes are hash-affecting** (see above). Either they
   land before any real package is signed, or `sha256-canon-v1` is retired in
   favor of a v2 and old packages verify under the old scheme. This is the
@@ -728,7 +812,11 @@ as R13–R19 and need no question here.*
    unreliable. **This is the largest gap the third reading found:** the model
    can say a thing passed or failed, and cannot say "it passed, and here is the
    permanent condition of that pass."
-10. **Template revision on the instance** ([R10](0018-review-notes.md#r10--template-revision-is-not-captured-on-the-instance--open--adr-open-question-10)).
+10. ~~**Template revision on the instance**~~ **RESOLVED 2026-08-04: a monotonic
+    `version`, and the premise was half wrong — ADR 0010 already freezes the
+    item text, so this is an index, not a preservation mechanism. See §14, and
+    land it with question 5.**
+    ([R10](0018-review-notes.md#r10--template-revision-is-not-captured-on-the-instance--decided--monotonic-version-adr-14)).
     `template_version` / `revision` appears nowhere in this ADR or
     `ARCHITECTURE.md`, while the source's own checklist form carries a revision
     marker in its header. If a template line is added, reworded, or removed
@@ -738,7 +826,10 @@ as R13–R19 and need no question here.*
     already freezes item text, in which case the version is just the index and
     most of the work is done. **Must be decided before M5:** a version cannot be
     retrofitted onto already-signed checks.
-11. **Vendor evidence is many-to-many with tags** ([R11](0018-review-notes.md#r11--vendor-evidence-is-many-to-many-with-tags-not-one-to-one--open--adr-open-question-11)).
+11. ~~**Vendor evidence is many-to-many with tags**~~ **RESOLVED 2026-08-04: a
+    `service_visit_tags` join with an optional `page_range`; `service_visits`
+    stays one visit, one trip. See §5.**
+    ([R11](0018-review-notes.md#r11--vendor-evidence-is-many-to-many-with-tags-not-one-to-one--decided--service_visit_tags-join-adr-5)).
     §5 assumes one report evidences one subject. In the source one vendor's
     service order covers two machines under a single signature block, another
     vendor's form covers four positions in parallel columns, and the system
@@ -748,7 +839,9 @@ as R13–R19 and need no question here.*
     carrying an optional `page_range` per tag — keeping `service_visits` honest
     about what a visit was, and answering *which part* of a thirty-tag document
     proves a given tag.
-12. **Should `service_visits.phase` be required?** ([R12](0018-review-notes.md#r12--service_visitsphase-is-nullable-the-source-argues-it-must-be-required--open--adr-open-question-12)).
+12. ~~**Should `service_visits.phase` be required?**~~ **RESOLVED 2026-08-04:
+    required unless `result = 'informational'`. See §5.**
+    ([R12](0018-review-notes.md#r12--service_visitsphase-is-nullable-the-source-argues-it-must-be-required--decided--required-unless-informational-adr-5)).
     §5 has it nullable. The source's argument for required: on four vendor
     reports the phase exists **only** as a five-word free-text note, because the
     form has no phase field — so a human must assert it at capture, and a

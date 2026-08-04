@@ -398,7 +398,21 @@ third reading found: the model can say a thing failed, and can say it passed,
 and cannot say **"it passed, and here is the permanent condition of that
 pass."**
 
-## R10 — Template revision is not captured on the instance · *open · ADR open question 10*
+## R10 — Template revision is not captured on the instance · **DECIDED — monotonic `version` (ADR §14)**
+
+**Resolved by the maintainer, 2026-08-04: option (a), a monotonic `version`.**
+**This comment's premise was half wrong and the correction is the useful part.**
+It assumed the questions could be lost when a template is edited. They cannot —
+`check_items.prompt` already freezes a copy of the template text at submit, §7
+freezes the limits the same way, and ADR 0010's manifest already hashes the
+ordered `check_items`. Option (b) "freeze the resolved items onto the check" is
+not a decision available to take; it is a description of what the product has
+always done. **Checking the adjacent ADR before proposing a mechanism would have
+caught this** — the same lesson R1 landed on from a different direction.
+
+What survives is narrower and still worth doing: the version is an **index**,
+and its real work is distinguishing "this check predates that line" from "this
+check skipped that line," which frozen prompts genuinely cannot do. See §14.
 
 **ADR location:** `checklist_templates` / `checks`.
 
@@ -425,7 +439,12 @@ the version integer is the index and (b) is already half-built. Worth deciding
 before M5, because retrofitting a version onto already-signed checks is not
 possible.
 
-## R11 — Vendor evidence is many-to-many with tags, not one-to-one · *open · ADR open question 11*
+## R11 — Vendor evidence is many-to-many with tags, not one-to-one · **DECIDED — `service_visit_tags` join (ADR §5)**
+
+**Resolved by the maintainer, 2026-08-04: option (a), the join with an optional
+`page_range`.** `service_visits` stays one visit, one vendor, one trip — option
+(c) was rejected because inflating the visit count corrupts a number that
+backcharge and schedule arguments use directly.
 
 **ADR location:** §5, `service_visits` (tag XOR system) + `attachments`.
 
@@ -461,7 +480,10 @@ record per tag, all pointing at the same attachment digest, with a shared
 belongs. (c) inflates the visit count, which is a number the schedule and
 backcharge arguments actually use.
 
-## R12 — `service_visits.phase` is nullable; the source argues it must be required · *open · ADR open question 12*
+## R12 — `service_visits.phase` is nullable; the source argues it must be required · **DECIDED — required unless `informational` (ADR §5)**
+
+**Resolved by the maintainer, 2026-08-04: required, with the `informational`
+escape** exactly as the comment's counter-argument proposed.
 
 **ADR location:** §5 field table — `phase` · select (phase enum), **nullable**.
 
