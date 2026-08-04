@@ -22,13 +22,37 @@ change is four refinements folded into the ADR (R2, R6, R7, R8) and three
 questions the summary did not raise (R3–R5). R1 proposed reversing a
 recommendation and was **decided against** by the maintainer.
 
-**What was read.** A 24-page compiled startup submittal covering five
+**What was read.** A **73-page** compiled startup submittal covering five
 independent vendors, in five mutually incompatible form formats: a rotary-lobe
 pump vendor's four-page start-up report (×4 units), a blower vendor's seven-page
 service order (×2 units), a valve-actuator vendor's inspection reports (×6
 units), an MBR system supplier's three field service reports (dry checks, I/O
 checks, clean water), and three clean-water checklists including a pre-run gate.
 No project, company, or person is identified in these notes.
+
+**Corrections — third reading, 2026-08-04.** Three claims in these notes were
+wrong, and all three failed the same way: they were taken from the PDF's
+**extracted text layer** rather than from rendered pages. In this package the
+text layer misplaces checkbox and Y/N columns — marks collapse upward toward
+the first rows of a table, and answer columns detach from their items — so a
+filled form reads as a mostly-empty one. The source was re-read from rendered
+page images and the corrections are marked at each site below.
+
+| Claim as written | Correct | Where |
+|---|---|---|
+| "A 24-page compiled startup submittal" | **73 pages** — 24 was the tooling's page count, not the file's | fixed above |
+| "14 of 20 checklist items blank on all four copies … including rotation direction and power consumption" | **3 of 20** — items 6, 12 and 20. Rotation direction (item 7) and power consumption (item 19) are both marked and initialled | §4 row in the confirmation table |
+| "one clean-water logic line is answered a hard **N** — a PID loop not tuned" | The PID line is marked **Y**. The **N** is the line covering **automatic recovery from simulated power-loss events** | R4 |
+
+The third correction is the one that matters beyond accuracy: **ADR 0018's open
+question 7 is built on that example**, and the real line is both more
+consequential and a cleaner illustration of the point. It is corrected there
+too.
+
+Nothing structural changes. The ten observations still hold, R2 / R6 / R7 / R8
+stand as folded in, and R3–R5 remain open. Method note for whoever reads a
+scanned or form-heavy source next: **render the pages.** A text layer is a
+convenience, not the document.
 
 ---
 
@@ -152,10 +176,24 @@ them. That is not `deferred` (nothing was moved to a later phase, and no
 follow-up was named), not `na` (the check applies), and not `fail`. It is
 "not performed, because the plant could not be put in the state required."
 
-Separately, one clean-water logic line is answered a hard **N** — a PID loop
-not tuned — and appears in **no** action-item list in the package. A bare `fail`
+Separately, one clean-water logic line is answered a hard **N** — ~~a PID loop
+not tuned~~ **corrected: the line confirming that the system recovers
+automatically from simulated power-loss events, with no manual operator
+action** — and appears in **no** action-item list in the package. A bare `fail`
 with no punch item is exactly the leak the ball-in-court work is meant to close
 (see R5's neighbour finding below).
+
+**Correction, third reading 2026-08-04.** The PID line is marked **Y**, not N;
+its *note* describes an unresolved equipment defect and prescribes a speed
+limit as a workaround, which makes it an instance of **R3** (pass with
+exception), not of this comment. The genuine bare failure is the power-loss
+recovery line, and it is a stronger example in three ways: its note cell is
+**empty**, so there is no prose for a reader to fall back on; it is arguably
+the most consequential line on the page; and the page was **signed as a whole**
+immediately afterwards. That last point sharpens the recommendation below — the
+QC flag has to fire at **sign/freeze** time, not only in the turnover package,
+because a signature over a set of lines is plainly not a signature over their
+content.
 
 **Recommendation:** a short closed vocabulary on `not_performed` —
 `conditions_unavailable` · `access_blocked` · `equipment_unavailable` ·
@@ -246,7 +284,7 @@ assumed:
 | ADR section | Source evidence |
 |---|---|
 | §2 deferral | Two "will be checked during clean water with [vendor] rep" annotations, plus one "finish during clean water" |
-| §4 blanks | 14 of 20 checklist items blank on **all four** copies of one vendor's pump form, including rotation direction and power consumption |
+| §4 blanks | ~~14 of 20~~ **3 of 20** checklist items blank on **all four** copies of one vendor's pump form — items 6, 12 and 20 (optional safety equipment, air relieved from piping, and the O&M inspection schedule: plausibly N/A, definitely-performed-or-not, and a deliverable rather than a field check — three meanings, one blank cell). Rotation direction and power consumption are both marked and initialled. Separately, the form's **Date column is blank on all twenty rows** of all four copies; only initials were entered, so nothing on the form dates an individual check |
 | §5 vendor evidence | Five vendors, five incompatible formats, one of them a seven-page service order with on-site/off-site times **and break duration** |
 | §6 ball-in-court | The MBR supplier's reports are *organized* by responsible party — three standing sections per report |
 | §6 scope gap | Three separate instances, including an instrument explicitly "not in scope but would need to be set up before turning plant online" |

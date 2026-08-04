@@ -606,9 +606,28 @@ reasoning in [`0018-review-notes.md`](0018-review-notes.md) R3–R5.*
    because "conditions were not available" — not deferred, not N/A, not failed.
    Recommendation: a short closed vocabulary — `conditions_unavailable` ·
    `access_blocked` · `equipment_unavailable` · `out_of_scope` · `other` — so
-   the package answers "why not" without a paragraph. Pair it with a turnover QC
-   flag for a **failed line carrying no linked punch item** (the source has
-   exactly one such orphan failure, appearing in no action-item list anywhere).
+   the package answers "why not" without a paragraph. Pair it with a QC flag for
+   a **failed line carrying no linked punch item**.
+
+   **Example corrected 2026-08-04 (third reading).** This question previously
+   cited a PID-tuning line as the orphan failure; that line is marked **pass**,
+   and its note describes a defect plus a workaround — an instance of open
+   question 6, not this one. The real orphan failure is the line confirming
+   **automatic recovery from simulated power-loss events**, and it is a stronger
+   case: its note cell is **empty**, it is arguably the most consequential line
+   on that page, and the page was **signed as a whole** immediately afterwards
+   with the failure on it, appearing in no action-item list anywhere in the
+   package.
+
+   **Consequence for where the flag fires.** An orphan failure that survives a
+   signature is not caught by a turnover-package check — turnover is far too
+   late, and the signature already happened. The flag belongs at **sign/freeze**
+   time alongside §4's blank-result gate: §4 already refuses to sign a check
+   carrying a blank line, and a **failed line with no linked punch item is the
+   same class of defect** — a line whose consequence has nowhere to go. Whether
+   that hard-blocks the signature (as blanks do) or warns loudly is the open
+   part; §4's gate is the precedent, and the field evidence says a warning would
+   have been clicked through.
 8. **Structural vs. situational N/A** ([R5](0018-review-notes.md#r5--required-na_reason-will-be-heavier-than-the-adr-assumes--open)).
    §4 requires `na_reason` on every N/A. The source marks two lines N/A on
    *every* unit of a type — a property of the equipment subtype, not of the
