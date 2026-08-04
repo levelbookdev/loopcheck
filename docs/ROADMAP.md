@@ -465,6 +465,12 @@ gate moves to where ambiguity becomes permanent (ADR 0018 §4).
   lines are unresolved, and the check lands `incomplete` as today. `sign.html`
   and the turnover build surface unresolved lines as the specific blocker,
   linking to the correction check that would clear them.
+- **A note is never an answer.** Result and note are separate fields; prose in
+  the response position is not a response. A line with a note and no result is a
+  **blank** and the gate treats it as one. The source answers several lines with
+  a bare "see notes" and no mark — a cross-reference standing in place of an
+  answer, one of which points at notes that never mention the line. The capture
+  UI structurally cannot produce this shape, which is the point.
 - **Validation.** `na_reason` is **required when `result = "na"`**,
   server-enforced on `check_items`. A check may **not be signed**, and a scope
   may **not be frozen**, while any included line carries a blank result — the
@@ -612,11 +618,20 @@ mid-startup with nothing prompting re-verification.
 **Goal.** Capture what the vendor PDFs took with them when they left, and make
 the package refuse to be compiled with the signature block empty.
 
-### M6.1 — Instrument configuration records (observation 6)
+### M6.1 — Instrument and final-control-element configuration records (observation 6)
 
 The 4–20 mA span, the transmitter range, the delay, the logging interval, the
 setpoints — configured at startup, captured inside a vendor's report, and
 unrecoverable by the time the instrument is replaced.
+
+**Scope widened after the full render of the valve reports**
+([review notes R21](adr/0018-review-notes.md#r21--configuration-data-lives-on-final-control-elements-not-only-instruments--folded-into-adr-0018-8)):
+this covers **final control elements too**, not just transmitters. Every valve
+report in the source records fail position on loss of input signal, function
+(on/off vs modulating), and control/feedback signal types. **Fail position is
+the clearest case for the whole collection** — configured once, recorded only in
+a vendor PDF, the first thing needed at replacement, and wrong answers have
+process consequences rather than paperwork ones.
 
 - **Data model.** New **append-only `instrument_settings`**: `project`, `tag`
   (required), `configured_at`, `configured_by`, `vendor_company` (nullable),
@@ -624,7 +639,9 @@ unrecoverable by the time the instrument is replaced.
   range: 0–500 gpm), `signal_low` / `signal_high` / `signal_unit` (the
   electrical span: 4–20 mA), `damping_seconds`, `delay_seconds`,
   `logging_interval`, `setpoints` (text), `firmware_version`, `notes`,
-  `superseded_by` (self-relation, nullable), `client_token`.
+  `superseded_by` (self-relation, nullable), `client_token`; and for final
+  control elements `fail_position`, `control_function`, `control_signal`,
+  `feedback_signal`.
   `updateRule: null`, `deleteRule: null`. **Not** folded into `calibrations`:
   "what is it set to" and "does it read true" are different facts on different
   cadences (ADR 0016 rejected the analogous flattening).
@@ -665,6 +682,21 @@ missing countersignatures before the package was compiled.
   minus roles signed against the current `content_hash`. No stored `signed`
   flag (already rejected by ADR 0010). The app records who signed in what
   capacity; it never adjudicates who was entitled to.
+- **Required roles come from the GC's template, never from the vendor's paper**
+  ([review notes R22](adr/0018-review-notes.md#r22--missing-countersignature-has-two-failure-modes-and-one-has-no-block-to-leave-blank--folded-into-adr-0018-9)).
+  The source has two failure modes: a contractor block **left blank** on one
+  vendor's form, and on another **no such block at all** — it ends at "inspected
+  by". A QC deriving who owes a signature from the attached document would report
+  nothing missing for the second and worse case. The list is computed against the
+  frozen `required_signature_roles`, independent of any attached document.
+- **Print discipline** ([R20](adr/0018-review-notes.md#r20--a-signature-can-sit-on-a-page-that-identifies-nothing--open)).
+  In the source, a signed checklist's signature block sits on **its own page**,
+  carrying a name, a wet signature, a date — and nothing identifying what was
+  signed. Detached from the preceding sheet it attests to nothing. Every page of
+  a printed turnover artifact must therefore carry enough identity (package id,
+  scope, content-hash prefix) that a separated page stays traceable. This is the
+  concrete field justification for ADR 0010's `signed_content_hash`, and it sets
+  a bar the free print view must not regress against.
 - **Turnover.** A **missing-countersignature QC block** computed before the
   freeze is allowed.
 

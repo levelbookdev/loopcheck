@@ -14,11 +14,16 @@ No project, company, vendor, or person is identified anywhere in this record.
 **Provenance — read this before trusting the Context section.** This ADR was
 written from a **summary** of those observations. The source package was read
 directly afterwards, on 2026-08-04, and the reading is recorded in
-[`0018-review-notes.md`](0018-review-notes.md). Every observation was confirmed;
-comments **R2, R6, R7, R8 are folded in below**, **R1 reversed a recommendation**
-in this ADR's open questions, and **R3–R5 remain open** for the maintainer. The
-Context section below is left as originally written rather than retrofitted —
-what the ADR knew when, and from what, is itself part of the record.
+[`0018-review-notes.md`](0018-review-notes.md). Every observation was confirmed.
+Four readings have now happened — a summary, a text-layer pass, a corrected
+render pass, and a full render of the valve reports and clean-water checklists.
+Comments **R2, R6, R7, R8, R21 and R22 are folded in below**; **R9–R12 were
+decided** and appear as §§13–14 and §5; **R1 proposed reversing a recommendation
+and was decided against**; **R3–R5 and R13–R20 remain open** for the maintainer.
+The Context section below is left as originally written rather than retrofitted —
+what the ADR knew when, and from what, is itself part of the record. Three of
+its ten bullets are now known to be imprecise in detail while correct in
+substance; the review notes carry the corrections.
 
 ## Context
 
@@ -150,6 +155,16 @@ is to separate the two moments:
 - **`check_items.na_reason`** (text) is **required when `result = "na"`**,
   server-enforced by the `check_items` createRule. "N/A" with no reason is the
   second most ambiguous mark on a paper form.
+- **A note is never an answer**
+  ([R3](0018-review-notes.md#r3--pass-with-exception-is-a-real-answer-the-state-vocabulary-has-no-home-for--open)).
+  A line carries a `result`, and separately may carry a `note`; prose in the
+  response position is not a response. The source answers several lines with a
+  bare **"see notes" and no mark at all** — a cross-reference standing *in place
+  of* an answer, which reads as resolved and is not. Worse, one such pointer
+  **dangles**: the notes it refers to say nothing about that line. So a line with
+  a note and no `result` is a **blank**, and the gate below treats it as one. The
+  capture UI cannot produce this shape (result control and note field are
+  separate), which is the point — the failure is native to paper.
 - **`incomplete` survives, and keeps its meaning** at the check level: a run
   that was started and abandoned. Capture is never blocked — hard constraint #1
   means a laborer on a dead-zone phone must always be able to submit what they
@@ -334,12 +349,22 @@ which a naive numeric parse would read as a single value — a concrete case for
 the §7 rule that an unparseable reading derives nothing and the tech's explicit
 result stands.)
 
-### 8. Instrument configuration is its own append-only ledger
+### 8. Configuration is its own append-only ledger — instruments **and final control elements**
 
 Configured settings are neither a calibration nor a checklist. A calibration
 (ADR 0016) asks "does it read true?" — configuration asks "what is it set to?"
 They change on different schedules and for different reasons; folding settings
 into `calibration_points` would misrepresent both.
+
+**Scope covers final control elements, not only transmitters**
+([R21](0018-review-notes.md#r21--configuration-data-lives-on-final-control-elements-not-only-instruments--folded-into-adr-0018-8)).
+Every valve report in the source captures the same class of fact on an
+actuator — fail position on loss of input signal, function, control-signal type,
+feedback-signal type. **Fail position is the single clearest case for this whole
+collection**: configured once, recorded only in a vendor PDF, first thing anyone
+needs when the actuator is replaced, and getting it wrong has process
+consequences rather than paperwork ones. The collection keeps the name
+`instrument_settings` — a tag is a tag and the record shape does not differ.
 
 New append-only collection **`instrument_settings`**:
 
@@ -350,7 +375,10 @@ New append-only collection **`instrument_settings`**:
 `signal_low` / `signal_high` / `signal_unit` (the electrical span: 4–20 mA) ·
 `damping_seconds` · `delay_seconds` · `logging_interval` ·
 `setpoints` (text: the human list) · `firmware_version` · `notes` ·
-`superseded_by` (self-relation, nullable) · `client_token` (idempotent retry).
+`superseded_by` (self-relation, nullable) · `client_token` (idempotent retry) ·
+and for final control elements: `fail_position` (e.g. `close` / `open` /
+`last`) · `control_function` (`on_off` / `modulating`) ·
+`control_signal` · `feedback_signal`.
 
 `updateRule: null`, `deleteRule: null`. A reconfiguration is a **new record**
 that the prior may point at via `superseded_by`; the **current settings are
@@ -376,6 +404,15 @@ answered.
   the check** at execution (`checks.required_signature_roles`), exactly like
   `witness_required` already does (ADR 0002). A template edited later must not
   change what a signed check required.
+- **Required roles come from the GC's template, never from the vendor's paper**
+  ([R22](0018-review-notes.md#r22--missing-countersignature-has-two-failure-modes-and-one-has-no-block-to-leave-blank--folded-into-adr-0018-9)).
+  The source shows two failure modes, not one: a contractor block **left blank**
+  on one vendor's form, and on another vendor's form **no such block at all** —
+  it ends at "inspected by" and never contemplated a countersignature. A QC that
+  derived "who still owes a signature" from what the attached document contains
+  would report nothing missing for the second case, which is the worse one. The
+  missing-countersignature list is therefore computed against the frozen
+  `required_signature_roles` **independently of any attached vendor document**.
 - `signatures.signer_role` gains `vendor_tech`, `subcontractor`,
   `gc_witness`, and `controls_integrator` alongside the existing vocabulary.
 - **Witnessing becomes a role, not a text field.** `checks.witnessed_by` stays

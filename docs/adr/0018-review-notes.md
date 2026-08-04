@@ -68,6 +68,14 @@ reach** — [R9–R19](#third-reading--eleven-items-not-previously-raised) at th
 end of this file. Four carry to the ADR as open questions 9–12; none overturns
 a decision already made.
 
+**Fourth reading, 2026-08-04 — the valve reports and clean-water checklists at
+full render.** All six valve-actuator inspection reports and all four
+clean-water checklist pages read as images. It confirmed **R8, R9, R10 and R15**
+with exact evidence, **sharpened R3 and R5** materially (R3 had modelled the
+safer half of the problem), and raised **R20–R22**. Two of those fold straight
+into the ADR (§8 scope, §9 required-roles source); R20 is a rationale finding for
+ADR 0010 rather than a schema change. Again, nothing overturned.
+
 ---
 
 ## R1 — Per-leg readings: the ADR's recommendation is **reversed** · **DECIDED — original recommendation upheld**
@@ -180,6 +188,35 @@ carries a non-empty note **and** a linked punch item renders differently
 the caveat visible on the standing plate rather than inside a note field. But
 it is a real decision and the ADR should not absorb it silently.
 
+### Sharpened by the full render of all six valve reports (2026-08-04)
+
+This comment modelled the wrong half. "See notes" appears in **two distinct
+forms**, and the one it described is the safer one:
+
+- **`x  see notes`** — a mark *and* a pointer. Pass with a caveat. This is what
+  the comment addressed, and recommendation (c) handles it.
+- **`see notes` with no mark at all** — a cross-reference standing **in place
+  of** an answer. On four of the six reports, "Position indicator indicates
+  position properly" is answered this way. It is not a pass with a caveat; it
+  is an **unanswered line wearing an answer's clothes**, and a reader scanning
+  the column sees text where a blank would at least have been honest.
+
+**And one of those pointers dangles.** On the 3" PVC valve report, "Check
+alignment to ensure there is no defect with MTG hardware" carries no mark and a
+sub-bullet reading "See notes" — while that report's Other Notes contain only
+the PLC-signal line and "Valve left in closed position." Nothing about
+alignment. The reference resolves to nothing.
+
+**Consequence for §4.** A mark-less "see notes" is a **blank**, and the
+blank-result gate should treat it as one. The design implication is narrower
+than a new state: §4 must be explicit that *a note is never an answer*. A line
+carries a `result` **and** may carry a note; prose in the response position is
+not a response. That is enforceable at capture (the note field is separate from
+the result control, so the UI cannot produce this shape) and at the gate (a
+line with a note and no result is blank, and blocks signature). The dangling
+pointer additionally argues that if a note references other evidence it should
+be a typed pointer — see **R19**.
+
 ## R4 — `not_performed` needs a small reason vocabulary, not just a free-text note · *open*
 
 **ADR location:** §4.
@@ -242,6 +279,25 @@ maintenance hint on the template page.
 server-side, and surface the structural case as a template-quality signal
 rather than a per-check exemption. But note the friction honestly in the task:
 this rule will be felt.
+
+**On one page, "blank" carries three different meanings.** The clean-water gate
+form has nine numbered rows; four are filled and **rows 5–9 are blank by
+design** — deliberate space for project-specific items. The Auto Production Mode
+list has two `NA` answers with empty note cells. So a single rendered page
+shows: an **unused row** (nothing was ever owed), an **unanswered item**
+(something was owed and not recorded), and an **N/A with no reason** (a judgment
+with no basis given). All three look identical. A per-line explicit state kills
+the first two outright — an unused template row cannot exist in a rendered
+check, and an unanswered line is caught by §4's gate — which leaves `na_reason`
+carrying only the third, and strengthens the case for requiring it.
+
+**A carve-out worth considering.** Two of the `NA` answers sit on lines whose
+*prompt* already states the condition — "(If applicable)" and "(if applicable:
+Siphon or Gravity System)". There, N/A is self-explaining and a typed reason
+adds nothing. If `template_items` ever gains a `conditional` flag, waiving
+`na_reason` on flagged lines would remove most of the friction this comment
+warns about without weakening the rule where it matters. Not proposed as scope —
+noted so the friction has a cheap answer if it proves real.
 
 **The structural case also appears at column scale, and it appears as a
 blank.** The pump vendor's form is one checklist serving two equipment types —
@@ -322,7 +378,8 @@ assumed:
 | §10 continuation | One vendor's form has literal "Follow-up assignment necessary for:" and "Follow-up order issued for:" fields; the MBR supplier's action items carry across three sequential visit reports |
 | §11 duplicate serial | One pump serial appears on two reports with different motor and gear-reducer serials; one "unit position" value appears on all four |
 | §11 asset vs. position | A pump found with a frozen impeller, removed, rebuilt with new seals, and re-installed — mid-startup, between the clean-water and seeding phases. Open question #12 is live on a real job, not hypothetical |
-| §12 gates | A signed, dated "Clean Water Pre-Run Check list" with Y/N + note per line — the gate form exists and someone already signs it |
+| §12 gates | A signed, dated "Clean Water Pre-Run Check list" with Y/N + note per line — the gate form exists and someone already signs it. Signed by **one** person, the equipment supplier's representative; no GC or owner line (see **R22**) |
+| Constraint #5 (no conditional logic) | **Evidence for the constraint, not against it.** The gate form's one conditional item handles branching by writing the condition **into the prompt text**, highlighted in red — "applicable only if membranes were already installed." An experienced vendor, authoring freely with no tooling constraint at all, independently chose prose-in-the-prompt over a branching form. Cite this when conditional checklists are next proposed |
 
 One further confirmation worth stating plainly: the phase sequence in the source
 is **dry checks → I/O checks → clean water / wet-mech → seeding → performance**,
@@ -416,10 +473,12 @@ check skipped that line," which frozen prompts genuinely cannot do. See §14.
 
 **ADR location:** `checklist_templates` / `checks`.
 
-The system supplier's clean-water checklists carry a **revision marker in the
-form header**. Someone at that vendor already understood that a completed
-checklist is meaningless without knowing which version of the questions was
-asked.
+The system supplier's clean-water checklists carry a **form identifier and a
+revision marker in the header**, on every page. Someone at that vendor already
+understood that a completed checklist is meaningless without knowing which
+version of the questions was asked — and that the two facts are separate: *which
+form* and *which revision of it*. LoopCheck has the first (`template_key`) and
+not the second.
 
 `template_version`, `template_rev`, and `revision` appear nowhere in ADR 0018 or
 `ARCHITECTURE.md`. A check relates to a template, and templates are edited. If a
@@ -649,3 +708,91 @@ description, date) so the pointer is structured rather than a sentence. It does
 not make the evidence available, but it makes the gap **countable** and tells a
 future reader who to ask. A flag that says "missing" when the truth is
 "elsewhere" trains people to ignore the flag.
+
+---
+
+# Fourth reading — the valve reports and clean-water checklists at full render
+
+All six valve-actuator inspection reports and all four clean-water checklist
+pages were rendered and read as images on 2026-08-04. This pass **confirmed
+R8, R9, R10 and R15 with exact evidence** (recorded at each comment),
+**sharpened R3 and R5** (recorded there), and raised the three comments below.
+Nothing here overturns a decision already made.
+
+## R20 — A signature can sit on a page that identifies nothing · *open*
+
+**ADR location:** §9; ADR 0010's `signed_content_hash`.
+
+The Auto Production Mode checklist's signature block is on **its own page**. That
+page carries the form header, the printed name, a wet signature, and a date —
+and **nothing identifying what was signed**. The eighteen answered items are on
+the preceding page. Separate the two sheets, which a compiled package does
+routinely, and the signature attests to nothing recoverable.
+
+This is the clearest field justification in the whole source for a signature
+that **binds to content** rather than sitting adjacent to it. ADR 0010 already
+has the mechanism — `signatures.signed_content_hash`, copied from the frozen
+package at sign time, so each signature is self-contained evidence of *which*
+content it covers. The source shows the failure mode that mechanism prevents,
+in paper form, on a real signed deliverable.
+
+**Recommendation:** no schema change — this is a **rationale finding**, and it
+belongs in ADR 0010's Context when that ADR is unfrozen, as the concrete answer
+to "why not just print the name at the bottom of the page?" It also sets a bar
+for the free print view: every page of a printed turnover artifact must carry
+enough identity (package id, scope, content hash prefix) that a detached page is
+still traceable. A print view that reproduces this failure would be a
+regression, not a neutral choice.
+
+## R21 — Configuration data lives on final control elements, not only instruments · **folded into ADR 0018 §8**
+
+**ADR location:** §8 `instrument_settings`.
+
+§8 scoped the settings ledger to instruments — spans, ranges, damping, logging
+intervals. Every valve report in the source captures the same *class* of fact on
+a **valve actuator**: failure position on loss of input signal, function
+(on/off vs modulating), control signal type, and feedback signal type.
+
+Fail position is exactly the fact §8 exists to preserve: it is configured once,
+recorded only in a vendor PDF, and it is the first thing anyone needs when the
+actuator is replaced — and getting it wrong has process consequences, not just
+paperwork ones.
+
+→ §8 now scopes the collection to **instruments and final control elements**,
+with the actuator fields named. The collection is renamed in spirit rather than
+in fact (the name `instrument_settings` stays; the *scope* statement changes),
+because a tag is a tag and the record shape does not differ.
+
+**Secondary finding, feeding open question #12:** actuator **Serial # reads
+"N/A" on all six reports**. These assets carry no serial identity in the
+record at all. Any asset-vs-position model must handle a position whose occupant
+is genuinely unidentifiable — the answer cannot assume every asset has a serial.
+
+## R22 — "Missing countersignature" has two failure modes, and one has no block to leave blank · **folded into ADR 0018 §9**
+
+**ADR location:** §9, the required-roles QC.
+
+The observation summary said the contractor countersignature block was blank.
+The render shows two different failures across two vendors:
+
+1. **A block left blank** — the pump vendor's form has `Contractor: Name: ___
+   Signature: ___`, unsigned on all four copies.
+2. **No block at all** — the valve vendor's form ends at "Inspected By" with two
+   names and a date. There is nowhere for a contractor or owner to sign. Nothing
+   was omitted; the form never contemplated it.
+
+A third variant sits beside them: the gate checklist is signed by **one person**
+— the equipment supplier's representative — with no GC or owner line, and the
+blower service order's "customer" signature was applied by the equipment
+supplier rather than the GC or owner (already recorded under §9).
+
+The design consequence is small but load-bearing: **required signature roles are
+a property of the GC's template, never of the vendor's paper.** A QC that
+derives "who still owes a signature" from what the attached form happens to
+contain would report nothing missing for case 2 — the worst case — because the
+form asked for nothing.
+
+→ §9 now states that `required_signature_roles` is defined by the GC's template
+and frozen onto the check, and that the missing-countersignature QC is computed
+against **that** list, independent of what any attached vendor document
+provides.
