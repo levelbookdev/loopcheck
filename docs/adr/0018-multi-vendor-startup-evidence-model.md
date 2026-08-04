@@ -17,9 +17,9 @@ directly afterwards, on 2026-08-04, and the reading is recorded in
 [`0018-review-notes.md`](0018-review-notes.md). Every observation was confirmed.
 Four readings have now happened — a summary, a text-layer pass, a corrected
 render pass, and a full render of the valve reports and clean-water checklists.
-Comments **R2, R6, R7, R8, R21 and R22 are folded in below**; **R3, R4, R9–R12
-and R15 were decided** and appear as §4, §5 and §§13–14; **R1 proposed reversing
-a recommendation and was decided against**; **R5, R13, R14 and R16–R20 remain
+Comments **R2, R6, R7, R8, R21 and R22 are folded in below**; **R3–R5, R9–R13
+and R15 were decided** and appear as §4, §5, §11 and §§13–14; **R1 proposed
+reversing a recommendation and was decided against**; **R14 and R16–R20 remain
 open** for the maintainer.
 The Context section below is left as originally written rather than retrofitted —
 what the ADR knew when, and from what, is itself part of the record. Three of
@@ -156,6 +156,39 @@ is to separate the two moments:
 - **`check_items.na_reason`** (text) is **required when `result = "na"`**,
   server-enforced by the `check_items` createRule. "N/A" with no reason is the
   second most ambiguous mark on a paper form.
+
+  **It stays free text, and the friction is deliberate** (**R5**, resolved
+  2026-08-04). R4 gave `not_performed` a closed vocabulary because its reasons
+  recur. `na`'s do not: after `out_of_scope` and `satisfied_by_other_evidence`
+  moved to `not_performed`, what remains under `na` is "this line does not apply
+  to this subject" — which is either **structural** (the line should not be on
+  this `tag_type`'s template) or a genuine one-off. Giving it a picker would make
+  the structural case *cheap*, and cheap is exactly wrong: the friction is the
+  pressure that gets the template fixed. A closed vocabulary here would let six
+  identical N/As per unit, across dozens of units, become one tap and stay
+  forever.
+
+  **The systemic case is answered by a template hint, not an exemption**
+  (R5 option (c)). The template page flags a line that is `na` on **every tag of
+  its type** in a project — "consider a template split" — derived on the fly,
+  nothing stored. This is ADR 0009's reasoning one grain finer: an inapplicable
+  *phase* is `phases_na`, and an inapplicable *line* is a template that wants
+  splitting. The hint keys on the repetition, not on the reason text, so junk
+  reasons ("n/a", "-") cannot defeat it.
+
+  **Carve-out, adopted:** `template_items` gains **`conditional`** (bool), and
+  `na_reason` is **waived on flagged lines**. A prompt that already states its
+  own condition — the source's "(if applicable: …)" lines — is self-explaining,
+  and a typed reason there buys nothing. The `result` is still explicitly `na`;
+  only the prose is waived. This is metadata, not a forms designer: no branching,
+  no conditional logic engine, the same class of template flag as §12's
+  `gate_for_phase`.
+
+  **Rejected — requiring the reason only when siblings differ** (R5 option (b)).
+  It makes the capture rule depend on data the device may not have: the field
+  tier is offline-capable, and a rule that changes based on other tags' state is
+  unpredictable to the person it is being enforced against. Server-enforceable
+  and always-the-same beats clever.
 - **A note is never an answer**
   ([R3](0018-review-notes.md#r3--pass-with-exception-is-a-real-answer-the-state-vocabulary-has-no-home-for--decided--derived-not-a-state-adr-4)).
   A line carries a `result`, and separately may carry a `note`; prose in the
@@ -520,6 +553,39 @@ is invisible to a register check alone:
   register and warns loudly on a miss, offering "create this tag" or "fix the
   number." A warning, never a block: a real tag missing from the register is
   itself a finding worth recording.
+
+  **Resolution normalizes first, in three tiers** (**R13**, resolved
+  2026-08-04). An exact-match register check reports the source's real
+  disagreements as "non-existent tag," which is true and useless — the tag
+  exists and the reader is being asked to spot a one-character difference.
+
+  1. **Exact match** — resolves silently, as today.
+  2. **Normalized match** — offered as a **candidate** ("did you mean …?"), one
+     tap to accept. This catches an omitted separator or zero-padding, e.g. a
+     float tag written `LSH01130` against a register holding `LSH-01130`.
+  3. **Numeric-core match under a different prefix** — surfaced as a **question,
+     never a candidate to accept**. The prefix says what the device *is* (ISA
+     convention: an on/off valve prefix is not a flow-control-valve prefix), so
+     the source's `XV`-vs-`FCV` disagreement on the same number is two parties
+     describing the equipment differently, not a typo. A human answers that.
+
+  Anything else stays the miss above.
+
+  **The normalization is pinned exactly**, for the same reason ADR 0010 pins its
+  canonical form: uppercase → strip all non-alphanumerics → strip leading zeros
+  from each maximal digit run. Unpinned, "did you mean" behaves differently in
+  the core, the sidecar, and an importer, and a matching rule nobody can predict
+  is worse than none.
+
+  **Never auto-correct, and never rewrite the stored value.** The ledger keeps
+  what the human or the vendor actually wrote, verbatim — the same principle as
+  R6's narrative and §7's frozen `value` text. Normalization exists to *find*
+  candidates, never to silently agree with one. On CSV import, candidates are a
+  **review step**, never a bulk rewrite.
+
+  Normalized forms are **derived, not stored**. If a stored normalized column
+  ever becomes necessary for import performance it must be server-maintained on
+  write and never read as authoritative — deliberately **not built ahead**.
 - **Self-consistency within one report.** A tag claimed **twice inside the same
   report, against two different descriptions**, is a warning. In the source one
   flow-control-valve tag is listed as two different valves and one analyzer tag

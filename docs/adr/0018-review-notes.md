@@ -273,7 +273,24 @@ content.
 punch-item creation (already the behavior in `check.html`) and that the
 turnover QC flags a failed line with no linked punch item.
 
-## R5 — Required `na_reason` will be heavier than the ADR assumes · *open*
+## R5 — Required `na_reason` will be heavier than the ADR assumes · **DECIDED — (a) + (c) + the conditional carve-out (ADR §4)**
+
+**Resolved by the maintainer, 2026-08-04: require it, hint at the template, and
+waive it on self-explaining lines.** The comment's own carve-out is adopted —
+`template_items.conditional`, waiving `na_reason` on lines whose prompt already
+states its condition.
+
+The decision turns on something this comment framed as a cost and is better read
+as a feature: **the friction is load-bearing.** A closed vocabulary or a blanket
+exemption would make the *structural* N/A cheap, and cheap is exactly wrong —
+the friction is the pressure that gets the template split. So `na_reason` stays
+free text (unlike R4's `not_performed_reason`, whose reasons genuinely recur),
+the systemic case is answered by a derived template hint keyed on repetition
+rather than on the reason text, and only the self-explaining case is waived.
+
+Option (b) is rejected on a ground the comment did not reach: the field tier is
+offline-capable, so a rule whose applicability depends on sibling tags' data
+cannot be evaluated on the device it is enforced against.
 
 **ADR location:** §4, "`na_reason` required when `result = "na"`".
 
@@ -591,7 +608,17 @@ missing rows.
 The remaining seven are refinements to decisions already made, not new
 structure. Recorded so they are not rediscovered a fourth time.
 
-## R13 — Tag matching must normalize before it warns · *open*
+## R13 — Tag matching must normalize before it warns · **DECIDED — three tiers, pinned normalization (ADR §11)**
+
+**Resolved by the maintainer, 2026-08-04**, with the comment's core accepted and
+one distinction added: normalization resolves separators, case and zero-padding,
+but it **cannot** resolve a prefix disagreement — and should not try. A
+normalized match is offered as a candidate; a numeric-core match under a
+different prefix is raised as a **question**, because the prefix states what the
+device is and two vendors disagreeing about it is a real finding, not a typo.
+The normalization itself is pinned exactly, on ADR 0010's reasoning about its
+canonical form: a matching rule that behaves differently in the core, the
+sidecar and an importer is worse than none.
 
 **ADR location:** §11, "Non-existent tag warning."
 
