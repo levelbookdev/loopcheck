@@ -55,6 +55,16 @@ open-confirmation list below should be resolved against the contract documents b
 project goes live. This keeps the seed library honest — it never hardcodes a number that
 a spec section overrides.
 
+**Proposed, not implemented — acceptance limits beside the reading.**
+[ADR 0018](../docs/adr/0018-multi-vendor-startup-evidence-model.md) §7
+(*proposed*) would add `expected_min` / `expected_max` / `expected_text` /
+`comparison` to `template_items`, so a `value` line can carry its acceptance
+limit instead of leaving the number in the binder with no criterion. It adds
+**no fifth response type** — constraint #5 stands, and `confirm_per_spec: true`
+with blank limits stays the honest "the project spec supplies this number"
+state. When it lands, the seed schema gains four optional keys per item and
+this library's `confirm_per_spec` lines are exactly the ones that stay blank.
+
 **`spec_reference`** (optional, per item) carries the *citation* for a
 `confirm_per_spec` line: the governing **standard** where it is universal
 (`"AWWA gate seat-leakage / spec"`), or a project spec section
@@ -102,6 +112,19 @@ Completed" column). Training templates live in `training_templates.json`
 (`witness_required: true` — the forms are manufacturer/GC/owner signed),
 loaded by `1789000022_seed_training_templates.js` after `1789000021` opens the
 enum. A tag that owes no training marks `training` in `phases_na` (ADR 0009).
+
+**Proposed, not loaded — two process-plant phases.**
+[ADR 0018](../docs/adr/0018-multi-vendor-startup-evidence-model.md) §1
+(*proposed*) would add `wetCommissioning` (clean water / wet-mech) and
+`processSeeding` to the equipment phase set, because a real multi-vendor plant
+startup runs those stages and the current six have no honest home for them. The
+observed "dry checks" and "I/O checks" map onto `installation`/`energization`
+and `pointToPoint`/`loopCheck` respectively and get **no** new phase — a new
+*form* at an existing phase costs nothing, a new *phase* changes every affected
+tag's derived denominator. Nothing here is authored yet, and the vocabulary is
+still open ([open-questions #11](../docs/open-questions.md#11-what-is-the-right-startup-phase-vocabulary)).
+Note also what ADR 0018 does **not** propose: a per-project phase list. A
+project configures its phases by configuring this library.
 
 Service connections (service subjects, ADR 0006):
 

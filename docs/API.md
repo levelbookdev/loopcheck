@@ -305,6 +305,52 @@ for API clients:
   failing check. The response returns `{id, content_hash, hash_algo, standing,
   records}`.
 
+## Announced future contract changes (not yet implemented)
+
+Nothing here has shipped. It is recorded so an integrator planning against this
+contract knows what is coming and can avoid depending on a shape that is
+already scheduled to change. Source:
+[ADR 0018](adr/0018-multi-vendor-startup-evidence-model.md) (*proposed*), the
+M4–M6 track in [ROADMAP.md](ROADMAP.md). None of it lands before the v1
+reconciliation and version bump (`open-questions.md` #7,
+[DECISIONS D12](DECISIONS.md#d12--api-v1-reconciliation--version-bump-sequenced-to-m3-v10)).
+
+**Breaking — plan for it:**
+
+- `punch_items.assigned_party` is revocabularized to `gc` · `subcontractor` ·
+  `vendor` · `controls_integrator` · `electrical` · `owner` · `engineer` ·
+  `unassigned`. **`contractor` is retired** (migrated to `gc`). Any client
+  filtering or displaying `assigned_party = "contractor"` breaks.
+
+**Additive but contract-visible:**
+
+- Enum growth: `checks.result` += `deferred` (and `pending`, ADR 0012);
+  `check_items.result` += `not_performed`, `deferred`; the shared phase enum +=
+  `wet_commissioning`, `process_seeding`; `signatures.signer_role` +=
+  `vendor_tech`, `subcontractor`, `gc_witness`, `controls_integrator`. A client
+  that switches exhaustively on any of these enums must gain a default branch.
+- New fields on existing collections: `checks.deferred_to_phase`,
+  `checks.as_left_condition`, `checks.continues`,
+  `checks.required_signature_roles`; `check_items.na_reason`,
+  `check_items.value_numeric` + frozen limit fields; `template_items`
+  expected-range fields; `checklist_templates.required_signature_roles` and
+  `gate_for_phase`; `punch_items.blocks_phase` and `scope_gap`; `tags`
+  nameplate fields; `service_visits` visit-detail fields.
+- One new collection: append-only `instrument_settings`.
+
+**New validation that can reject a call that succeeds today:**
+
+- `check_items` with `result = "na"` will require `na_reason`.
+- `POST /api/turnover/build` will **fail** on a scope containing any check item
+  with a blank result, naming the offending check and line.
+
+**Hash semantics:** the turnover manifest gains a vendor report index, a
+per-tag instrument settings table, deferred standing cells, a
+countersignature QC block, and a completeness assertion. These change the
+canonical bytes, so they land inside `sha256-canon-v1` before the first real
+package is signed, or behind a `sha256-canon-v2` — undecided
+([open-questions #13](open-questions.md#13-do-adr-0018s-turnover-additions-land-inside-sha256-canon-v1)).
+
 ## Not contract
 
 The internal SQLite layout and `pb_data/` contents, the PocketBase admin

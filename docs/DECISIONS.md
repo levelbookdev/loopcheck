@@ -207,3 +207,103 @@ on real hardware; and an accessibility + field-device + offline-honesty polish
 pass across all pages (not just LOTO).
 **Rationale.** These are the gaps between "the maintainer can run it" and "a
 stranger can adopt and self-host it."
+
+---
+
+## Session 2026-08-04 — multi-vendor startup field-observation review
+
+Decisions D20–D24 come from reviewing a full compiled vendor startup report
+package (equipment vendor forms, field service reports, I/O check reports,
+clean water test checklists) from a multi-vendor plant startup against what
+LoopCheck can currently record. Ten gaps came out of that review; the
+structural answers are in
+[ADR 0018](adr/0018-multi-vendor-startup-evidence-model.md) (*proposed*) and
+the sequenced work is the M4–M6 track in [ROADMAP.md](ROADMAP.md).
+
+### D20 — The multi-vendor startup track is post-1.0 (M4–M6)
+**Decision.** The ten field observations become **M4 (v1.1.0)**, **M5
+(v1.2.0)**, and **M6 (v1.3.0)**, sequenced **after** M3/v1.0 — they do not
+preempt or reorder M1–M3. Priority *within* the track follows observed pain:
+staged per-tag-per-phase lifecycle, ball-in-court punch items, and vendor
+evidence first (M4); explicit line resolution, typed values, and tag validation
+second (M5); instrument configuration, signature QC, phase gates, and
+continuation chains last (M6).
+**Rationale.** Three reasons, in order of weight. (1) [D2](#d2--trust-before-features-m1-comes-first)
+already fixed trust-before-features and M1–M3 are the trust work. (2) Three of
+these items make **breaking changes to v1-published collections**
+(`punch_items.assigned_party` most sharply), and
+[D12](#d12--api-v1-reconciliation--version-bump-sequenced-to-m3-v10) sequences
+the API v1 reconciliation to M3 — doing the reconciliation first makes the
+breaks clean instead of compounding. (3) v1.0's bar
+([D19](#d19--v10-stranger-ready-bar)) is "a stranger can adopt this," and a
+stranger adopting a schema mid-revision is the worse outcome.
+**Rejected.** Interleaving M4 items into M2/M3 to get the vendor evidence
+ledger sooner — it would put a breaking enum change ahead of the contract
+reconciliation that makes it survivable.
+**Cross-ref.** ADR 0018; ROADMAP "The multi-vendor startup track".
+
+### D21 — D7 and D8 amended — the "real job" trigger fired
+**Decision.** [D7](#d7--preservation-adr-0015-and-vendor-visits-adr-0017-uis-are-parked)
+parked the **vendor field service visit UI** (ADR 0017) and
+[D8](#d8--openresolve-and-tank-leak-test-uis-are-parked) parked the
+**open→resolve UI** (ADR 0012) until a real job asked for them. A real
+multi-vendor startup asked for both. Both are **unparked** and scheduled:
+vendor visits as **M4.3**, the continuation-chain half of open→resolve as
+**M6.4**. The rest of D7 and D8 stands — **equipment preservation (ADR 0015)
+stays parked** (its ownership boundary vs TrenchNote is still open,
+open-questions #3), and the **tank leak-test execution UI stays parked** until
+a real tank/duration-test job needs it.
+**Rationale.** D7/D8 were not "never"; they named a trigger condition
+precisely so a future session would know when to build. Amending them on the
+stated trigger is the mechanism working, not a relitigation.
+**Cross-ref.** ADR 0017, ADR 0012, ADR 0018 §§5, 10.
+
+### D22 — Ambiguity is legal at capture and illegal at signature
+**Decision.** A checklist line may still be submitted unanswered — the record
+of a crew getting pulled off is worth more than no record. But a check may not
+be **signed**, and a scope may not be **frozen** into a turnover package, while
+any included line carries a blank result. The gate lives at signature and
+freeze, not at capture.
+**Rationale.** This is the one requirement that pulls directly against a
+shipped, deliberate behavior (ARCHITECTURE §6 records unanswered lines on
+purpose). Both concerns are legitimate and they apply at different moments:
+hard constraint #1 owns the capture moment; the evidence promise owns the
+deliverable. Blocking submission would trade a recoverable partial record for
+no record at all — the worse failure on a dead-zone phone.
+**Rejected.** Requiring every line before submit; leaving blanks legal all the
+way into a frozen package.
+**Cross-ref.** ADR 0018 §4; ROADMAP M5.1.
+
+### D23 — No fifth response type, no per-project phase table, no vendor accounts
+**Decision.** Three requirements are answered **inside** existing constraints
+rather than by relaxing them:
+- **Typed values with expected ranges** are metadata on the existing `value`
+  response type (`expected_min` / `expected_max` / `expected_text` /
+  `comparison` on `template_items`, frozen onto `check_items`), **not** a
+  fifth response type. Hard constraint #5 stands.
+- **Per-project configurable phases** are configured by the project's template
+  library, not by a per-project `phases` collection. A stored phase map is the
+  same drift `ARCHITECTURE.md` §7 already rejects for required phases; the
+  shared enum gains `wet_commissioning` and `process_seeding` additively.
+- **Vendor participation** is never solved by giving vendors accounts, a
+  portal, or an integration. Vendors use their own paper; LoopCheck is the
+  GC's master ledger that indexes it. ADR 0017 already rejected the adjacent
+  vendor-scheduling/contract/billing scope.
+**Rationale.** Each of the three had an obvious constraint-relaxing answer and
+a slightly less obvious constraint-preserving one that is as good or better.
+Recording the reasoning stops a future session from taking the easy version.
+**Cross-ref.** ADR 0018 §§1, 5, 7; CLAUDE.md constraints #3, #5.
+
+### D24 — Phase-entry gates warn; they never block
+**Decision.** A phase-entry prerequisite checklist is an ordinary check with a
+system subject against a template flagged `gate_for_phase`. An unsatisfied gate
+shows prominently and **does not prevent** anyone from running the phase.
+**Rationale.** ADR 0007's principle — the app records, it never authorizes —
+generalizes beyond safety. A crew that runs a phase over an unsatisfied gate
+has made a decision, and the ledger's job is to record visibly that they did.
+A hard block also strands the field tier the moment a gate item is owed by
+someone who is not on site, and it is the first step toward the workflow-
+engine scope LoopCheck refuses to become.
+**Rejected.** Hard-blocking phase entry; a dedicated `gates` collection (a
+gate is a check).
+**Cross-ref.** ADR 0018 §12; ADR 0007.

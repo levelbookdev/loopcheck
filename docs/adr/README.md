@@ -11,7 +11,7 @@ collided on `0009`. Claiming the number here before writing the file makes the
 next free number unambiguous even when more than one change is in flight at
 once.
 
-**Next free number: `0018`.**
+**Next free number: `0019`.**
 
 | #    | Title                                                                 | Status   |
 |------|-----------------------------------------------------------------------|----------|
@@ -32,6 +32,7 @@ once.
 | [0015](0015-stored-equipment-preservation-log.md) | Stored-equipment preservation log (recurring, tag-subject) | accepted |
 | [0016](0016-purpose-built-instrument-calibration-records.md) | Instrument calibration uses a purpose-built as-found/as-left ledger | accepted |
 | [0017](0017-vendor-field-service-reports.md) | Vendor field service reports: immutable visits with attached proof | accepted |
+| [0018](0018-multi-vendor-startup-evidence-model.md) | Multi-vendor startup: staged checkout, explicit resolution, and vendor evidence as the GC's master ledger | proposed |
 
 ADR 0010 has a companion, [`0010-review-notes.md`](0010-review-notes.md) — a
 design review, not its own numbered decision.

@@ -70,6 +70,11 @@ The following are `PROPOSED` until accepted and mechanically enforced:
    fact should retain input units, method identifier/version, comparison, and
    rounding policy. LoopCheck's current generic value/unit answers do not yet
    establish a calculation contract.
+   *Proposed shape (2026-08-04):* [ADR 0018](adr/0018-multi-vendor-startup-evidence-model.md)
+   §7 — `expected_min`/`expected_max`/`expected_text`/`comparison` on
+   `template_items`, **frozen onto `check_items`** at submit alongside a
+   `value_numeric` companion to the free-text reading, with the verdict derived
+   rather than stored. Not implemented.
 4. **Evidence hashes are reproducible.** If hashing is adopted, canonical bytes,
    included fields/files, algorithm/version, and golden vectors must be public
    enough for independent verification.
@@ -90,6 +95,16 @@ The following are `PROPOSED` until accepted and mechanically enforced:
 10. **Offline state is honest.** Cached safety/acceptance data must expose age
     and uncertainty; a queued local write must never be presented as a server-
     accepted fact.
+11. **A signed or frozen record contains no ambiguous mark.** Every checklist
+    line in a signed check or a frozen turnover package should carry an
+    explicit state — pass, fail, N/A *with a reason*, not performed, or
+    deferred. A blank may exist at capture (a crew gets pulled off) but never
+    survives into the deliverable. *Proposed:* ADR 0018 §4, DECISIONS D22.
+12. **Owed scope is never silently absent.** Work that moved to a later phase,
+    ended a visit incomplete, or fell in nobody's scope should be a positive
+    record — a deferral naming its target phase, a continuation chain, a
+    scope-gap flag — not the absence of one. Absence and deferral are different
+    facts and must not render alike. *Proposed:* ADR 0018 §§2, 6, 10.
 
 Draft shapes supporting these goals are in
 [`ecosystem-contracts.md`](ecosystem-contracts.md). They are not implemented

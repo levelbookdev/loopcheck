@@ -158,3 +158,83 @@ safe.
 - **Decision owner:** Maintainer/operations owner.
 - **Latest safe decision point:** before calling Pi/replication production-
   supported or onboarding external operators.
+
+---
+
+Questions 11–13 came out of the 2026-08-04 review of field observations from a
+multi-vendor plant startup ([ADR 0018](adr/0018-multi-vendor-startup-evidence-model.md),
+proposed). They gate the M4–M6 track, not M1–M3 — except #13, which is cheapest
+to answer immediately.
+
+## 11. What is the right startup phase vocabulary?
+
+- **Why it matters:** the observed sequence (dry checks → I/O checks → clean
+  water / wet-mech → seeding → performance) does not map cleanly onto the six
+  committed checkout phases, and a tag's required phases derive from which
+  templates exist per phase. Getting the vocabulary wrong means re-phasing
+  seeded templates later, which re-derives standing for every existing record.
+- **Options:** add `wet_commissioning` + `process_seeding` only and map dry/IO
+  checks onto the existing `installation`/`energization`/`point_to_point`/
+  `loop_check`; add distinct `dry_check` and `io_check` phases and re-phase the
+  seeded library; leave the vocabulary alone and express the stages as
+  additional templates within existing phases.
+- **Current evidence:** ADR 0018 §1 recommends the first option. The mechanical
+  acceptance forms already set the precedent that a new *form* at an existing
+  phase costs nothing, while a new *phase* changes every affected tag's derived
+  denominator.
+- **Recommendation:** the two additive phases; do not re-phase the library.
+- **Validate:** against the maintainer's own phase sequence on a real job, and
+  against whether any observed check has no honest home in the existing six.
+- **Decision owner:** Maintainer/domain expert.
+- **Latest safe decision point:** before the M4.1 enum-opening migration.
+
+## 12. Does LoopCheck model the asset separately from the position?
+
+- **Why it matters:** a `tag` is a P&ID *position*; the serial-numbered machine
+  is an *asset* that gets pulled, rebuilt, and reinstalled — possibly in a
+  different position — mid-startup. Today they are the same record, so a phase
+  passed in March by one machine reads identically to one passed by its
+  replacement in May. The observed failure was one tag number appearing for two
+  different valves in vendor paperwork, undetectable on paper.
+- **Options:** a new `equipment_assets` collection plus an append-only
+  install/remove ledger (asset ↔ position over time); a lighter "nameplate
+  changed on this tag" append-only event that triggers the re-verification
+  prompt without a second identity; do nothing beyond the duplicate-serial and
+  nameplate-mismatch warnings in M5.3.
+- **Current evidence:** ADR 0018 §11 deliberately defers this and lands only
+  the cheap validation half, because a second identity touches every record
+  that points at a tag — checks, punch items, warranties, LOTO, calibrations,
+  settings, signatures.
+- **Recommendation:** decide the *goal* first (is the requirement really
+  "re-verify after a swap", or is it full asset lifecycle?). If it is the
+  former, the lighter event is probably sufficient and far cheaper.
+- **Validate:** what a turnover binder must show after a mid-startup swap; what
+  the warranty clock does when the asset changes (ADR 0005's basis/trigger
+  provenance); whether QR labels follow the position or the machine.
+- **Decision owner:** Maintainer/domain expert.
+- **Latest safe decision point:** before any equipment-asset work is scoped;
+  it needs its own ADR either way.
+
+## 13. Do ADR 0018's turnover additions land inside `sha256-canon-v1`?
+
+- **Why it matters:** the vendor report index, the instrument settings table,
+  the deferred-cell standing grid, the countersignature QC block, and the
+  completeness assertion all enter the canonical bytes a package hashes. A hash
+  scheme is evidence only if an independent party can recompute it, so changing
+  what enters the bytes after real packages exist means those packages verify
+  under a different scheme than new ones.
+- **Options:** fold the additions into `sha256-canon-v1` before any real
+  package is signed; accept ADR 0010 as-is now and plan `sha256-canon-v2`;
+  freeze package building entirely until both ADRs are decided.
+- **Current evidence:** no real turnover package has been signed. ADR 0010 is
+  Proposed and frozen ([D6](DECISIONS.md#d6--adr-0010-signatures--turnover-stays-proposed-and-frozen));
+  its golden-vector and required-role gates are still open, and ADR 0018 §9 is
+  the concrete proposal for the required-role gate.
+- **Recommendation:** fold first, decide **with** question #5, and accept the
+  two ADRs together. This is the cheapest moment this decision will ever have.
+- **Validate:** golden vectors across the goja builder and the sidecar; whether
+  a manifest carrying vendor reports and settings stays buildable on a Pi.
+- **Decision owner:** Maintainer/API owner.
+- **Latest safe decision point:** **before the first real turnover package is
+  signed** — this is the one question here that gets more expensive with time
+  rather than staying flat.

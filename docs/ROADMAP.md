@@ -265,6 +265,400 @@ Defined, not yet scheduled; broken into tasks when reached.
 
 ---
 
+# The multi-vendor startup track (M4 → M6)
+
+**Where this came from.** Field observations from a multi-vendor plant startup
+— a review of a full compiled vendor startup report package (equipment vendor
+forms, field service reports, I/O check reports, clean water test checklists)
+against what LoopCheck can currently record. Ten gaps came out of that review.
+The structural answers, the rejected alternatives, and the conflicts with
+existing decisions are captured in
+[**ADR 0018**](adr/0018-multi-vendor-startup-evidence-model.md) (*proposed —
+design capture only, no migration, no UI*). **ADR 0018 must be accepted before
+any task in M4–M6 is written**, per the design-task pattern `CLAUDE.md`
+describes for Phase 4.
+
+**Why this track sits after v1.0, not before it.**
+[D2](DECISIONS.md#d2--trust-before-features-m1-comes-first) (trust before
+features) and [D19](DECISIONS.md#d19--v10-stranger-ready-bar) already fix
+M1 → M2 → M3, and three of these items make **breaking changes to
+v1-published collections** — which the API v1 reconciliation
+([D12](DECISIONS.md#d12--api-v1-reconciliation--version-bump-sequenced-to-m3-v10))
+must land first to make cleanly. Sequencing is recorded in
+[D20](DECISIONS.md#d20--the-multi-vendor-startup-track-is-post-10-m4m6).
+The **priority order inside the track** is the observed-pain order: the
+staged lifecycle, ball-in-court punch items, and vendor evidence first.
+
+**One sequencing constraint overrides the rest.** Every turnover addition below
+changes the bytes that `sha256-canon-v1` hashes (ADR 0018, "what this adds to
+the frozen turnover package"). They must land **before the first real package
+is signed**, or behind a `sha256-canon-v2`. That is the strongest argument for
+deciding ADR 0010 and ADR 0018 together — see open question #5.
+
+---
+
+## M4 — Staged checkout & ball-in-court → **v1.1.0**
+
+**Goal.** Make the ledger able to say *which phase*, *who owes it*, and *whose
+paper proves it* — the three gaps that produced the most rework in the observed
+package.
+
+### M4.1 — Per-tag, per-phase checkout lifecycle (observation 2)
+
+Startup is staged, the same tag is touched in several phases with different
+scope, and "deferred to phase X" is a real, recurring, load-bearing state that
+today has nowhere to live.
+
+*Already covered — extend, do not rebuild:* `checks.phase` already makes every
+check per-tag-per-phase; required phases already derive from the template
+library minus `tags.phases_na` (ADR 0009); `readiness.html` already renders the
+tag × phase rollup with completion dates.
+
+- **Data model.** `checks.result` += `deferred`. New `checks.deferred_to_phase`
+  (select over the phase enum, nullable). Phase enum += `wet_commissioning`,
+  `process_seeding` (additive enum-opening migration, then a seed loader — the
+  established two-step). **No per-project `phases` collection**: a project
+  configures its phases by configuring its template library (ADR 0018 §1).
+- **UI.** `check.html` gains a "defer this phase" action that writes a signed,
+  attributable deferral check naming the target phase and the reason.
+  `readiness.html` gains a distinct `deferred → {phase}` cell state (neither
+  red nor green) and per-cell drill-down to that phase's checks. `tag.html`'s
+  standing plate shows deferred phases separately from passed and outstanding.
+- **Validation.** `deferred_to_phase` is required when `result = "deferred"`
+  and must differ from the check's own phase (server-enforced createRule —
+  append-only means a malformed deferral is permanent). A deferral to a phase
+  the tag lists in `phases_na` is rejected: scope cannot be deferred into a
+  phase that does not apply.
+- **Standing fold.** Gains one state, after `running` and before `incomplete`:
+  a `deferred` record whose target phase has no later record folds to
+  *deferred*. Deferral is **not** `phases_na` — that distinction is the whole
+  point (owed-and-moved vs. never-owed).
+- **Turnover.** The manifest's per-tag-per-phase standing grid records
+  `deferred` cells **with their target phase**, so a frozen package cannot
+  present moved scope as absent scope.
+
+### M4.2 — Punch items: ball-in-court, phase gating, scope gaps, as-left (observation 4)
+
+Coordination happened in email because the punch list could not say who owed
+what, which phase an item blocked, or that an item was in nobody's scope.
+
+*Already covered — extend:* `punch_items.assigned_party`, `source_check` /
+`closing_check` (ADR 0004), A/B/C severity, and the `punchlist.html` report
+(D17) all exist.
+
+- **Data model.** `assigned_party` revocabulary: `gc` · `subcontractor` ·
+  `vendor` · `controls_integrator` · `electrical` · `owner` · `engineer` ·
+  `unassigned`, retiring `contractor` (migration maps `contractor` → `gc`).
+  New `punch_items.blocks_phase` (select over the phase enum, nullable) and
+  `punch_items.scope_gap` (bool). New `checks.as_left_condition` (text).
+- **UI.** `punchlist.html` gains a ball-in-court filter and a **pinned
+  scope-gap section** that renders above the severity groups and stays there
+  until the item is claimed — the failure mode is that nobody reads a list
+  they do not think is theirs, so a scope gap must never sort quietly into a
+  party's bucket. `readiness.html` marks a cell whose phase is blocked by an
+  open item. Every check-completion screen offers as-left condition as one
+  optional line ("valve left closed", "breaker left racked out").
+- **Validation.** `scope_gap = true` requires `assigned_party = "unassigned"`;
+  assigning a party clears the flag (an item in someone's scope is by
+  definition not a gap). `blocks_phase` is advisory — it never blocks a write.
+- **Contract.** The `assigned_party` change is **breaking** on a v1 collection:
+  it needs the ADR-0003 version bump, which is why it follows M3.
+- **Turnover.** Scope-gap items and as-left conditions render as their **own
+  sections** in the frozen package rather than buried inside the punch list.
+
+### M4.3 — Vendor evidence attachment model (observation 1)
+
+Vendor service techs will never use this app — they arrive with their own paper
+or PDF forms. LoopCheck's job is to be the GC's master ledger that indexes the
+vendor's own record and captures the handful of structured facts a dispute
+turns on.
+
+*Already covered — extend, and unpark:* `service_visits` (ADR 0017) is already
+this collection — append-only, tag XOR system, vendor company, rep name,
+purpose, summary, report via polymorphic `attachments`, idempotent
+`client_token`. Its **UI was parked** by
+[D7](DECISIONS.md#d7--preservation-adr-0015-and-vendor-visits-adr-0017-uis-are-parked)
+pending a real job asking for it. These observations are that request
+([D21](DECISIONS.md#d21--d7-and-d8-amended--the-real-job-trigger-fired)).
+
+- **Data model.** `service_visits` gains `time_on_site` / `time_off_site`
+  (text HH:MM), `date_end` (nullable — `date` becomes the start of a multi-day
+  visit), `result` (`complete` / `incomplete` / `deferred` / `informational`),
+  `open_items` (text — the verbatim end-of-visit list), `phase` (nullable),
+  `check` (relation → checks, nullable), and `continues` (self-relation, for
+  M6.4). No new collection.
+- **UI.** A phone capture page for a visit (vendor, rep, dates, hours, purpose,
+  result, open items, **report photo/PDF**), a per-tag vendor-evidence section
+  on `tag.html`, and a project vendor-visit ledger. The report is captured in
+  the same flow, and a visit whose report never uploaded is **loudly flagged
+  and retried** — never silently presented as if the PDF exists (ADR 0017 §2).
+- **Validation.** `result` required; `time_off_site` without `time_on_site`
+  rejected; the existing tag-XOR-system + same-project createRule unchanged;
+  the report stays non-constitutive so a failed second upload can never erase
+  the visit.
+- **Turnover.** **A vendor report index keyed by tag** — for every tag in
+  scope, every visit with company, rep, dates, hours, result, open items, and
+  the attachment digest of the report file. This is the highest-value single
+  addition in the whole track: the table that says *here is every vendor who
+  touched this tag, and here is their signed paper.*
+
+**M4 definition of done (testable)**
+- [ ] ADR 0018 is **Accepted** and its §§1, 2, 5, 6 are implemented as written
+      or the ADR is amended first.
+- [ ] A tag can carry a signed deferral naming its target phase; the standing
+      plate and `readiness.html` render it as neither passed nor failed.
+- [ ] A punch item can be assigned to any of the eight parties, flagged as a
+      scope gap, and linked to the phase it blocks; `punchlist.html` pins
+      scope gaps above the severity groups.
+- [ ] A vendor visit with its report attaches to a tag from a phone and
+      appears in the tag's vendor-evidence section and the project ledger; a
+      report-less visit is visibly flagged.
+- [ ] Migrations apply to a fresh DB; `scripts/smoke_test.sh` covers the new
+      rules (deferral shape, scope-gap/party rule, visit validation).
+- [ ] Docs updated (ARCHITECTURE, API.md contract rows, landing page);
+      tagged v1.1.0.
+
+---
+
+## M5 — No ambiguous evidence → **v1.2.0**
+
+**Goal.** Make it impossible for a frozen turnover package to contain a mark
+whose meaning has to be guessed — the blank checkbox, the bare number, the tag
+that might be two different machines.
+
+### M5.1 — No ambiguous blanks (observation 3)
+
+A blank checkbox could mean pass-and-forgot, not-applicable, not-performed, or
+deferred. On paper there is no way to tell, and no way to ask years later.
+
+*Current behavior, deliberately:* `check.html` writes every line, answered or
+not, and an unanswered line lands with a blank `result` (ARCHITECTURE §6) so a
+crew pulled off mid-checklist still leaves a record. That choice stays — the
+gate moves to where ambiguity becomes permanent (ADR 0018 §4).
+
+- **Data model.** `check_items.result` += `not_performed`, `deferred` (joining
+  `pass` / `fail` / `na`). New `check_items.na_reason` (text).
+- **UI.** The response control offers five explicit states instead of three
+  plus a blank. A submit with blanks remains allowed but shows exactly which
+  lines are unresolved, and the check lands `incomplete` as today. `sign.html`
+  and the turnover build surface unresolved lines as the specific blocker,
+  linking to the correction check that would clear them.
+- **Validation.** `na_reason` is **required when `result = "na"`**,
+  server-enforced on `check_items`. A check may **not be signed**, and a scope
+  may **not be frozen**, while any included line carries a blank result — the
+  build route rejects the freeze and names the offending check and line.
+  Capture itself is never blocked (hard constraint #1).
+- **Turnover.** A **completeness assertion**: the freeze fails while any
+  included check item is blank, so a frozen package can never contain an
+  ambiguous blank. The strongest single evidence improvement in the track.
+
+### M5.2 — Typed value fields with expected ranges (observation 5)
+
+Megger readings, cable resistance, amp draw vs. nameplate, per-leg voltage,
+flows and pressures were recorded as numbers with the acceptance limit stated
+somewhere else — or nowhere.
+
+*Constraint:* hard constraint #5 fixes **exactly four response types**. This
+adds none — a measured reading is already a `value` line; what it lacks is the
+limit stored beside it. This closes the gap `docs/invariants.md` names as
+desired invariant #3 (explicit units and calculation method) for value lines.
+
+- **Data model.** `template_items` += `expected_min`, `expected_max` (number,
+  nullable), `expected_text` (the human statement, e.g. "≥ 1 MΩ per kV + 1 MΩ"),
+  `comparison` (`between` / `min` / `max` / `equals` / `informational`).
+  `unit` and `confirm_per_spec` already exist and are unchanged — blank limits
+  with `confirm_per_spec: true` stays the honest "the project spec supplies
+  this number" state. `check_items` += `value_numeric` (number, nullable) and
+  **frozen copies** of the four limit fields. Nameplate data goes on `tags`
+  beside the existing `manufacturer`/`model`/`serial_number`: `hp`, `voltage`,
+  `full_load_amps`, `phase_count`, `rpm`, `frame`, `nameplate_note` — all
+  CSV-importable through the header-synonym table.
+- **UI.** A `value` line shows its limit inline as the tech types, with live
+  in-range / out-of-range feedback before submit. Amp-draw lines compare
+  against `tags.full_load_amps` and show the percentage. The reading itself is
+  still typed freely.
+- **Validation.** Pass/fail on a value line is **derived** from `value_numeric`
+  against the frozen limits — never stored. An unparseable reading or
+  `comparison: informational` derives nothing and the tech's explicit result
+  stands; capture is never blocked by a reading the parser cannot read. The
+  limits **freeze onto the check item** at submit, so a template edited next
+  year cannot retroactively change whether a reading passed.
+- **Turnover.** Every value line in the manifest carries reading, unit, frozen
+  limit, and derived verdict — a number in the binder is never again a number
+  with no criterion.
+
+### M5.3 — Tag validation and the asset/position distinction (observation 7)
+
+One tag number appeared for two different valves in a vendor report —
+undetectable on paper. Equipment also got pulled, rebuilt, and reinstalled
+mid-startup with nothing prompting re-verification.
+
+- **Data model (this milestone).** None. All three checks below are
+  derivations over data that already exists.
+- **UI.** (a) **Unknown-tag warning** wherever a tag number is *typed* rather
+  than picked — vendor visit capture, vendor tag-list import, open-items text —
+  resolved against the project's tag register, offering "create this tag" or
+  "fix the number". A **warning, never a block**: a real tag missing from the
+  register is itself a finding. (b) **Duplicate-serial report** across
+  `tags.serial_number` within a project. (c) **Nameplate-mismatch warning**
+  when a vendor visit's recorded make/model/serial disagrees with the tag's own
+  nameplate — this is what surfaces one tag number claimed by two machines.
+- **Validation.** Deliberately **no unique index on `serial_number`**: blanks
+  are the norm and a duplicate is a finding to investigate, not a write to
+  reject.
+- **Deferred to its own ADR.** The true **asset-vs-position split** — `tag` as
+  a P&ID position, the serial-numbered machine as an asset with an append-only
+  install/remove ledger, and the re-verification prompt ("this position's asset
+  changed on {date}; phases passed before that date were passed by a different
+  machine"). It changes the identity of every record pointing at a tag and must
+  not be improvised inside a validation task. See
+  [open-questions #12](open-questions.md#12-does-loopcheck-model-the-asset-separately-from-the-position).
+
+**M5 definition of done (testable)**
+- [ ] No `check_item` can be created with `result = "na"` and no reason; the
+      smoke test asserts the rule.
+- [ ] A turnover build **fails** on a scope containing a blank line, naming the
+      check and line; signing is blocked the same way.
+- [ ] A `value` line with limits derives and displays pass/fail, and its limits
+      are frozen onto the check item (verified by editing the template
+      afterwards and re-reading the historical check).
+- [ ] Typing an unknown tag number warns without blocking; a project with two
+      tags sharing a serial reports it.
+- [ ] Migrations apply to a fresh DB; smoke test extended; docs updated;
+      tagged v1.2.0.
+
+---
+
+## M6 — Configuration, signature QC & continuation → **v1.3.0**
+
+**Goal.** Capture what the vendor PDFs took with them when they left, and make
+the package refuse to be compiled with the signature block empty.
+
+### M6.1 — Instrument configuration records (observation 6)
+
+The 4–20 mA span, the transmitter range, the delay, the logging interval, the
+setpoints — configured at startup, captured inside a vendor's report, and
+unrecoverable by the time the instrument is replaced.
+
+- **Data model.** New **append-only `instrument_settings`**: `project`, `tag`
+  (required), `configured_at`, `configured_by`, `vendor_company` (nullable),
+  `input_type`, `range_low` / `range_high` / `range_unit` (the engineering
+  range: 0–500 gpm), `signal_low` / `signal_high` / `signal_unit` (the
+  electrical span: 4–20 mA), `damping_seconds`, `delay_seconds`,
+  `logging_interval`, `setpoints` (text), `firmware_version`, `notes`,
+  `superseded_by` (self-relation, nullable), `client_token`.
+  `updateRule: null`, `deleteRule: null`. **Not** folded into `calibrations`:
+  "what is it set to" and "does it read true" are different facts on different
+  cadences (ADR 0016 rejected the analogous flattening).
+- **UI.** A capture form on the instrument's tag page (public create, like
+  calibrations, so the field tier can log it accountlessly), and a
+  current-settings panel on `tag.html` with its full history beneath.
+- **Validation.** A reconfiguration is a **new record**; the current settings
+  are **derived** as the latest record nothing supersedes — no stored "current"
+  flag. `client_token` makes an offline retry idempotent.
+- **Turnover.** A **per-tag instrument settings table** in the frozen package
+  with provenance (who set it, when, which vendor) — the table that makes a
+  replaced transmitter re-configurable from the binder.
+
+### M6.2 — Signature roles and countersignature QC (observation 8)
+
+The contractor countersignature block was blank on every vendor form, and a
+"customer" signature line was signed by the wrong party. Nothing listed the
+missing countersignatures before the package was compiled.
+
+> **Blocked on [open-questions #5](open-questions.md#5-is-adr-0010-ready-to-accept-and-land).**
+> ADR 0010 named required-role semantics as one of its explicitly open gates
+> and [D6](DECISIONS.md#d6--adr-0010-signatures--turnover-stays-proposed-and-frozen)
+> froze it. This item is the concrete proposal for that gate; it cannot land
+> before ADR 0010 is unfrozen and accepted.
+
+- **Data model.** `checklist_templates.required_signature_roles` (text,
+  comma-separated role keys), **frozen onto the check** at execution as
+  `checks.required_signature_roles` — the same freezing pattern
+  `witness_required` already uses. `signatures.signer_role` += `vendor_tech`,
+  `subcontractor`, `gc_witness`, `controls_integrator`.
+- **UI.** `turnover.html` gains a **missing-countersignature QC list** shown
+  *before* the freeze; each signing surface states the role's meaning in plain
+  words so a wrong-capacity signature is legible rather than buried.
+  `checks.witnessed_by` stays as capture-time attribution — a witness who
+  actually attests writes a `signatures` record with role `gc_witness`, which
+  carries name, timestamp, and content binding that a text field cannot.
+- **Validation.** Missing countersignatures are **derived**: required roles
+  minus roles signed against the current `content_hash`. No stored `signed`
+  flag (already rejected by ADR 0010). The app records who signed in what
+  capacity; it never adjudicates who was entitled to.
+- **Turnover.** A **missing-countersignature QC block** computed before the
+  freeze is allowed.
+
+### M6.3 — Phase-entry prerequisite checklists (observation 9)
+
+A clean-water pre-run checklist — tanks cleaned, floats set, permeate recycle
+loop configured — gated a whole phase but existed only as a conversation.
+
+- **Data model.** `checklist_templates.gate_for_phase` (select, nullable).
+  **No new collection and no new record shape**: a gate is an ordinary check
+  with a **system** subject against a gate template. No conditional logic
+  inside a template, so hard constraint #5 is untouched.
+- **UI.** A system's unsatisfied gate shows prominently on `readiness.html`
+  and at the phase's capture entry point.
+- **Validation.** A gate for phase P is **satisfied** when the system's latest
+  gate check for P folds to pass — derived. **It warns; it never blocks.** This
+  is ADR 0007's record-never-authorize principle applied outside safety: a crew
+  that runs a phase with an unsatisfied gate has made a decision, and the
+  ledger's job is to record visibly that they did. Hard-blocking would also
+  strand the field tier whenever the gate is owed by someone off site.
+- **Turnover.** Gate checks appear in the manifest as the ordinary system-
+  subject checks they are, with their gated phase named.
+
+### M6.4 — Multi-visit continuation chains (observation 10)
+
+"Need to finish startup on mixer and pumps: amp reading, auto/manual,
+performance test, FLS testing" is a real end-of-visit state, and the follow-up
+visit had no structural link back.
+
+*Already covered — extend, and unpark:* ADR 0012 established the linked-pair
+pattern and `checks.resolves` **already ships**; its execution UI was parked by
+[D8](DECISIONS.md#d8--openresolve-and-tank-leak-test-uis-are-parked) pending
+real demand. Same trigger as M4.3
+([D21](DECISIONS.md#d21--d7-and-d8-amended--the-real-job-trigger-fired)); build
+the two UIs together.
+
+- **Data model.** `checks.continues` (relation → checks, nullable) and
+  `service_visits.continues` (self-relation, added in M4.3). Deliberately
+  **distinct from `resolves`**: `resolves` closes a test *expected* to be open
+  (a 48-hour leak test, a bac-t sample); `continues` picks up work that was
+  supposed to finish and did not. Collapsing them would make "running
+  correctly" and "abandoned mid-run" indistinguishable in the standing fold.
+- **UI.** An incomplete check or visit offers "continue this work", which opens
+  a new record **pre-populated** from the prior one: answered lines carried
+  forward as read-only context, unresolved lines presented blank and awaiting
+  an explicit state (M5.1). A visit's `open_items` text seeds the follow-up's
+  checklist. Both records stay frozen — pre-population is a UI behavior over
+  two immutable records, never a copy into storage that could drift.
+- **Validation.** `continues` must point at a check on the same subject; a
+  chain may not point at itself. The standing fold is unchanged — a
+  continuation is an ordinary check whose result folds in normally. The chain
+  is provenance, not arithmetic.
+- **Turnover.** Continuation chains render as a single work thread with each
+  visit's date and outcome, so an incomplete first visit never reads as an
+  abandoned one.
+
+**M6 definition of done (testable)**
+- [ ] ADR 0010 is Accepted (or M6.2 is deferred) — see open question #5.
+- [ ] An instrument's configured span/range/setpoints capture from a phone,
+      appear as current settings on the tag page, and a reconfiguration
+      appends without editing the prior record.
+- [ ] A package with a required role unsigned lists that role as missing
+      before the freeze.
+- [ ] A gate template's unsatisfied gate warns on `readiness.html` and does
+      not prevent a check.
+- [ ] An incomplete check opens a pre-populated continuation linked by
+      `continues`; both records remain immutable.
+- [ ] Migrations apply to a fresh DB; smoke test extended; docs updated;
+      tagged v1.3.0.
+
+---
+
 ## Later / Ideas (parking lot)
 
 Not scheduled. Recorded so they aren't re-proposed as new; promote only on real
@@ -280,8 +674,13 @@ demand or a new decision. Rationale for each is in
   0010); would pre-commit hash semantics.
 - **Equipment preservation UI (ADR 0015)** — parked; ownership vs TrenchNote
   unresolved (open-questions #3).
-- **Vendor field service visit UI (ADR 0017)** — parked; schema frozen.
-- **open→resolve / tank leak-test UI (ADR 0012)** — parked; build on real demand.
+- ~~**Vendor field service visit UI (ADR 0017)** — parked; schema frozen.~~
+  **Unparked 2026-08-04** — promoted to **M4.3**; D7's "a real job requests it"
+  trigger fired ([D21](DECISIONS.md#d21--d7-and-d8-amended--the-real-job-trigger-fired)).
+- ~~**open→resolve / tank leak-test UI (ADR 0012)** — parked; build on real
+  demand.~~ **Partly unparked 2026-08-04** — the continuation-chain half is
+  **M6.4** (D21); the *tank leak-test* execution UI stays parked until a real
+  tank/duration-test job needs it (D8 otherwise stands).
 - **Cross-product handoff manifests / lifecycle events** — blocked on a portable
   identity scheme (open-questions #4); `docs/ecosystem-contracts.md` stays
   PROPOSED and non-binding.
@@ -290,8 +689,9 @@ demand or a new decision. Rationale for each is in
 
 Forms designer / conditional checklists · stored status fields · npm, build
 steps, CDNs in the app · vendor API integrations · being an ERP · any
-energy-control decision support in the LOTO module. See `ARCHITECTURE.md` §7
-(rejected ideas).
+energy-control decision support in the LOTO module · a per-project phase table
+· vendor-facing accounts or portals · hard-blocking a phase on an unsatisfied
+gate (ADR 0018 §§1, 5, 12). See `ARCHITECTURE.md` §7 (rejected ideas).
 
 ---
 
@@ -340,11 +740,16 @@ Status of each, per the 2026-07-21 planning session:
 | 8 | Offline guarantee | **Doc now, code deferred** ([D13](DECISIONS.md#d13--offline-document-guarantees-now-build-no-second-queue)) |
 | 9 | Min free turnover artifact | **Deferred** with #5; principle recorded (B5) |
 | 10 | Deployment topology | **Doc now** (label honestly), Pi validation M3 ([D14](DECISIONS.md#d14--deployment-topology-labeling)) |
+| 11 | Startup phase vocabulary | **Open** (2026-08-04) — ADR 0018 §1 proposes two additive phases; maintainer confirms the mapping before M4 |
+| 12 | Asset vs. position identity | **Open** (2026-08-04) — needs its own ADR before any equipment-asset work; gates M5.3's re-verification prompt |
+| 13 | Turnover hash versioning | **Open** (2026-08-04) — fold ADR 0018's manifest additions into `sha256-canon-v1` before the first signed package, or plan a v2. Decide **with** #5 |
 
 **Unresolved for the maintainer to answer eventually** (not blocking M1): #3
 (preservation ownership) and #4 (identity scheme) both need a maintainer/domain
 decision before the corresponding work can start; the roadmap parks that work
-until then.
+until then. #11–#13 came out of the 2026-08-04 field-observation review and
+gate the M4–M6 track, not M1–M3 — but **#5 and #13 are cheapest to answer
+now**, before any real turnover package is signed.
 
 ### Planning-session open questions (2026-07-21)
 

@@ -345,7 +345,9 @@ The plan lives in three files. Read them before starting work:
 
 - **[docs/ROADMAP.md](docs/ROADMAP.md)** — the vision and the milestone sequence
   (M1 Harden & Reconcile → M2 Shutdown Runbooks + Punch List → M3 Stranger-Ready,
-  then post-1.0 modules and a Later/Ideas parking lot). Milestones are named by
+  then post-1.0 modules — including the **M4–M6 multi-vendor startup track**
+  designed in [ADR 0018](docs/adr/0018-multi-vendor-startup-evidence-model.md) —
+  and a Later/Ideas parking lot). Milestones are named by
   goal and mapped to a semver tag; the first tag is v0.9.0.
 - **[docs/DECISIONS.md](docs/DECISIONS.md)** — the roadmap/scope/sequencing/cut
   decision log (`D`-numbered). It records *what we chose to build, in what order,

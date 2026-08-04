@@ -248,7 +248,7 @@ signatures               (subject_collection, subject_id → package XOR check) 
 
 ### Planned collections and active schema work
 
-The twenty-two collections above are the complete **committed** application
+The twenty-four collections above are the complete **committed** application
 schema at this snapshot. ADR 0010 proposes two more collections, and a staged
 migration was present in the working tree during the 2026-07-12 documentation
 review, but neither the active files nor a Proposed ADR are shipped behavior.
@@ -267,6 +267,42 @@ review, but neither the active files nor a Proposed ADR are shipped behavior.
 structural PII split. ADR 0011 remains Proposed despite its backend rule/split
 implementation having landed, so decision status and implementation status
 must be reconciled rather than silently equated.
+
+#### Designed but not built — the multi-vendor startup track (ADR 0018)
+
+**Nothing in this subsection is shipped behavior.** It is design capture from
+[ADR 0018](docs/adr/0018-multi-vendor-startup-evidence-model.md) (*proposed*),
+recorded here so a future reader knows the shapes were reasoned about rather
+than left open. The sequenced work is the M4–M6 track in
+[`docs/ROADMAP.md`](docs/ROADMAP.md); **do not implement any of it before ADR
+0018 is Accepted.** Field observations from a multi-vendor plant startup drove
+every line of it.
+
+| Change | Shape | Where |
+|---|---|---|
+| Deferral as a fact | `checks.result` += `deferred`; `checks.deferred_to_phase` | M4.1 |
+| Process-plant phases | phase enum += `wet_commissioning`, `process_seeding` (additive; **no** per-project phase table) | M4.1 |
+| Ball-in-court | `punch_items.assigned_party` revocabulary (**breaking**), `blocks_phase`, `scope_gap` | M4.2 |
+| As-left condition | `checks.as_left_condition` | M4.2 |
+| Vendor evidence | `service_visits` += `time_on_site`/`time_off_site`, `date_end`, `result`, `open_items`, `phase`, `check`, `continues` (no new collection) | M4.3 |
+| Explicit resolution | `check_items.result` += `not_performed`, `deferred`; `check_items.na_reason` required when `na` | M5.1 |
+| Typed values | `template_items` += `expected_min`/`expected_max`/`expected_text`/`comparison`, frozen onto `check_items` alongside `value_numeric` — **not** a fifth response type | M5.2 |
+| Nameplate | `tags` += `hp`, `voltage`, `full_load_amps`, `phase_count`, `rpm`, `frame`, `nameplate_note` | M5.2 |
+| Instrument configuration | new append-only `instrument_settings` (current settings **derived** as the latest unsuperseded record) | M6.1 |
+| Signature roles | `checklist_templates.required_signature_roles`, frozen onto `checks`; `signatures.signer_role` += four roles; missing countersignatures **derived** | M6.2 |
+| Phase gates | `checklist_templates.gate_for_phase`; a gate is an ordinary system-subject check that **warns, never blocks** | M6.3 |
+| Continuation | `checks.continues` — deliberately distinct from `resolves` (abandoned ≠ running as designed) | M6.4 |
+
+Two things about this table are load-bearing. First, **the turnover manifest
+additions it implies are hash-affecting**: the vendor report index, the
+instrument settings table, the deferred-cell grid, the countersignature QC
+block, and the completeness assertion all enter the canonical bytes, so they
+must land before the first real package is signed or behind a
+`sha256-canon-v2` (ADR 0018, and open-questions #13). Second, the
+`punch_items.assigned_party` change is **breaking on a v1-published
+collection** and needs the ADR-0003 version bump — which is why the whole track
+follows M3's API reconciliation
+([DECISIONS D20](docs/DECISIONS.md#d20--the-multi-vendor-startup-track-is-post-10-m4m6)).
 
 ### Authentication implementation status
 
@@ -327,6 +363,17 @@ There is **no `status` column on a tag or a system.** Status is always computed:
 
 This is a deliberate invariant: a stored status can drift out of sync with the
 ledger; a derived one cannot. It costs a query; it buys trustworthiness.
+
+**Designed, not built:** ADR 0012 adds a *running* state to the standing fold
+(an unresolved `pending` open event) and ADR 0018 adds *deferred* (a signed
+deferral whose target phase has no later record). Neither is implemented. With
+both, the fold reads: any pass wins → else any fail → else any unresolved
+pending = running → else any deferral not yet picked up = deferred → else any
+record = incomplete → else not started. That is the **ceiling**: a field UI
+cannot render a sixth state legibly, so no state is added without retiring one.
+Note that *deferred* and `phases_na` are different facts — `phases_na` means
+the phase never applied to this tag, *deferred* means it applies, it is owed,
+and it moved. Collapsing them would let owed scope disappear.
 
 ## 4. The clean tag URL
 
@@ -563,6 +610,49 @@ re-imports are safe.
   LoopCheck records that a representative visited and preserves the report.
   Planning trips, administering vendor agreements, and reconciling invoices
   are separate systems and would blur the module's evidence-only boundary.
+
+The following are rejected by [ADR 0018](docs/adr/0018-multi-vendor-startup-evidence-model.md)
+(*proposed*) — recorded here so the alternatives are not re-proposed as new,
+with the caveat that the ADR itself is not yet Accepted:
+
+- **A per-project `phases` collection.** Rejected — a stored map that drifts
+  from the template library, which is the same thing already rejected above
+  for required-phases. A project configures its phases by configuring its
+  template library; the shared enum grows additively.
+- **Vendor-facing accounts, portals, or integrations.** Rejected — vendor
+  service techs will always use their own paper or PDF forms. That is a
+  premise, not an adoption problem. LoopCheck is the GC's master ledger that
+  *indexes* the vendor's record and captures the few structured facts a
+  dispute turns on.
+- **Blocking check submission until every line is answered.** Rejected — it
+  breaks the field tier for a crew that gets pulled off and converts a
+  recoverable partial record into no record. Ambiguity is legal at capture and
+  illegal at signature/freeze instead (DECISIONS D22).
+- **A fifth response type for measured values.** Rejected — constraint #5.
+  Acceptance limits are template *metadata* on the existing `value` type, and
+  they freeze onto the check item so a later template edit cannot retroactively
+  change whether a reading passed.
+- **Replacing `check_items.value` with a numeric field, or storing a value
+  line's derived pass/fail.** Rejected — "480/478/481 V" and "3.2 mils TIR" are
+  real readings a number cannot hold, so the text stays the record and the
+  numeric is a companion; and the verdict derives from the reading against the
+  frozen limit, like every other status.
+- **Instrument configuration inside `calibrations`, or as checklist lines.**
+  Rejected — "what is it set to" and "does it read true" are different facts on
+  different cadences. A separate append-only `instrument_settings` ledger, with
+  current settings derived as the latest unsuperseded record and no stored
+  "current" flag.
+- **A unique index on `tags.serial_number`.** Rejected — blank serials are the
+  norm and a duplicate serial is a finding to surface, not a write to reject.
+- **One relation serving both `resolves` and `continues`.** Rejected — it would
+  make "running as designed" and "abandoned mid-run" the same shape in the
+  standing fold, the same error `pending`-vs-`incomplete` already avoided.
+- **Hard-blocking a phase on an unsatisfied entry gate.** Rejected — ADR 0007's
+  record-never-authorize principle applied outside safety. An unsatisfied gate
+  warns prominently; a crew that runs the phase anyway has made a decision, and
+  the ledger records visibly that they did.
+- **A second per-tag-per-phase rollup page.** Rejected — `readiness.html` is
+  that page; a parallel matrix is drift by construction.
 
 ## 8. Reproducing the database
 
