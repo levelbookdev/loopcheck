@@ -341,7 +341,13 @@ passes did not reach. **None of them overturns anything in ADR 0018.** Four are
 structural and carry to the ADR as open questions 9–12; seven are refinements to
 decisions already made. All are ordered by value, and all are **open**.
 
-## R9 — An accepted operating restriction has no home in the model · *open · ADR open question 9*
+## R9 — An accepted operating restriction has no home in the model · **DECIDED — `restrictions` record adopted (ADR §13)**
+
+**Resolved by the maintainer, 2026-08-04: option (b), a `restrictions` record.**
+ADR 0018 gains §13. The comment below stands as written; the only thing worth
+adding after the fact is that the decision turned on the boundary against punch
+items — a restriction is a **condition of acceptance nobody owes work on**, and
+putting it on the punch list would have made the open-punch count unreliable.
 
 **ADR location:** §4 result vocabulary, §6 punch items, §7 typed values.
 

@@ -450,6 +450,72 @@ configured) is real and worth recording. Making it *block* is not.
   blocking would also break the field tier the moment a gate check is owed by
   someone who is not on site.
 
+### 13. An accepted operating restriction is its own appended record — not a sixth state
+
+**Decided by the maintainer 2026-08-04, resolving open question 9**
+([R9](0018-review-notes.md#r9--an-accepted-operating-restriction-has-no-home-in-the-model--decided--restrictions-record-adopted-adr-13)).
+
+A system is accepted with a permanent limit configured around a fault nobody
+will fix. That is not `fail`, not a clean `pass`, not a punch item (no work is
+owed), and not `deferred` (no later phase clears it). A **`restrictions`**
+collection holds it.
+
+| Field | Type | Why |
+|---|---|---|
+| `project` | relation, required | Same-project rule as every other collection. |
+| `tag` / `system` | relation, **XOR** | Same subject rule as `checks` and `service_visits`. |
+| `summary` | text, required | What the restriction *is*, in operating terms ("limit drive speed to X Hz"). |
+| `reason` | text, required | The fault it works around. A restriction with no stated cause is folklore. |
+| `limit_min` / `limit_max` | number, nullable | The limit as data. |
+| `unit` / `comparison` | as §7 | Reuses `between` / `min` / `max` / `equals` / `informational` verbatim — one limit vocabulary in the product, not two. |
+| `limit_text` | text | The human statement, mirroring §7's `expected_text`, for limits that do not reduce to a number. |
+| `scope` | select: `permanent` / `phase` | The source carries both: a speed cap that never lifts, and a phase run with one of a redundant pair unavailable. |
+| `until_phase` | select (phase enum), nullable | Required when `scope = phase`; the phase the restriction expires with. |
+| `established_by_check` / `established_by_visit` | relation, nullable | Provenance — the record where it originated. At least one required. |
+| `lifted_by` | relation → `restrictions`, nullable | Supersession, §10's linked-pair pattern. |
+| `client_token` | text | Idempotency, as elsewhere. |
+
+**It is appended, never edited, and never deleted.** Lifting a restriction is a
+**new record** that points back via `lifted_by` — the same shape §10 uses for
+continuation, and for the same reason: "this limit was removed in March" is a
+fact worth as much as the limit itself.
+
+**The active set is derived**, never stored: a subject's active restrictions are
+those with nothing pointing at them through `lifted_by`, minus phase-scoped ones
+whose `until_phase` is complete. Constraint #4 is untouched.
+
+**It does not add a sixth derived state, and this is the point.** The standing
+fold is unchanged and stays at its declared ceiling. A restricted subject still
+derives `pass`; the standing plate renders the pass **with an active-restriction
+badge beside it**, exactly as R3 recommends rendering a caveated pass. The
+restriction is a *fact attached to the subject*, not a verdict about a phase.
+
+**Three boundaries, because the whole value is in keeping them apart:**
+
+- **vs. a punch item (§6)** — a punch item is **outstanding work someone owes**,
+  with ball-in-court. A restriction is **a condition of acceptance nobody owes
+  work on**. If work is owed, it is a punch item; if the answer is "we operate
+  around it," it is a restriction. Keeping these apart is what makes the open-
+  punch count mean something.
+- **vs. as-left condition (§6)** — as-left is the state equipment was left in at
+  the end of a visit (a valve left closed). It is per-visit and transient. A
+  restriction constrains **operation**, and persists until lifted.
+- **vs. `phases_na` / `deferred` (§§1–2)** — those say a phase does not apply or
+  has moved. A restriction says the phase **completed**, and here is the
+  permanent condition of that completion.
+
+**Turnover and O&M.** Active restrictions enter the frozen manifest as their own
+per-subject section. This is the half that matters most: the source's restriction
+is recorded inconsistently across two pages of a submittal, and an operator who
+exceeds the limit in year three reproduces a fault whose diagnosis exists only in
+a note cell. A restriction is the one artifact in this ADR whose **primary reader
+is not the GC at turnover but the operator years later**, and the manifest is how
+it gets there.
+
+**Rejected: a `wont_fix` / `accepted` punch resolution.** It would put something
+that is not outstanding work on the outstanding-work list, and make "open punch
+items" — a number people actually manage against — permanently unreliable.
+
 ## What all of this adds to the frozen turnover package
 
 ADR 0010's manifest gains, per scope:
@@ -529,7 +595,8 @@ change** and must land before the first real package is signed, or behind a
   `signatures.signer_role` enum additions are additive but contract-visible;
   `instrument_settings` is a new collection. All of it needs the ADR-0003
   version bump, which is why M4–M6 sit **after** M3's v1 reconciliation
-  (DECISIONS D12).
+  (DECISIONS D12). **`restrictions` (§13) is a second new collection** and joins
+  the same queue; it is additive, so it breaks nothing already published.
 - **The turnover manifest changes are hash-affecting** (see above). Either they
   land before any real package is signed, or `sha256-canon-v1` is retired in
   favor of a v2 and old packages verify under the old scheme. This is the
@@ -544,7 +611,10 @@ change** and must land before the first real package is signed, or behind a
 - **The standing fold now carries five derived states** — pass, fail, running,
   deferred, incomplete, plus not-started and N/A. That is near the ceiling of
   what a field UI can render legibly, and it is a hard stop: no sixth state
-  without retiring one.
+  without retiring one. **§13 respects the ceiling deliberately**: an accepted
+  operating restriction is a record attached to the subject, rendered as a badge
+  beside an unchanged `pass`, not a new state. Anything else arriving in this
+  space should take the same route.
 - **Nothing here creates a forms designer, a stored status, or a conditional
   template.** Every addition is either capture-side input data (ADR 0002's
   pattern), an appended immutable fact, or a derivation over the two.
@@ -641,7 +711,10 @@ pages). Full reasoning in [`0018-review-notes.md`](0018-review-notes.md)
 R9–R12; seven further refinements to decisions already made are recorded there
 as R13–R19 and need no question here.*
 
-9. **An accepted operating restriction** ([R9](0018-review-notes.md#r9--an-accepted-operating-restriction-has-no-home-in-the-model--open--adr-open-question-9)).
+9. ~~**An accepted operating restriction**~~ **RESOLVED by the maintainer,
+   2026-08-04: a `restrictions` collection — see §13.** The reasoning below
+   stands as written; §13 carries the settled shape.
+   ([R9](0018-review-notes.md#r9--an-accepted-operating-restriction-has-no-home-in-the-model--decided--restrictions-record-adopted-adr-13)).
    The source accepts a system with a permanent speed cap configured around an
    unresolved equipment fault: not a fail, not a clean pass, not a punch item
    (nobody will ever fix it), not a deferral (no later phase clears it). The
