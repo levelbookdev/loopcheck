@@ -1,6 +1,39 @@
 # ADR 0010 — Signatures & the turnover package: a signed, frozen snapshot over the append-only ledger
 
-**Status:** proposed · **Date:** 2026-07-10
+**Status:** **accepted** (2026-08-04) · **Date:** 2026-07-10
+
+> **Accepted 2026-08-04** by maintainer decision, resolving
+> [open-questions #5](../open-questions.md) and closing
+> [D6](../DECISIONS.md#d6--adr-0010-signatures--turnover-stays-proposed-and-frozen)'s
+> freeze. D6 named three gates; here is where each landed:
+>
+> 1. **Golden-vector / canonicalization test — NOW MET, and it was not before.**
+>    D6 assumed the fixture was a test. It was a `console.log`: on drift it
+>    printed one line to a server console (a trailer Pi's, typically unread) and
+>    kept sealing packages with hashes no independent verifier could reproduce.
+>    Fixed as part of this acceptance — `verifyGoldenVector()` moved beside the
+>    serializer, `POST /api/turnover/build` **refuses** on mismatch rather than
+>    sealing unverifiable evidence, and `scripts/smoke_test.sh` asserts the algo,
+>    the digest shape, **hash determinism across a rebuild**, and supersession.
+>    The refusal path was verified by deliberately drifting the vector and
+>    confirming the build fails. Deliberately *not* a throw at load: a turnover
+>    canonicalizer must never take down an instance serving QR scans, LOTO
+>    status, and field checks — the blast radius stays scoped to builds.
+> 2. **Required-role semantics — MET by design.**
+>    [ADR 0018 §9](0018-multi-vendor-startup-evidence-model.md) defines them:
+>    `required_signature_roles` is template data frozen onto the check, the
+>    missing-countersignature list is derived, and the roles come from the GC's
+>    template **never** from whatever the vendor's paper happened to provide.
+> 3. **Legal wording (C4) — MET in shipped code.** Both `sign.html` and
+>    `turnover.html` carry the "records an attestation, not a qualified
+>    electronic signature" caveat on the page, not only in this ADR.
+>
+> **What acceptance does NOT do.** It does not perform the D12 contract bump —
+> `turnover_packages` and `signatures` stay marked `delta; ADR 0010` in
+> [docs/API.md](../API.md) until M3 reconciles the whole collection set. An
+> accepted ADR is a settled *design*; the published *contract version* is a
+> separate act with its own sequencing. Do not read this Status line as a
+> contract guarantee.
 
 > **The manifest allowlist and canonical form are unfrozen for one fold**
 > (2026-08-04, DECISIONS **D25** amending D6). ADR 0018 adds eight
@@ -16,13 +49,18 @@
 > regenerated as the acceptance test; **partial folds are forbidden**, since
 > each addition alone changes the canonical bytes.
 >
-> **This does not accept ADR 0010.** C4's on-page wording, required-role
-> semantics, and the D12 contract bump still gate acceptance.
+> ~~**This does not accept ADR 0010.** C4's on-page wording, required-role
+> semantics, and the D12 contract bump still gate acceptance.~~
+> **Superseded 2026-08-04** — see the acceptance block at the top of this file.
+> C4 and required-role semantics are met; the D12 contract bump is explicitly
+> *not* a precondition of acceptance and remains M3 work.
 
 **Implementation status (committed + review-hardened, 2026-07-12):** the
 migration (`turnover_packages` + `signatures`, `1789000026`), the server
 builder/canonicalizer (`pb_hooks/turnover.pb.js` + `turnover_canon.js`, with a
-golden-vector self-check on load), the auth helper (`lc-auth.js` +
+golden-vector check enforced at build time and asserted by the smoke test —
+see the acceptance block; it was load-time-log-only until 2026-08-04), the auth
+helper (`lc-auth.js` +
 `login.html`), and the signing/turnover pages (`sign.html`, `turnover.html`)
 are in the committed baseline and were hardened by a code-review pass
 (single scoped `check_items` query, `//`+`/\` open-redirect guard,

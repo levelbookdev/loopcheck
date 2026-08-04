@@ -17,9 +17,10 @@ directly afterwards, on 2026-08-04, and the reading is recorded in
 [`0018-review-notes.md`](0018-review-notes.md). Every observation was confirmed.
 Four readings have now happened — a summary, a text-layer pass, a corrected
 render pass, and a full render of the valve reports and clean-water checklists.
-Comments **R2, R6, R7, R8, R21 and R22 are folded in below**; **R9–R12 were
-decided** and appear as §§13–14 and §5; **R1 proposed reversing a recommendation
-and was decided against**; **R3–R5 and R13–R20 remain open** for the maintainer.
+Comments **R2, R6, R7, R8, R21 and R22 are folded in below**; **R3, R4, R9–R12
+and R15 were decided** and appear as §4, §5 and §§13–14; **R1 proposed reversing
+a recommendation and was decided against**; **R5, R13, R14 and R16–R20 remain
+open** for the maintainer.
 The Context section below is left as originally written rather than retrofitted —
 what the ADR knew when, and from what, is itself part of the record. Three of
 its ten bullets are now known to be imprecise in detail while correct in
@@ -165,6 +166,59 @@ is to separate the two moments:
   a note and no `result` is a **blank**, and the gate below treats it as one. The
   capture UI cannot produce this shape (result control and note field are
   separate), which is the point — the failure is native to paper.
+- **A caveated pass is a derivation, not a state** (**R3**, resolved 2026-08-04,
+  open question 6). No `pass_with_exception`. Five states stay five. A `pass`
+  line instead renders as **pass with exception** — on the standing plate and as
+  its own turnover section — when it carries a **linked consequence**: a
+  `punch_items` record (§6) or a `restrictions` record (§13). The source's
+  vendors already write this by hand, marking a line with *both* a checkmark and
+  "see notes."
+
+  **The trigger is a link, not a note.** Notes are common and mostly benign; a
+  badge that fires on every noted pass is a badge nobody reads. **And the
+  restriction trigger is what makes this complete** — the source's clearest
+  caveated pass has no punch item *and never will*, because the equipment is
+  defective, the workaround is permanent, and nobody owes work. R3's original
+  recommendation (pass + note + punch item) would never have fired on it; §13 is
+  what closes that hole.
+
+  **Residual risk, named and accepted:** a caveat written as prose with nothing
+  linked stays invisible to the derivation. Deliberately **not** mitigated by
+  nudging on every `pass` carrying a note — a warning that fires on benign notes
+  is one that gets clicked through, which is precisely the failure this ADR
+  keeps finding in the source.
+- **`not_performed` carries a reason from a closed vocabulary** (**R4**, resolved
+  2026-08-04, open question 7). `check_items.not_performed_reason` (select),
+  server-required when `result = "not_performed"`:
+
+  `conditions_unavailable` · `access_blocked` · `equipment_unavailable` ·
+  `satisfied_by_other_evidence` · `out_of_scope` · `other`
+
+  `other` requires free text in the note — an escape hatch that costs a sentence
+  is an escape hatch people use honestly. `satisfied_by_other_evidence` takes an
+  optional **`satisfied_by`** relation to the `check_item` that did the
+  demonstrating; without the pointer it is a nicer-sounding blank.
+
+  **This absorbs R15**, and reclassifies it. The source marks such a line
+  **N/A** ("verified — by a different test"), but the honest answer is
+  `not_performed` + `satisfied_by_other_evidence`: the check *applies*, it simply
+  was not the test that was run. People reach for N/A when nothing better
+  exists — the same no-home-for-this-fact pattern as R9. So `na_reason` keeps
+  its narrower job and does not grow a third meaning.
+
+  **`out_of_scope` complements §6's scope-gap punch item, it does not replace
+  it.** The line records why the check was not performed; the punch item records
+  that someone still has to own the work. Recording only the line lets the scope
+  gap vanish along with it.
+
+  **QC pairing:** a `fail` line carrying no linked punch item is flagged at
+  **sign/freeze**, beside the blank-result gate below — not at turnover, which
+  is far too late, because in the source the page carrying the orphan failure had
+  already been signed.
+
+  Both new fields enter the manifest allowlist and land in the **§15 fold**; the
+  caveated-pass derivation needs no new hashed field, since punch items and
+  restrictions are already in it.
 - **`incomplete` survives, and keeps its meaning** at the check level: a run
   that was started and abandoned. Capture is never blocked — hard constraint #1
   means a laborer on a dead-zone phone must always be able to submit what they
@@ -483,8 +537,16 @@ is invisible to a register check alone:
   a mismatch warning when a vendor visit's recorded manufacturer/model/serial
   disagrees with the tag's own nameplate data.
 
-**Deferred to its own ADR:** the true **asset-vs-position** split — a `tag` is a
-position on the P&ID; the physical machine with a serial number is an asset
+**RESOLVED 2026-08-04 — see §16**, which answers this with an append-only
+`equipment_events` ledger and a derived re-verify marker rather than a second
+identity. The paragraph below is left standing as the original deferral: it was
+right that the *heavy* version must not be improvised inside a validation task,
+and the source reading then removed the reason to build the heavy version at
+all — the actuators in it carry **no serial number**, so a serial-keyed asset
+model has a hole in it on day one.
+
+~~**Deferred to its own ADR:**~~ the true **asset-vs-position** split — a `tag`
+is a position on the P&ID; the physical machine with a serial number is an asset
 that can be pulled, rebuilt, and reinstalled, possibly in a different position.
 Modelling that properly means a new `equipment_assets` collection and an
 append-only installation ledger (asset → position, with install/remove events),
@@ -493,7 +555,7 @@ larger change than the other nine combined and it must not be improvised inside
 a validation task. The **re-verification prompt** — "this position's asset
 changed on {date}; phases passed before that date were passed by a different
 machine" — is the reason the split matters and the first thing the new ADR must
-specify. See open question #12.
+specify. ~~See open question #12.~~
 
 ### 12. Phase-entry gates warn; they never block
 
@@ -653,29 +715,110 @@ behind `sha256-canon-v2` — a signed package that stops verifying is the one
 outcome this whole ADR exists to prevent. Test packages are discarded, not
 migrated.
 
-**Scope of the fold** — the eight additions listed above, landing together, with
-the **golden vector regenerated** as the acceptance test. Partial folds are
-forbidden: each one alone would change the canonical bytes, so shipping them
-piecemeal means several silent breaks instead of one deliberate one.
+**Scope of the fold** — the eight additions listed above **plus any field
+decided before the fold ships**, landing together, with the **golden vector
+regenerated** as the acceptance test. Partial folds are forbidden: each one
+alone would change the canonical bytes, so shipping them piecemeal means several
+silent breaks instead of one deliberate one. *Added after this section was
+written:* `check_items.not_performed_reason` and `satisfied_by` (§4, R4). The
+caveated-pass derivation (§4, R3) adds no hashed field — punch items and
+restrictions are already in the manifest.
 
-**This does not accept ADR 0010, and D6 is amended rather than reversed**
-(DECISIONS D25). D6 froze ADR 0010 on the reasoning that "accepting it now
-hardens hash/attestation semantics that are hard to change once real records
-exist." That reasoning **argues for this fold, not against it** — the allowlist
-is precisely the thing that becomes unchangeable, so it is the thing to get
-complete while it is still free. D6 conflated two separable questions:
+**D6 is amended rather than reversed** (DECISIONS D25). D6 froze ADR 0010 on the
+reasoning that "accepting it now hardens hash/attestation semantics that are hard
+to change once real records exist." That reasoning **argues for this fold, not
+against it** — the allowlist is precisely the thing that becomes unchangeable, so
+it is the thing to get complete while it is still free. D6 conflated two
+separable questions:
 
 - **the canonical form and manifest allowlist** — unfrozen by this decision,
   because delay makes it strictly more expensive and never cheaper;
-- **acceptance of ADR 0010 as a whole** — still blocked, on gates this ADR does
-  not touch: the "not a qualified e-signature" wording (C4), required-role
-  semantics, and the API v1 contract bump (D12).
+- **acceptance of ADR 0010 as a whole** — a separate act, on separate gates:
+  the "not a qualified e-signature" wording (C4), required-role semantics, and
+  the API v1 contract bump (D12). ~~This decision leaves it blocked.~~ *(It did
+  not stay blocked — see below.)*
 
-So ADR 0010 stays **Proposed** with a completed allowlist. That is a coherent
-state: the bytes are settled, the legal and contract questions are not.
+~~So ADR 0010 stays **Proposed** with a completed allowlist. That is a coherent
+state: the bytes are settled, the legal and contract questions are not.~~
+
+**Overtaken 2026-08-04: ADR 0010 is now Accepted** (DECISIONS **D26**). The two
+gates this section left standing were closed the same day — C4's wording was
+already shipped on both signing pages, and required-role semantics are §9 of
+this ADR. A third gate that D6 *assumed* was met turned out not to be: the
+golden vector was a `console.log`, not a test. It is now enforced at the build
+route and asserted by `scripts/smoke_test.sh`. The **API v1 contract bump is
+explicitly not a precondition** of acceptance and remains M3 work. See ADR
+0010's acceptance block.
 
 **Unblocks §9.** The Conflicts table below recorded signature-role QC as
 "blocks on open question #5." It no longer does.
+
+### 16. The asset behind a position is an appended event, not a second identity
+
+Resolves [open-questions #12](../open-questions.md). §11 deferred the
+asset-vs-position split to its own ADR on the grounds that it "changes the
+identity of every record pointing at a tag." That was the right instinct about
+the *heavy* version of the design, and the source reading then removed the
+reason to build the heavy version at all.
+
+**What killed the obvious design.** An `equipment_assets` collection keyed on
+serial number fails immediately: in the source, **actuator serial number reads
+"N/A" on all six valve reports**. An entire equipment class has no identity to
+key on. A model with a hole that size on day one is not a model.
+
+**What the requirement actually is.** Not "track assets through their life" —
+that is asset management, and the product refuses to be an ERP. It is: *a phase
+passed by a machine that was subsequently pulled apart must not read as
+current.* In the source, a pump was found with a frozen impeller, removed,
+rebuilt with new seals, and re-installed **between the clean-water and seeding
+phases**, with a standing action item to confirm the rebuild. Every clean-water
+result logged against that position describes a machine that no longer exists in
+that state. Nothing anywhere says so.
+
+That requirement is a **derivation over dates**, which is what this product does
+everywhere.
+
+New append-only collection **`equipment_events`**:
+
+`project` · `tag` (required) · `occurred_at` · `kind`
+(`replaced` / `rebuilt` / `reinstalled` / `relocated` / `nameplate_corrected`) ·
+`serial_before` / `serial_after` (**both nullable** — the actuator case) ·
+`performed_by` · `vendor_company` (nullable) · `note` · `client_token`.
+`updateRule: null`, `deleteRule: null`. Public create, like the other field
+ledgers.
+
+**The derivation.** For each tag, `last_event = max(occurred_at)`. Any phase
+whose standing derives entirely from checks **older than `last_event`** renders
+with a **re-verify marker naming the event and its date**. It is a marker, not a
+downgrade — the pass stays in the ledger exactly as any-pass-wins requires, and
+nothing is stored. The frozen turnover package carries the same marker, which
+produces the honest sentence an owner is owed: *this phase passed on the 12th;
+the machine was rebuilt on the 19th.*
+
+**Why this shape:**
+
+- **It is one more append-only event ledger on a tag** — the same grammar as
+  `loto_events`, `calibrations`, and `service_visits`. No new subject kind, no
+  change to the exactly-one-subject rule, no identity scheme, and no edit to any
+  record that points at a tag.
+- **It works when there is no serial.** The *event* is the fact; serials are
+  optional metadata on it. An actuator swap with nothing to key on is still
+  recordable and still raises the marker.
+- **It is derived, never stored.** No "needs re-verification" flag; it falls out
+  of comparing check dates to event dates.
+- **It does not foreclose the heavy version.** If spares pools or rotating
+  equipment ever matter, these events are the substrate that model would be
+  built on — they already record what changed and when.
+
+**What it deliberately gives up, and this is a real loss:** you cannot ask
+"where has serial X been installed over time," or follow one physical machine
+between positions. That is asset management. It belongs in an ERP or a
+materials-tracking product, not a commissioning tracker, and the refusal is
+consistent with the rejected-ideas list. Recorded as a conscious trade rather
+than an oversight.
+
+**Sizing.** One small collection, one derivation, one marker in two views — a
+scope item inside **M5.3**, not its own milestone and not its own ADR.
 
 ## What all of this adds to the frozen turnover package
 
@@ -807,7 +950,7 @@ it is resolved by open question 5 below: **one fold, now, into v1.**
 | Vendor evidence UI (§5) | DECISIONS D7 parks the ADR 0017 UI | D7's trigger condition met; D7 amended by D21 |
 | Continuation UI (§10) | DECISIONS D8 parks the open→resolve UI | Same; D8 amended by D21 |
 | Punch party vocabulary (§6) | `docs/API.md` publishes `assigned_party` as v1 | Breaking; requires the D12 version bump — sequenced post-M3 |
-| Asset vs. position (§11) | `tags` is the identity of every check subject | Deferred to its own ADR; open question #12 |
+| Asset vs. position (§11) | `tags` is the identity of every check subject | **Resolved (§16)** — an appended `equipment_events` fact + derived re-verify marker; `tags` stays the only identity. Asset-history tracking is a conscious loss |
 
 ## Open questions for the maintainer
 
@@ -840,14 +983,20 @@ it is resolved by open question 5 below: **one fold, now, into v1.**
 *Questions 6–8 were raised by the source reading, not the summary. Full
 reasoning in [`0018-review-notes.md`](0018-review-notes.md) R3–R5.*
 
-6. **Pass with exception** ([R3](0018-review-notes.md#r3--pass-with-exception-is-a-real-answer-the-state-vocabulary-has-no-home-for--open)).
+6. ~~**Pass with exception**~~ **RESOLVED 2026-08-04: option (c), a derivation —
+   and the trigger is a *linked consequence* (punch item **or** §13
+   restriction), not a note. See §4.**
+   ([R3](0018-review-notes.md#r3--pass-with-exception-is-a-real-answer-the-state-vocabulary-has-no-home-for--decided--derived-not-a-state-adr-4)).
    The source answers lines "see notes", and in two cases with both a checkmark
    *and* "see notes" — it works, and there is a caveat that became a punch item.
    Five states have no home for that. Recommendation: **do not add a state**;
    render a `pass` carrying a note **and** a linked punch item differently, as a
    derivation. Keeps the vocabulary at its ceiling and puts the caveat on the
    standing plate rather than inside a note field.
-7. **A reason vocabulary for `not_performed`** ([R4](0018-review-notes.md#r4--not_performed-needs-a-small-reason-vocabulary-not-just-a-free-text-note--open)).
+7. ~~**A reason vocabulary for `not_performed`**~~ **RESOLVED 2026-08-04: the
+   closed vocabulary, with `satisfied_by_other_evidence` added and R15 absorbed
+   into it. See §4.**
+   ([R4](0018-review-notes.md#r4--not_performed-needs-a-small-reason-vocabulary-not-just-a-free-text-note--decided--closed-vocabulary-adr-4)).
    The source records four sections as tested for logic but not live-tested
    because "conditions were not available" — not deferred, not N/A, not failed.
    Recommendation: a short closed vocabulary — `conditions_unavailable` ·

@@ -28,7 +28,7 @@
 #          LC_TEST_PORT=8500 ./scripts/smoke_test.sh
 # Exit:    0 = all assertions passed;  1 = a regression;  2 = setup failure.
 #
-# Assertion count: 89 as of 2026-07-28. If you add or remove assertions, update
+# Assertion count: 94 as of 2026-08-04. If you add or remove assertions, update
 # this number -- it is the cheap check that a section did not silently stop
 # running (a helper returning empty makes assertions vanish, not fail loudly).
 #
@@ -483,6 +483,71 @@ anon_field_absent "anon expand of service_contacts_via_service carries no PII" \
 echo "==> clean-URL routes serve"
 accepted "/t/{tag} route"     "$(http_status GET "$BASE/t/PMP-1002")"
 accepted "/s/{service} route" "$(http_status GET "$BASE/s/$(first_id services)")"
+
+# ---- turnover: the seal is only evidence if it reproduces (ADR 0010) --------
+# The golden vector was a console.log until 2026-08-04 -- on drift it printed
+# one line to a console nobody reads and kept sealing packages with hashes no
+# independent verifier could reproduce. ADR 0010 says the fixture "ships as a
+# test"; these assertions are what makes that true. The build route now refuses
+# on mismatch, so a drifted canonicalizer fails HERE rather than silently
+# producing worthless evidence.
+echo "==> turnover build seals a reproducible hash (ADR 0010)"
+TP_PROJECT=$(first_id projects)
+turnover_build() {
+  curl -s -X POST "$BASE/api/turnover/build" \
+    -H "Content-Type: application/json" -H "Authorization: ${TOKEN:-}" \
+    -d "{\"project\":\"$TP_PROJECT\",\"title\":\"smoke\"}"
+}
+TP1=$(turnover_build)
+TP1_HASH=$(printf '%s' "$TP1" | sed -n 's/.*"content_hash":"\([0-9a-f]*\)".*/\1/p')
+TP1_ALGO=$(printf '%s' "$TP1" | sed -n 's/.*"hash_algo":"\([^"]*\)".*/\1/p')
+
+case "$TP1_ALGO" in
+  sha256-canon-v1) ok "build route seals under the pinned algo ($TP1_ALGO)" ;;
+  *) bad "build route algo: expected sha256-canon-v1, got '${TP1_ALGO:-<none>}'" ;;
+esac
+
+# 64 lowercase hex = a real SHA-256. Guards against an empty/absent hash field
+# being read as "fine" by a looser check.
+case "$TP1_HASH" in
+  [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*)
+    if [ "${#TP1_HASH}" -eq 64 ]; then ok "content_hash is 64-char lowercase hex"
+    else bad "content_hash length: expected 64, got ${#TP1_HASH}"; fi ;;
+  *) bad "content_hash missing or malformed ('${TP1_HASH:-<none>}')" ;;
+esac
+
+# DETERMINISM is the property that makes the hash evidence at all: the same
+# unchanged scope must seal to the same bytes, or no third party can ever
+# recompute it. generated_at/generated_by are deliberately OUTSIDE the hashed
+# manifest (only algo/scope/records/truncated enter it), so a rebuild with no
+# ledger changes MUST match exactly.
+TP2=$(turnover_build)
+TP2_HASH=$(printf '%s' "$TP2" | sed -n 's/.*"content_hash":"\([0-9a-f]*\)".*/\1/p')
+if [ -n "$TP1_HASH" ] && [ "$TP1_HASH" = "$TP2_HASH" ]; then
+  ok "rebuilding an unchanged scope reproduces the identical hash (canonicalizer is deterministic)"
+else
+  bad "hash NOT reproducible: first '$TP1_HASH' vs rebuild '$TP2_HASH' -- an unverifiable seal"
+fi
+
+# A re-issue supersedes the prior package for the same scope (ADR 0010 C3);
+# signatures do not carry forward, so the chain is how "current" is derived.
+# NOTE: the build response deliberately returns only {id, content_hash,
+# hash_algo, standing, records} -- `supersedes` is set on the RECORD, so read it
+# back rather than expecting it in the response body.
+TP1_ID=$(printf '%s' "$TP1" | sed -n 's/.*"id":"\([a-z0-9]\{15\}\)".*/\1/p')
+TP2_ID=$(printf '%s' "$TP2" | sed -n 's/.*"id":"\([a-z0-9]\{15\}\)".*/\1/p')
+TP2_SUPERSEDES=$(curl -s "$BASE/api/collections/turnover_packages/records/$TP2_ID" \
+  -H "Authorization: ${TOKEN:-}" \
+  | sed -n 's/.*"supersedes":"\([a-z0-9]\{15\}\)".*/\1/p')
+if [ -n "$TP1_ID" ] && [ "$TP2_SUPERSEDES" = "$TP1_ID" ]; then
+  ok "re-issued package supersedes the prior one for the scope"
+else
+  bad "re-issue supersedes '${TP2_SUPERSEDES:-<none>}', expected the prior package '$TP1_ID'"
+fi
+
+# The packages just built are append-only like every other ledger.
+rejected "turnover_packages reject PATCH (append-only)" \
+  "$(patch_status turnover_packages "$(first_id turnover_packages)" '{"title":"tamper"}')"
 
 # ---- report -----------------------------------------------------------------
 echo ""

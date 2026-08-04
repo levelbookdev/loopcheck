@@ -52,4 +52,40 @@ function rfc3339(s) {
   return String(s).replace(" ", "T");
 }
 
-module.exports = { canonical, contentHash, rfc3339 };
+// ---- The golden vector ------------------------------------------------------
+// A fixed manifest and its pinned digest. It lives HERE, beside the serializer,
+// so both the load-time shout and the build route can assert it — a route
+// handler runs in an isolated goja scope and cannot see turnover.pb.js's
+// top-level bindings, so a flag set at load is invisible to the route.
+//
+// ADR 0010 promises this is "a test that both the core and the sidecar assert
+// against." It was a console.log until 2026-08-04: on drift it printed one line
+// to a server console nobody reads on a trailer Pi, and every package built
+// afterwards carried a hash no independent verifier could reproduce. The whole
+// evidentiary claim of the module rests on this fixture, so it is now enforced
+// at the point where bad evidence would be created (see verifyGoldenVector's
+// callers) and asserted by scripts/smoke_test.sh.
+//
+// The paid sidecar asserts the SAME fixture. If this digest ever changes, the
+// canonical form changed, and every previously stored content_hash is
+// unverifiable under the new rules -- which is a `sha256-canon-v2`, not an edit
+// here.
+const GOLDEN = {
+  algo: "sha256-canon-v1",
+  scope: { project: "p1", system: "s1" },
+  records: [
+    { collection: "checks", id: "c1", phase: "loop_check", result: "pass",
+      performed_by: "V. Ellison", performed_at: "2026-07-11T09:00:00.000Z",
+      check_items: [{ prompt: "Megger ≥ min", response_type: "value", value: "550", result: "pass" }] },
+    { collection: "punch_items", id: "pi1", severity: "A", status: "open" },
+  ],
+};
+const GOLDEN_HASH = "8ae3e6620dda622ead115b79816e741f68f6bdfbfead89530020ae39068f4921";
+
+// -> { ok, expected, got }. Cheap: one hash of a two-record fixture.
+function verifyGoldenVector() {
+  const got = contentHash(GOLDEN);
+  return { ok: got === GOLDEN_HASH, expected: GOLDEN_HASH, got: got };
+}
+
+module.exports = { canonical, contentHash, rfc3339, verifyGoldenVector, GOLDEN_HASH };

@@ -312,10 +312,16 @@ gate is a check).
 **Decision.** ADR 0018's eight hash-affecting manifest additions land in **one
 pass, into `sha256-canon-v1`**, before any real package is signed — not behind a
 `sha256-canon-v2`. D6 is **amended, not reversed**: the canonical form and
-manifest allowlist are unfrozen for this fold, while ADR 0010's *acceptance*
-stays blocked on its own gates (the "not a qualified e-signature" wording C4,
-required-role semantics, and the D12 contract bump). ADR 0010 stays **Proposed**
-with a completed allowlist. Partial folds are forbidden — each addition alone
+manifest allowlist are unfrozen for this fold, while ADR 0010's *acceptance* is a
+separate act on separate gates (the "not a qualified e-signature" wording C4,
+required-role semantics, and the D12 contract bump). ~~ADR 0010 stays
+**Proposed** with a completed allowlist.~~ **Superseded the same day by
+[D26](#d26--adr-0010-accepted-the-golden-vector-was-not-a-test-until-it-was-made-one):
+ADR 0010 was accepted** — C4 and required-role semantics were already met, and
+D12 is explicitly not a precondition. **The fold decision is unaffected**; what
+changed is that D26 also made the golden vector enforceable at the build route,
+so this entry's precondition is now checked by code rather than by a reviewer
+remembering. Partial folds are forbidden — each addition alone
 changes the canonical bytes, so piecemeal shipping means several silent breaks
 instead of one deliberate one. The golden vector is regenerated as the
 acceptance test.
@@ -335,3 +341,67 @@ only one of them gets more expensive with delay.
 **Rejected.** Accepting ADR 0010 wholesale (its legal and contract gates are
 untouched by this work); minting `sha256-canon-v2` (no history to protect).
 **Cross-ref.** ADR 0018 §15 and open question 5; ADR 0010; D6, D12.
+
+### D26 — ADR 0010 accepted; the golden vector was not a test until it was made one
+**Decision.** **ADR 0010 (Signatures & the turnover package) is Accepted**
+(2026-08-04), closing [D6](#d6--adr-0010-signatures--turnover-stays-proposed-and-frozen)'s
+freeze and resolving open question #5. Acceptance covers the *design*: the
+frozen snapshot, the canonical hash, supersession, and the attestation model.
+It explicitly does **not** perform the D12 contract bump — `turnover_packages`
+and `signatures` stay `delta; ADR 0010` in `docs/API.md` until M3.
+**What the gates turned out to be.** D6 named three. Two were already met and
+merely unrecorded: the "not a qualified e-signature" wording ships on both
+`sign.html` and `turnover.html`, and required-role semantics are ADR 0018 §9.
+The third was **not met, and D6 assumed it was** — the golden vector was a
+`console.log` at hook load, not a test. On canonicalizer drift it printed one
+line to a server console (on a trailer Pi, an unread one) and kept sealing
+packages with hashes no independent verifier could reproduce. That is worse than
+having no seal: an unverifiable hash on a signed turnover package looks like
+evidence and is not.
+**Fixed as part of accepting, not deferred.** `verifyGoldenVector()` moved beside
+the serializer in `turnover_canon.js`; `POST /api/turnover/build` **refuses**
+with an explicit message on mismatch rather than sealing unverifiable evidence;
+`scripts/smoke_test.sh` asserts the pinned algo, the digest shape, **hash
+determinism across a rebuild of an unchanged scope**, and supersession (89 → 94
+assertions). The refusal path was verified by deliberately drifting the vector
+and confirming the build fails.
+**Deliberately not a throw at load.** A drifted *turnover* canonicalizer must
+never take down an instance whose first job is QR scans, LOTO status, and field
+checks. "Never cripple the field tier" outranks failing fast about an office
+deliverable, so the blast radius stays scoped to builds. This is the same
+asymmetry ADR 0007 applies to LOTO, pointed the other way.
+**Rationale.** This work is test hardening, not feature work, so it does not
+violate [D2](#d2--trust-before-features-m1-comes-first) — it is exactly M1's
+goal (prove the invariants) applied to the one invariant that had been asserted
+in prose and nowhere else.
+**Cross-ref.** ADR 0010; ADR 0018 §§9, 15; D6, D12, D25; open questions #5, #13.
+
+### D27 — The asset behind a position is an appended event, not a second identity
+**Decision.** Open question #12 (asset vs. position) is **resolved** by a small
+append-only **`equipment_events`** ledger on the tag — `kind` (replaced /
+rebuilt / reinstalled / relocated / nameplate_corrected), nullable
+`serial_before` / `serial_after`, occurred-at, who, note — plus a **derived**
+re-verify marker: any phase whose standing rests entirely on checks older than
+the tag's latest event renders as "passed before the {date} {kind} event." A
+marker, never a downgrade; the pass stays in the ledger. No `equipment_assets`
+collection, no second identity, no identity scheme. It is a scope item inside
+**M5.3**, not its own milestone or ADR (ADR 0018 §16).
+**What decided it.** The obvious design — an asset keyed on serial number —
+fails on contact with the source: **actuator serial number reads "N/A" on all
+six valve reports.** A whole equipment class has no identity to key on. The real
+requirement was never asset lifecycle; it is "a phase passed by a machine that
+was later pulled apart must not read as current," which is a derivation over
+dates. The source has the case live: a pump found with a frozen impeller,
+removed, rebuilt, and re-installed **between the clean-water and seeding
+phases**.
+**What this gives up, deliberately.** You cannot ask "where has serial X been
+installed over time," or follow one machine between positions. That is asset
+management and belongs in an ERP or a materials product, consistent with the
+standing refusal to become an ERP. Recorded as a conscious trade; if spares
+pools or rotating equipment ever matter, these events are the substrate the
+heavier model would be built on.
+**Rejected.** An `equipment_assets` collection with an install/remove ledger
+(holed on day one by unserialised assets, and it would touch the identity of
+every record pointing at a tag); a stored "needs re-verification" flag (status
+that drifts).
+**Cross-ref.** ADR 0018 §§11, 16; open question #12; ROADMAP M5.3.

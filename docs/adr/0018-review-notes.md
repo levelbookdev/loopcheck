@@ -162,7 +162,19 @@ register, against the tag's own nameplate data, and **against the rest of the
 same report's tag list** (a tag claimed twice in one report with two different
 descriptions is a warning, not a silent pass).
 
-## R3 — "Pass with exception" is a real answer the state vocabulary has no home for · *open*
+## R3 — "Pass with exception" is a real answer the state vocabulary has no home for · **DECIDED — derived, not a state (ADR §4)**
+
+**Resolved by the maintainer, 2026-08-04: option (c), with one change this
+comment could not have known to make.** The trigger is a **linked consequence**
+— a punch item **or** a §13 restriction — not "a `pass` carrying a note." Two
+corrections worth keeping visible:
+
+- **"pass + note + linked punch item" would have missed the clearest case.** The
+  strongest caveated pass in the source has **no punch item and never will** —
+  permanent workaround, defective equipment, nobody owes work. §13 did not exist
+  when this comment was written, and it is what makes the derivation complete.
+- **"non-empty note" is the wrong trigger.** Notes are common and mostly benign;
+  a badge that fires on all of them is one nobody reads.
 
 **ADR location:** §4, the `check_items.result` vocabulary.
 
@@ -217,7 +229,15 @@ line with a note and no result is blank, and blocks signature). The dangling
 pointer additionally argues that if a note references other evidence it should
 be a typed pointer — see **R19**.
 
-## R4 — `not_performed` needs a small reason vocabulary, not just a free-text note · *open*
+## R4 — `not_performed` needs a small reason vocabulary, not just a free-text note · **DECIDED — closed vocabulary (ADR §4)**
+
+**Resolved by the maintainer, 2026-08-04: the closed vocabulary, with one value
+added — `satisfied_by_other_evidence`, carrying an optional `satisfied_by`
+relation.** That value **absorbs R15**, which had proposed a third meaning for
+`na_reason`; the honest classification is `not_performed`, because the check
+applies and simply was not the test that was run. `na_reason` keeps its narrower
+job. The QC pairing this comment proposed also survives, sharpened by the third
+reading: the orphan-failure flag fires at **sign/freeze**, not at turnover.
 
 **ADR location:** §4.
 
@@ -625,9 +645,22 @@ device is.
 
 All three are warnings, never blocks, consistent with §11.
 
-## R15 — A third meaning of N/A: satisfied by other evidence · *open*
+## R15 — A third meaning of N/A: satisfied by other evidence · **DECIDED — absorbed into R4's vocabulary, and reclassified (ADR §4)**
 
-**ADR location:** §4 `na_reason`; extends **R5**.
+**Resolved 2026-08-04 as a consequence of R4.** The finding holds; its *framing*
+was wrong. This is **not** a third meaning of N/A — the check applies, so `na`
+was never the right answer. It is `not_performed` with reason
+`satisfied_by_other_evidence`, plus a `satisfied_by` pointer to the line that did
+the demonstrating.
+
+That the source wrote **N/A** is the interesting part, not a mistake to correct
+past: people reach for N/A when nothing better exists. Same shape as R9 — a real
+fact with no home migrates into whatever slot is nearest, and the slot it lands
+in then lies to every later reader. `na_reason` keeps its narrower job, and
+**R5's structural-vs-situational split is unaffected.**
+
+**ADR location:** §4 `not_performed_reason`; originally filed against
+`na_reason`, extending **R5**.
 
 R5 splits N/A into structural (a property of the equipment subtype) and
 situational. The source has a third: a line marked **N/A whose note says the

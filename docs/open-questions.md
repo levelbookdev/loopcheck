@@ -61,7 +61,29 @@ safe.
 - **Decision owner:** Cross-product architecture owner.
 - **Latest safe decision point:** before the first versioned handoff or import.
 
-## 5. Is ADR 0010 ready to accept and land?
+## 5. Is ADR 0010 ready to accept and land? — **RESOLVED (2026-08-04)**
+
+- **Resolution:** **Yes — ADR 0010 is Accepted**
+  ([DECISIONS D26](DECISIONS.md#d26--adr-0010-accepted-the-golden-vector-was-not-a-test-until-it-was-made-one)).
+  Acceptance covers the design (frozen snapshot, canonical hash, supersession,
+  attestation model). It does **not** perform the D12 contract bump; the two
+  collections stay `delta; ADR 0010` in `docs/API.md` until M3.
+- **What the investigation found:** two of D6's three gates were already met and
+  merely unrecorded (the on-page "not a qualified e-signature" wording ships in
+  `sign.html` and `turnover.html`; required-role semantics are ADR 0018 §9). The
+  third — "independent verification … tested," which this question's own
+  recommendation demanded — was **not** met and had been assumed to be: the
+  golden vector was a `console.log` at hook load. On drift it printed one line
+  to an unread console and kept sealing packages with unreproducible hashes.
+- **Closed by fixing it, not by lowering the bar:** the vector is now enforced
+  at `POST /api/turnover/build` (which refuses on mismatch) and asserted by
+  `scripts/smoke_test.sh` — pinned algo, digest shape, **hash determinism across
+  a rebuild**, supersession. The refusal path was verified by deliberately
+  drifting the vector.
+- **Still open beside it:** question 9 (minimum free turnover artifact) is no
+  longer *blocked* by this one, but is not decided by it either.
+
+### Original framing (retained)
 
 - **Why it matters:** staged signature/turnover code implements a Proposed ADR;
   hashes and attestations become hard to change after records exist.
@@ -194,7 +216,28 @@ to answer immediately.
 - **Decision owner:** Maintainer/domain expert.
 - **Latest safe decision point:** before the M4.1 enum-opening migration.
 
-## 12. Does LoopCheck model the asset separately from the position?
+## 12. Does LoopCheck model the asset separately from the position? — **RESOLVED (2026-08-04)**
+
+- **Resolution:** **No — no second identity.** An append-only
+  **`equipment_events`** ledger on the tag records that the physical machine
+  changed (`replaced` / `rebuilt` / `reinstalled` / `relocated` /
+  `nameplate_corrected`), with **nullable** `serial_before` / `serial_after`;
+  a **derived** re-verify marker then flags any phase whose standing rests
+  entirely on checks older than the tag's latest event. `tags` stays the only
+  identity ([ADR 0018 §16](adr/0018-multi-vendor-startup-evidence-model.md),
+  [DECISIONS D27](DECISIONS.md#d27--the-asset-behind-a-position-is-an-appended-event-not-a-second-identity)).
+  Sized as a scope item in **M5.3**.
+- **What decided it:** the serial-keyed asset model fails on contact with the
+  source — **actuator serial number reads "N/A" on all six valve reports**, so
+  an entire equipment class has no key. And the real requirement was never asset
+  lifecycle; it is "a phase passed by a machine later pulled apart must not read
+  as current," which is a derivation over dates.
+- **Accepted loss:** you cannot ask "where has serial X been installed over
+  time," or follow one machine between positions. That is asset management and
+  belongs elsewhere. If it ever matters, these events are the substrate the
+  heavier model would be built on.
+
+### Original framing (retained)
 
 - **Why it matters:** a `tag` is a P&ID *position*; the serial-numbered machine
   is an *asset* that gets pulled, rebuilt, and reinstalled — possibly in a
@@ -226,7 +269,24 @@ to answer immediately.
 - **Latest safe decision point:** before any equipment-asset work is scoped;
   it needs its own ADR either way.
 
-## 13. Do ADR 0018's turnover additions land inside `sha256-canon-v1`?
+## 13. Do ADR 0018's turnover additions land inside `sha256-canon-v1`? — **RESOLVED (2026-08-04)**
+
+- **Resolution:** **Yes — one fold, inside `sha256-canon-v1`, no v2**
+  ([DECISIONS D25](DECISIONS.md#d25--d6-amended--the-turnover-manifest-folds-into-sha256-canon-v1-now),
+  [ADR 0018 §15](adr/0018-multi-vendor-startup-evidence-model.md)). A hash
+  version exists to protect history and there is no history to protect; a v2
+  carrying additions no v1 package ever saw would be a boundary that records
+  nothing. **Partial folds are forbidden** — each addition alone changes the
+  canonical bytes.
+- **Precondition, still live:** confirm no `turnover_packages` record carrying
+  real signatures exists on any live instance before the fold ships. If one
+  does, the decision inverts to `sha256-canon-v2`.
+- **Related, and now closed:** the golden vector this decision leans on was a
+  `console.log`, not a test. It is now enforced at the build route and asserted
+  by `scripts/smoke_test.sh` (question 5, D26) — without which "regenerate the
+  golden vector as the acceptance test" would have had nothing to regenerate.
+
+### Original framing (retained)
 
 - **Why it matters:** the vendor report index, the instrument settings table,
   the deferred-cell standing grid, the countersignature QC block, and the

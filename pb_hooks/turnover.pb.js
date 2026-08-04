@@ -18,25 +18,22 @@
 // handler in an isolated scope that cannot see this file's top-level bindings.
 
 // ---- Golden vector: the cheapest defense against canonicalization drift -----
-// A fixed manifest and its pinned digest under sha256-canon-v1. If the
-// serializer ever changes, this fails on load and every stored hash would
-// silently diverge — so we shout. The paid sidecar asserts the SAME fixture.
+// The fixture and its pinned digest live in turnover_canon.js beside the
+// serializer. This shouts at load; the BUILD ROUTE refuses (below), which is
+// where it matters — a mismatch means every hash written from here on is
+// unreproducible by any independent verifier, and an unverifiable hash on a
+// signed turnover package is worse than no package at all.
+//
+// Deliberately NOT a throw at load. A drifted turnover canonicalizer must not
+// take down an instance whose first job is serving QR scans, LOTO status, and
+// field checks — "never cripple the field tier" outranks failing fast about an
+// office deliverable. The blast radius is scoped to turnover builds.
 (function goldenVectorSelfCheck() {
   const canon = require(`${__hooks}/turnover_canon.js`);
-  const fixture = {
-    algo: "sha256-canon-v1",
-    scope: { project: "p1", system: "s1" },
-    records: [
-      { collection: "checks", id: "c1", phase: "loop_check", result: "pass",
-        performed_by: "V. Ellison", performed_at: "2026-07-11T09:00:00.000Z",
-        check_items: [{ prompt: "Megger ≥ min", response_type: "value", value: "550", result: "pass" }] },
-      { collection: "punch_items", id: "pi1", severity: "A", status: "open" },
-    ],
-  };
-  const expected = "8ae3e6620dda622ead115b79816e741f68f6bdfbfead89530020ae39068f4921";
-  const got = canon.contentHash(fixture);
-  if (got !== expected) {
-    console.log("[turnover] GOLDEN VECTOR MISMATCH — canonical hash drifted! expected", expected, "got", got);
+  const v = canon.verifyGoldenVector();
+  if (!v.ok) {
+    console.log("[turnover] GOLDEN VECTOR MISMATCH — canonical hash drifted! expected", v.expected, "got", v.got);
+    console.log("[turnover] /api/turnover/build will REFUSE until this is resolved (ADR 0010).");
   }
 })();
 
@@ -44,6 +41,23 @@
 routerAdd("POST", "/api/turnover/build", (e) => {
  try {
   const canon = require(`${__hooks}/turnover_canon.js`);
+
+  // REFUSE TO SEAL EVIDENCE WE CANNOT PROVE. If the canonical serializer has
+  // drifted from the pinned golden vector, any content_hash written here is
+  // unreproducible by the paid sidecar or an outside expert's verifier — so the
+  // package would LOOK sealed while being worthless in the dispute it exists
+  // for. Refusing is the honest outcome; the ledger itself is untouched and
+  // every field workflow keeps running.
+  const golden = canon.verifyGoldenVector();
+  if (!golden.ok) {
+    return e.json(500, {
+      message: "Turnover build refused: the canonical hash vector does not match " +
+               "(ADR 0010, sha256-canon-v1). A package built now could not be " +
+               "independently verified. Resolve the canonicalizer drift first.",
+      expected: golden.expected,
+      got: golden.got,
+    });
+  }
 
   // Auth required (office action). requireAuth() middleware already ran; this
   // also yields the signer identity for generated_by.

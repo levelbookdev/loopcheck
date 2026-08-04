@@ -73,14 +73,16 @@ this is the index.
   append-only apply/release, derived lockout, staleness asymmetry, no green
   state. A visibility layer, never part of the energy-control decision. Free
   permanently — safety visibility is never paywalled.
-- **Signatures & Turnover** ([ADR 0010](adr/0010-signatures-and-turnover-package.md), **Proposed/frozen** — [DECISIONS.md D6](DECISIONS.md#d6--adr-0010-signatures--turnover-stays-proposed-and-frozen)) —
+- **Signatures & Turnover** ([ADR 0010](adr/0010-signatures-and-turnover-package.md), **Accepted 2026-08-04** — [DECISIONS.md D26](DECISIONS.md#d26--adr-0010-accepted-the-golden-vector-was-not-a-test-until-it-was-made-one)) —
   server-built frozen turnover snapshot + content hash, `sign.html`,
-  `turnover.html`, shared `lc-auth.js`/`login.html`. Implemented but not
-  formally accepted; no further work this cycle.
+  `turnover.html`, shared `lc-auth.js`/`login.html`. The golden vector is now
+  **enforced at the build route and asserted by the smoke test** (it was a
+  `console.log` until acceptance). The API v1 contract bump is **not** included
+  and remains M3 work ([D12](DECISIONS.md#d12--api-v1-reconciliation--version-bump-sequenced-to-m3-v10)).
 - **Selective auth + PII split** ([ADR 0011](adr/0011-auth-lockdown.md), **Accepted**) —
   public scan/reads and the deliberate accountless flag/check/LOTO/calibration
   creates survive; office writes and PII reads require an account; the
-  89-assertion smoke test asserts the matrix across guest/user/superuser.
+  94-assertion smoke test asserts the matrix across guest/user/superuser.
 
 **Shipped schema without UI (deliberately parked, not roadmap items):** segment
 acceptance (owned by MainLine — [D10](DECISIONS.md#d10--segment-acceptance-is-owned-by-mainline-correction-of-record)),
@@ -121,8 +123,9 @@ validated — all gated by CI. No new features
   all wait for M2+.
 - The formal API v1 version bump (that is M3 — [D12](DECISIONS.md#d12--api-v1-reconciliation--version-bump-sequenced-to-m3-v10)).
   M1 only makes the *documentation* of the current collection set truthful.
-- Accepting ADR 0010, building any parked schema's UI, or a general offline
-  layer.
+- ~~Accepting ADR 0010~~ (**done 2026-08-04, D26** — the code half was
+  golden-vector test hardening, which *is* M1's goal; the decision half cost no
+  build work), building any parked schema's UI, or a general offline layer.
 
 **Definition of done (testable)**
 - [x] `grep -ri "linecheck" docs/ *.md` returns only historical/superseded
@@ -568,8 +571,23 @@ One tag number appeared for two different valves in a vendor report —
 undetectable on paper. Equipment also got pulled, rebuilt, and reinstalled
 mid-startup with nothing prompting re-verification.
 
-- **Data model (this milestone).** None. All three checks below are
-  derivations over data that already exists.
+- **Data model.** One small append-only collection, **`equipment_events`**
+  (ADR 0018 §16, resolving open question #12): `project` · `tag` · `occurred_at`
+  · `kind` (`replaced` / `rebuilt` / `reinstalled` / `relocated` /
+  `nameplate_corrected`) · `serial_before` / `serial_after` (**both nullable**)
+  · `performed_by` · `vendor_company` · `note` · `client_token`.
+  `updateRule: null`, `deleteRule: null`, public create. The four validation
+  checks below need no schema at all.
+- **The re-verify marker is derived.** Any phase whose standing rests entirely
+  on checks **older than the tag's latest event** renders as "passed before the
+  {date} {kind} event." A marker, never a downgrade — the pass stays in the
+  ledger, and nothing is stored. The frozen turnover package carries the same
+  marker. **No `equipment_assets` collection and no second identity:** the
+  source's actuators carry no serial number at all, so a serial-keyed asset
+  model is holed on day one, and the real requirement ("a phase passed by a
+  machine later pulled apart must not read as current") is a derivation over
+  dates. Asset-history tracking — "where has serial X been installed" — is a
+  **conscious loss**, recorded in [D27](DECISIONS.md#d27--the-asset-behind-a-position-is-an-appended-event-not-a-second-identity).
 - **UI — four checks, not three.** (a) **Unknown-tag warning** wherever a tag
   number is *typed* rather than picked — vendor visit capture, vendor tag-list
   import, open-items text — resolved against the project's tag register,
@@ -590,13 +608,11 @@ mid-startup with nothing prompting re-verification.
 - **Validation.** Deliberately **no unique index on `serial_number`**: blanks
   are the norm and a duplicate is a finding to investigate, not a write to
   reject.
-- **Deferred to its own ADR.** The true **asset-vs-position split** — `tag` as
-  a P&ID position, the serial-numbered machine as an asset with an append-only
-  install/remove ledger, and the re-verification prompt ("this position's asset
-  changed on {date}; phases passed before that date were passed by a different
-  machine"). It changes the identity of every record pointing at a tag and must
-  not be improvised inside a validation task. See
-  [open-questions #12](open-questions.md#12-does-loopcheck-model-the-asset-separately-from-the-position).
+- ~~**Deferred to its own ADR.** The true asset-vs-position split…~~
+  **Resolved 2026-08-04** — see the `equipment_events` bullets above. The heavy
+  `equipment_assets` model was rejected, not postponed:
+  [open-questions #12](open-questions.md#12-does-loopcheck-model-the-asset-separately-from-the-position),
+  [D27](DECISIONS.md#d27--the-asset-behind-a-position-is-an-appended-event-not-a-second-identity).
 
 **M5 definition of done (testable)**
 - [ ] No `check_item` can be created with `result = "na"` and no reason; the
@@ -844,15 +860,15 @@ Status of each, per the 2026-07-21 planning session:
 | 2 | Continue Phase 6 segments? | **Decided** — no; MainLine owns ([D10](DECISIONS.md#d10--segment-acceptance-is-owned-by-mainline-correction-of-record)) |
 | 3 | Preservation ownership | **Open** — resolve boundary vs TrenchNote before any preservation UI ([D7](DECISIONS.md#d7--preservation-adr-0015-and-vendor-visits-adr-0017-uis-are-parked)) |
 | 4 | Portable identity scheme | **Deferred** — gate before first handoff ([D11](DECISIONS.md#d11--portable-identity-scheme-deferred)) |
-| 5 | Accept ADR 0010? | **Deferred** — stays Proposed/frozen ([D6](DECISIONS.md#d6--adr-0010-signatures--turnover-stays-proposed-and-frozen)) |
+| 5 | Accept ADR 0010? | **Resolved** (2026-08-04) — **Accepted**; the golden vector was a `console.log` and is now enforced + tested ([D26](DECISIONS.md#d26--adr-0010-accepted-the-golden-vector-was-not-a-test-until-it-was-made-one)) |
 | 6 | Auth access matrix | **Resolved** — ADR 0011 Accepted |
 | 7 | API v1 reconciliation | **Scheduled** — M3 ([D12](DECISIONS.md#d12--api-v1-reconciliation--version-bump-sequenced-to-m3-v10)) |
 | 8 | Offline guarantee | **Doc now, code deferred** ([D13](DECISIONS.md#d13--offline-document-guarantees-now-build-no-second-queue)) |
-| 9 | Min free turnover artifact | **Deferred** with #5; principle recorded (B5) |
+| 9 | Min free turnover artifact | **Open** — no longer *blocked* by #5 (now resolved), but not decided by it either; principle recorded (B5) |
 | 10 | Deployment topology | **Doc now** (label honestly), Pi validation M3 ([D14](DECISIONS.md#d14--deployment-topology-labeling)) |
 | 11 | Startup phase vocabulary | **Open, likely closeable** — ADR 0018 §1's two additive phases match the source sequence exactly; the dry-check and I/O-check reports map cleanly onto the existing four |
-| 12 | Asset vs. position identity | **Open, and live** — the source has a pump removed, rebuilt with new seals, and re-installed *between* the clean-water and seeding phases. Not hypothetical; needs its own ADR |
-| 13 | Turnover hash versioning | **Open** (2026-08-04) — fold ADR 0018's manifest additions into `sha256-canon-v1` before the first signed package, or plan a v2. Decide **with** #5 |
+| 12 | Asset vs. position identity | **Resolved** (2026-08-04) — an appended `equipment_events` fact + derived re-verify marker; no second identity. Asset-history tracking is a conscious loss ([D27](DECISIONS.md#d27--the-asset-behind-a-position-is-an-appended-event-not-a-second-identity)) |
+| 13 | Turnover hash versioning | **Resolved** (2026-08-04) — one fold inside `sha256-canon-v1`, no v2; partial folds forbidden ([D25](DECISIONS.md#d25--d6-amended--the-turnover-manifest-folds-into-sha256-canon-v1-now)). Precondition still live: no signed package may exist when it ships |
 
 **Unresolved for the maintainer to answer eventually** (not blocking M1): #3
 (preservation ownership) and #4 (identity scheme) both need a maintainer/domain
