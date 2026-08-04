@@ -157,7 +157,7 @@ is to separate the two moments:
   server-enforced by the `check_items` createRule. "N/A" with no reason is the
   second most ambiguous mark on a paper form.
 - **A note is never an answer**
-  ([R3](0018-review-notes.md#r3--pass-with-exception-is-a-real-answer-the-state-vocabulary-has-no-home-for--open)).
+  ([R3](0018-review-notes.md#r3--pass-with-exception-is-a-real-answer-the-state-vocabulary-has-no-home-for--decided--derived-not-a-state-adr-4)).
   A line carries a `result`, and separately may carry a `note`; prose in the
   response position is not a response. The source answers several lines with a
   bare **"see notes" and no mark at all** — a cross-reference standing *in place
