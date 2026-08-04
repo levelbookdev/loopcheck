@@ -275,6 +275,19 @@ limit stored *beside* the reading instead of in a spec section nobody opens.
 - A value that does not parse, or a line with `comparison: informational`,
   derives nothing and the tech's explicit `result` stands. Capture is never
   blocked by an unparseable reading.
+- **A multi-value reading is one template line per value** (maintainer
+  decision, 2026-08-04, resolving open question #3). Three-phase amps are three
+  lines, not one line holding three numbers. The tap count is identical, it
+  needs no schema beyond what §7 already adds, and each leg carries its own
+  limit and its own derived verdict. Vendor forms compress these onto one row
+  because paper is narrow; a phone is not.
+  **Known consequence — imbalance is not derived.** Three independent lines each
+  pass their own limit, and nothing notices that one leg is 8% low. If a
+  template ever needs a real imbalance criterion ("all three within 2% of each
+  other"), the cheap answer is an optional `group_key` on `template_items` so
+  the derivation can recognize the three as a set — deliberately **not built
+  ahead**. Until then, imbalance is a human read, and a tech who sees it flags a
+  punch item like any other finding.
 
 This closes the gap `invariants.md` names as desired invariant #3 ("units and
 calculation methods are explicit") for value lines, without a forms designer
@@ -558,19 +571,18 @@ change** and must land before the first real package is signed, or behind a
 2. **`deferred` at the check level vs. the line level.** This ADR puts it at
    both (§2 and §4). If a whole-check deferral is always the real case, the
    line-level value could be dropped to keep the response vocabulary smaller.
-3. **Numeric parsing of multi-value readings.** "480/478/481 V" is one line
-   holding three per-leg values. Does per-leg voltage deserve three template
-   lines (simple, more taps), or a structured multi-value reading (fewer taps,
-   more model)? ~~Recommendation: three lines — it stays inside the four
-   response types and each leg gets its own limit.~~ **Recommendation reversed
-   2026-08-04 after reading the source** ([R1](0018-review-notes.md#r1--per-leg-readings-the-adrs-recommendation-is-reversed--open-recommendation-changed)):
-   one vendor form carries **three triplets — nine numbers** — on what it treats
-   as one or two lines. Three template lines per triplet turns that into nine
-   lines on a glove-sized phone form, which is not "more taps," it is a
-   different form. This question is now genuinely **undecided**; a repeatable
-   value group on one `template_item` is the leading candidate. Note that
-   per-leg *imbalance* is the thing most worth deriving, so the cheapest option
-   (one free-text line, no numeric) quietly gives up the prize.
+3. ~~**Numeric parsing of multi-value readings.**~~ **RESOLVED by the
+   maintainer, 2026-08-04: one template line per leg.** See §7's
+   multi-value clause. The path: the ADR recommended three lines; the source
+   reading reversed that recommendation on the grounds that one vendor form
+   carries three triplets — nine numbers — on what it treats as one or two
+   lines ([R1](0018-review-notes.md#r1--per-leg-readings-the-adrs-recommendation-is-reversed--decided--original-recommendation-upheld));
+   the maintainer upheld the original recommendation. **The reversal
+   under-weighted that the tap count is identical either way** — nine readings
+   are typed whether they sit in one line with three boxes or three lines with
+   one box each. The vendor form's compact layout is a paper constraint, not a
+   phone one. Three lines needs no new schema, no value-group concept, and
+   gives each leg its own limit and derived verdict.
 4. **Asset/position split** — worth doing at all, or is the re-verification
    prompt achievable with a simpler "nameplate changed on this tag" event?
    (Open question #12.)

@@ -9,15 +9,18 @@ was read directly afterwards, and this file records what that reading confirmed,
 what it corrected, and what it newly raised — rather than silently rewriting the
 ADR's Context section as though the source had been read all along. Provenance
 matters here for the same reason it matters everywhere else in this repo: a
-record that quietly improves itself is not a record.
+record that quietly improves itself is not a record. The same rule applies to
+this file: **R1 was decided against and is left standing with its flaw named**,
+not deleted.
 
 **Verdict: the ten observations hold.** Every one is present in the source, and
 several appear close to verbatim — the deferral annotation, the blank
 countersignature block, the as-left condition, the instrument spans and logging
 intervals, and a signed phase-entry pre-run checklist all read as written. The
 ADR's structural answers are unchanged by the reading. What the source *did*
-change is one recommendation (R1, now reversed), three refinements folded into
-the ADR (R2, R6, R7), and four questions the summary did not raise (R3–R5, R8).
+change is four refinements folded into the ADR (R2, R6, R7, R8) and three
+questions the summary did not raise (R3–R5). R1 proposed reversing a
+recommendation and was **decided against** by the maintainer.
 
 **What was read.** A 24-page compiled startup submittal covering five
 independent vendors, in five mutually incompatible form formats: a rotary-lobe
@@ -29,9 +32,15 @@ No project, company, or person is identified in these notes.
 
 ---
 
-## R1 — Per-leg readings: the ADR's recommendation is **reversed** · *open, recommendation changed*
+## R1 — Per-leg readings: the ADR's recommendation is **reversed** · **DECIDED — original recommendation upheld**
 
-**ADR location:** open question #3.
+**Resolved by the maintainer, 2026-08-04: one template line per leg.** This
+comment argued for reversing the ADR's recommendation; the maintainer upheld the
+original. The argument below is left standing as written, with the flaw named
+at the end — a review note that quietly edits itself to agree with the outcome
+is worth nothing to the next reader.
+
+**ADR location:** open question #3 (now resolved); §7 carries the settled rule.
 
 The ADR recommended three template lines for a three-phase reading ("simple,
 more taps... each leg gets its own limit"). The source contradicts the premise.
@@ -64,6 +73,28 @@ costs nothing and buys nothing. Neither is chosen here.
 **Note for whoever decides:** per-leg imbalance is precisely the thing worth
 deriving — three legs within a few percent is a pass, one leg off is a finding —
 so the "one free-text line" option quietly gives up the main prize.
+
+---
+
+### Where this comment was wrong
+
+**The tap count is identical either way.** Nine readings get typed whether they
+sit in one line with three boxes or three lines with one box each. This comment
+counted *prompts* and called them taps, and treated the vendor form's compact
+layout as evidence about phone ergonomics when it is evidence about paper being
+narrow. Three lines needs no schema beyond what §7 already adds, introduces no
+value-group concept, and gives each leg its own limit and derived verdict.
+
+**What survives:** the imbalance point. Three independent lines each pass their
+own limit and nothing notices one leg 8% low. ADR 0018 §7 now records that
+consequence explicitly, with an optional `group_key` on `template_items` as the
+cheap future answer if a template ever needs a real imbalance criterion —
+deliberately not built ahead. Until then imbalance is a human read.
+
+**Method note for future reviews:** this comment argued from a document's
+*layout*. A vendor's form is evidence about what facts exist and what disputes
+arise; it is not evidence about how a phone should collect them. Two different
+questions, and this note conflated them.
 
 ## R2 — Tag validation must check a report against **itself** · **RESOLVED in ADR 0018 §11**
 

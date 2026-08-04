@@ -281,10 +281,11 @@ describes for Phase 4.
 **Source verification (2026-08-04).** ADR 0018 was written from a *summary* of
 the observations; the compiled report package was then read directly and the
 reading recorded in [`0018-review-notes.md`](adr/0018-review-notes.md). All ten
-observations were confirmed, several close to verbatim. The reading **reversed
-one recommendation** (per-leg readings, M5.2), **added a fourth tag-validation
-check** (M5.3), and **raised three open questions** the summary did not (M5.1).
-Those changes are folded into the entries below.
+observations were confirmed, several close to verbatim. The reading **added a
+fourth tag-validation check** (M5.3) and **raised three open questions** the
+summary did not (M5.1); it also proposed reversing the multi-value-reading
+recommendation, which the maintainer **decided against** — M5.2 now records the
+settled rule. Those changes are folded into the entries below.
 
 **Why this track sits after v1.0, not before it.**
 [D2](DECISIONS.md#d2--trust-before-features-m1-comes-first) (trust before
@@ -517,17 +518,21 @@ desired invariant #3 (explicit units and calculation method) for value lines.
   Service factor was missing until the source reading: every motor nameplate
   block in the package carries one, and it is what makes an over-nameplate amp
   reading arguable rather than automatically a failure.
-- **Blocked on a shape decision — multi-value readings.** One vendor form
-  records power consumption as **three triplets, nine numbers**, on what it
-  treats as one or two lines (per-leg amps plus two voltage sets). ADR 0018
-  originally recommended one template line per leg; the source **reversed that
-  recommendation** ([review notes R1](adr/0018-review-notes.md#r1--per-leg-readings-the-adrs-recommendation-is-reversed--open-recommendation-changed))
-  — nine lines on a glove-sized phone form is a different form, not more taps.
-  A repeatable value group on one `template_item` is the leading candidate.
-  **Decide before the migration**, and note that per-leg *imbalance* is the
-  thing most worth deriving, so the cheapest option (one free-text line, no
-  numeric) gives up the prize. Also cost the dual-voltage nameplate case: the
-  source records amps as `24.8/12.4`, which a naive parse reads as one value.
+- **Multi-value readings: one template line per value** — settled (maintainer
+  decision 2026-08-04, ADR 0018 §7 and open question #3). Three-phase amps are
+  three lines. The tap count is the same either way, it needs no schema beyond
+  what this item already adds, and each leg carries its own limit and verdict;
+  vendor forms compress these onto one row because paper is narrow, not because
+  a phone should. **Known consequence:** per-leg *imbalance* is not derived —
+  three lines each pass their own limit and nothing notices one leg 8% low. An
+  optional `group_key` on `template_items` is the cheap future answer if a
+  template ever needs a real imbalance criterion; **not built ahead**, and until
+  then imbalance is a human read that produces a punch item like any other
+  finding. ([Review notes R1](adr/0018-review-notes.md#r1--per-leg-readings-the-adrs-recommendation-is-reversed--decided--original-recommendation-upheld)
+  argued the other way and was decided against; it is left standing with its
+  flaw named.)
+  Also cost the dual-voltage nameplate case: the source records amps as
+  `24.8/12.4`, which a naive parse reads as one value.
 - **UI.** A `value` line shows its limit inline as the tech types, with live
   in-range / out-of-range feedback before submit. Amp-draw lines compare
   against `tags.full_load_amps` and show the percentage. The reading itself is
