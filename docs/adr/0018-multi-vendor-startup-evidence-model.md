@@ -17,10 +17,10 @@ directly afterwards, on 2026-08-04, and the reading is recorded in
 [`0018-review-notes.md`](0018-review-notes.md). Every observation was confirmed.
 Four readings have now happened — a summary, a text-layer pass, a corrected
 render pass, and a full render of the valve reports and clean-water checklists.
-Comments **R2, R6, R7, R8, R21 and R22 are folded in below**; **R3–R5, R9–R13
-and R15 were decided** and appear as §4, §5, §11 and §§13–14; **R1 proposed
-reversing a recommendation and was decided against**; **R14 and R16–R20 remain
-open** for the maintainer.
+Comments **R2, R6, R7, R8, R21 and R22 are folded in below**; **R3–R5, R9–R13,
+R15 and R18 were decided** and appear as §4, §5, §11, §12 and §§13–14; **R1
+proposed reversing a recommendation and was decided against**; **R14, R16, R17,
+R19 and R20 remain open** for the maintainer.
 The Context section below is left as originally written rather than retrofitted —
 what the ADR knew when, and from what, is itself part of the record. Three of
 its ten bullets are now known to be imprecise in detail while correct in
@@ -642,6 +642,43 @@ configured) is real and worth recording. Making it *block* is not.
   is to record that they did, visibly, not to stand in the doorway. Hard-
   blocking would also break the field tier the moment a gate check is owed by
   someone who is not on site.
+- **The gate reconciles against the punch list — by derivation, with no new
+  field** (**R18**, resolved 2026-08-04). A gate condition and a punch item are
+  routinely the same fact recorded twice: in the source, a tank-cleanliness item
+  is raised as a contractor punch item at one phase and re-appears six weeks
+  later as a line on the next phase's gate, with nothing connecting them. R18
+  proposed a gate-line → punch-item relation. **Rejected — the pieces already
+  exist.** `punch_items.blocks_phase` (§6) names the phase an item blocks, and
+  `source_check` / `closing_check` (ADR 0004) already tie punch items to the
+  checks that raised and cleared them. Three derivations close the loop:
+
+  1. **Before the gate is run** — the phase's capture entry point and
+     `readiness.html` list open punch items with `blocks_phase = P` on the
+     subject *beside* the unsatisfied gate. That is the lookahead answer to
+     "what will stop us next week," and it needs nothing new.
+  2. **At the moment the gate passes** — when a gate check for P folds to pass
+     while open `blocks_phase = P` items remain, prompt to close them, offering
+     **the gate check itself as `closing_check`**. That is precisely what ADR
+     0004 designed that field for, and it is the moment the divergence is
+     cheapest to catch.
+  3. **After** — a gate that folds pass with open blocking items **warns**, and
+     the warning names them. Never blocks: D24 and the bullet above.
+
+  **Why not a line-level link.** `check_items` is the highest-volume collection
+  in the product; a relation there would be paid on every line of every check to
+  serve a correspondence a human standing at the gate makes instantly from a
+  list of two or three items. It would also put the work at **gate capture** —
+  the moment we least want friction, because it is the one that happens in the
+  field.
+
+  **Residual, named:** with a nine-line gate and a dozen blocking items the
+  mapping does get murky. If that proves real, the cheap answer is a nullable
+  `blocks_template_item` on `punch_items` — set when the item is raised *from* a
+  gate line, where the association is already known. Deliberately **not built
+  ahead**.
+
+  R18's goal was to make the gate a derivation rather than a second checklist.
+  This reaches it by having the gate **read** the punch list, not link to it.
 
 ### 13. An accepted operating restriction is its own appended record — not a sixth state
 

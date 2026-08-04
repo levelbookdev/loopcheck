@@ -734,7 +734,31 @@ its limit when the vendor supplies none, and whether a value line with no limit
 should be visibly marked as "recorded, not evaluated" rather than looking like a
 pass. Recommendation: the latter, at minimum.
 
-## R18 — A gate is not linked to the punch items that satisfy it · *open*
+## R18 — A gate is not linked to the punch items that satisfy it · **DECIDED — finding upheld, mechanism rejected (ADR §12)**
+
+**Resolved by the maintainer, 2026-08-04: reconcile by derivation, add no
+field.** The finding stands — a gate condition and a punch item are routinely the
+same fact recorded twice. **This comment's recommended mechanism does not**, and
+for the same reason R10's did: it proposed a relation without checking what was
+already there. `punch_items.blocks_phase` (§6) and `source_check` /
+`closing_check` (ADR 0004) already carry the association at phase granularity,
+which is the granularity a human at the gate actually needs.
+
+What the comment got right and should be kept: "the punch list is a parallel
+universe" is the real defect, and closing the last blocking item **must**
+visibly move the gate. What it got wrong: that this requires a link. It requires
+the gate to *read* the punch list — before it is run, at the moment it passes,
+and after — which §12 now specifies.
+
+**Also wrong on cost.** "Low cost — `punch_items` and `check_items` both already
+exist" ignored that `check_items` is the highest-volume collection in the
+product, and that the link would be paid at **gate capture**, in the field. A
+derivation costs nothing at capture and nothing per row.
+
+*Third strike for the same reviewing habit — R1 argued from ergonomics without
+the tap arithmetic, R10 proposed a mechanism the adjacent ADR already provided,
+and this one proposed a relation two existing fields already imply. The pattern
+is proposing structure before reading what is there.*
 
 **ADR location:** §12.
 
