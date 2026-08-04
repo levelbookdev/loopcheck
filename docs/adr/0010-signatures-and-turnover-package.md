@@ -2,6 +2,23 @@
 
 **Status:** proposed · **Date:** 2026-07-10
 
+> **The manifest allowlist and canonical form are unfrozen for one fold**
+> (2026-08-04, DECISIONS **D25** amending D6). ADR 0018 adds eight
+> hash-affecting entries to the manifest, and they land **together, in
+> `sha256-canon-v1`** — not a v2 — because no real package has been signed, and
+> a version boundary that protects no history is worse than none. See
+> [ADR 0018 §15](0018-multi-vendor-startup-evidence-model.md) for the decision
+> and the enumerated additions.
+>
+> **Precondition before the fold ships:** confirm no `turnover_packages` record
+> carrying real signatures exists on any live instance. If one does, the
+> additions go behind `sha256-canon-v2` instead. The golden vector is
+> regenerated as the acceptance test; **partial folds are forbidden**, since
+> each addition alone changes the canonical bytes.
+>
+> **This does not accept ADR 0010.** C4's on-page wording, required-role
+> semantics, and the D12 contract bump still gate acceptance.
+
 **Implementation status (committed + review-hardened, 2026-07-12):** the
 migration (`turnover_packages` + `signatures`, `1789000026`), the server
 builder/canonicalizer (`pb_hooks/turnover.pb.js` + `turnover_canon.js`, with a

@@ -307,3 +307,31 @@ engine scope LoopCheck refuses to become.
 **Rejected.** Hard-blocking phase entry; a dedicated `gates` collection (a
 gate is a check).
 **Cross-ref.** ADR 0018 §12; ADR 0007.
+
+### D25 — D6 amended — the turnover manifest folds into `sha256-canon-v1` now
+**Decision.** ADR 0018's eight hash-affecting manifest additions land in **one
+pass, into `sha256-canon-v1`**, before any real package is signed — not behind a
+`sha256-canon-v2`. D6 is **amended, not reversed**: the canonical form and
+manifest allowlist are unfrozen for this fold, while ADR 0010's *acceptance*
+stays blocked on its own gates (the "not a qualified e-signature" wording C4,
+required-role semantics, and the D12 contract bump). ADR 0010 stays **Proposed**
+with a completed allowlist. Partial folds are forbidden — each addition alone
+changes the canonical bytes, so piecemeal shipping means several silent breaks
+instead of one deliberate one. The golden vector is regenerated as the
+acceptance test.
+**Precondition.** The builder and canonicalizer are already shipped and running,
+so this is a code change. **Confirm no `turnover_packages` record carrying real
+signatures exists on any live instance before the fold lands.** If one does, the
+decision inverts and the additions go behind `sha256-canon-v2`; a signed package
+that stops verifying is the outcome the ADR exists to prevent. Test packages are
+discarded, not migrated.
+**Rationale.** A hash version exists to protect history, and there is no history
+to protect. A v2 carrying additions no v1 package ever saw would leave a version
+boundary that records nothing. D6's own reasoning — that hash semantics are hard
+to change once real records exist — argues *for* completing the allowlist now,
+because the allowlist is exactly the thing that becomes unchangeable. D6
+conflated the canonical form with acceptance of the ADR; they are separable, and
+only one of them gets more expensive with delay.
+**Rejected.** Accepting ADR 0010 wholesale (its legal and contract gates are
+untouched by this work); minting `sha256-canon-v2` (no history to protect).
+**Cross-ref.** ADR 0018 §15 and open question 5; ADR 0010; D6, D12.

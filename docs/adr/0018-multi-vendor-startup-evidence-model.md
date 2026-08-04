@@ -627,6 +627,56 @@ manifest additions in the single fold that open question 5 recommends —
 real package is signed and v1 is simply defined to include it. **Decide and land
 this together with open question 5, not after it.**
 
+### 15. One fold into `sha256-canon-v1`, before any package is signed
+
+**Decided by the maintainer 2026-08-04, resolving open question 5.**
+
+Every manifest addition in this ADR is hash-affecting. The choice was to absorb
+them all into `sha256-canon-v1` now, or accept ADR 0010 as it stands and retire
+v1 into a `v2` later. **The fold happens now, in one pass, into v1.**
+
+**Why v1 rather than v2.** A hash scheme version exists to protect *history* —
+it lets old packages keep verifying under the rules they were sealed with. There
+is no history to protect: **no real package has been signed.** Minting a v2 to
+carry additions that no v1 package ever saw would leave a version boundary that
+records nothing, and every future reader would have to learn a distinction that
+never mattered. The cheap moment is the one where the cost is zero, and it does
+not come back.
+
+**Precondition, and it is a real one.** ADR 0010's builder and canonicalizer are
+**already shipped and running** (`pb_hooks/turnover.pb.js`,
+`turnover_canon.js`, with a golden-vector self-check on load). So this is a code
+change, not a documentation change. Before the fold lands, **confirm no
+`turnover_packages` record carrying real signatures exists on any live
+instance.** If one does, this decision inverts on the spot and the additions go
+behind `sha256-canon-v2` — a signed package that stops verifying is the one
+outcome this whole ADR exists to prevent. Test packages are discarded, not
+migrated.
+
+**Scope of the fold** — the eight additions listed above, landing together, with
+the **golden vector regenerated** as the acceptance test. Partial folds are
+forbidden: each one alone would change the canonical bytes, so shipping them
+piecemeal means several silent breaks instead of one deliberate one.
+
+**This does not accept ADR 0010, and D6 is amended rather than reversed**
+(DECISIONS D25). D6 froze ADR 0010 on the reasoning that "accepting it now
+hardens hash/attestation semantics that are hard to change once real records
+exist." That reasoning **argues for this fold, not against it** — the allowlist
+is precisely the thing that becomes unchangeable, so it is the thing to get
+complete while it is still free. D6 conflated two separable questions:
+
+- **the canonical form and manifest allowlist** — unfrozen by this decision,
+  because delay makes it strictly more expensive and never cheaper;
+- **acceptance of ADR 0010 as a whole** — still blocked, on gates this ADR does
+  not touch: the "not a qualified e-signature" wording (C4), required-role
+  semantics, and the API v1 contract bump (D12).
+
+So ADR 0010 stays **Proposed** with a completed allowlist. That is a coherent
+state: the bytes are settled, the legal and contract questions are not.
+
+**Unblocks §9.** The Conflicts table below recorded signature-role QC as
+"blocks on open question #5." It no longer does.
+
 ## What all of this adds to the frozen turnover package
 
 ADR 0010's manifest gains, per scope:
@@ -645,11 +695,17 @@ ADR 0010's manifest gains, per scope:
    ADR.
 6. **As-left conditions and scope-gap punch items** rendered as their own
    sections rather than buried in the punch list (§6).
+7. **Active operating restrictions, per subject** (§13) — the limit as data with
+   its cause and provenance. The one section whose primary reader is the
+   operator years later rather than the GC at turnover.
+8. **`template_version` on every included check** (§14) — the index that says
+   which revision of the questions a frozen answer set was complete for.
 
 Each addition is an allowlisted set of immutable fields entering the
 `sha256-canon-v1` canonical bytes, so **every one of them is a hash-affecting
 change** and must land before the first real package is signed, or behind a
-`sha256-canon-v2`. That is the sharpest sequencing constraint in this ADR.
+`sha256-canon-v2`. That is the sharpest sequencing constraint in this ADR, and
+it is resolved by open question 5 below: **one fold, now, into v1.**
 
 ## Alternatives rejected
 
@@ -747,7 +803,7 @@ change** and must land before the first real package is signed, or behind a
 | Configurable phases (§1) | ARCHITECTURE §7 rejects stored required-phase maps | Global vocabulary + template-library configuration; no per-project map |
 | No ambiguous blanks (§4) | ARCHITECTURE §6 deliberately records unanswered lines | Blank stays legal at capture; illegal at sign/freeze |
 | Typed values (§7) | CLAUDE.md constraint #5: exactly four response types | Limits are metadata on `value`; no fifth type |
-| Signature QC (§9) | DECISIONS D6 freezes ADR 0010 | **Blocks on open question #5** — ADR 0010 must be unfrozen first |
+| Signature QC (§9) | DECISIONS D6 freezes ADR 0010 | ~~Blocks on open question #5~~ **Unblocked 2026-08-04 (§15):** D6 is amended by D25 — the manifest allowlist and canonical form are unfrozen for one fold; ADR 0010's *acceptance* stays blocked on its own gates |
 | Vendor evidence UI (§5) | DECISIONS D7 parks the ADR 0017 UI | D7's trigger condition met; D7 amended by D21 |
 | Continuation UI (§10) | DECISIONS D8 parks the open→resolve UI | Same; D8 amended by D21 |
 | Punch party vocabulary (§6) | `docs/API.md` publishes `assigned_party` as v1 | Breaking; requires the D12 version bump — sequenced post-M3 |
@@ -777,10 +833,9 @@ change** and must land before the first real package is signed, or behind a
 4. **Asset/position split** — worth doing at all, or is the re-verification
    prompt achievable with a simpler "nameplate changed on this tag" event?
    (Open question #12.)
-5. **Hash versioning.** Accept ADR 0010 *after* folding these manifest
-   additions in (one canonical scheme), or accept it now and plan
-   `sha256-canon-v2`? Recommendation: fold first — no real packages are signed
-   yet, so the cheap moment is now.
+5. ~~**Hash versioning.**~~ **RESOLVED by the maintainer, 2026-08-04: fold
+   first, into `sha256-canon-v1`, before any real package is signed.** See
+   §15.
 
 *Questions 6–8 were raised by the source reading, not the summary. Full
 reasoning in [`0018-review-notes.md`](0018-review-notes.md) R3–R5.*
