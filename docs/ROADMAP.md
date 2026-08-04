@@ -472,9 +472,18 @@ gate moves to where ambiguity becomes permanent (ADR 0018 §4).
   Capture itself is never blocked (hard constraint #1).
 - **Turnover.** A **completeness assertion**: the freeze fails while any
   included check item is blank, so a frozen package can never contain an
-  ambiguous blank. The strongest single evidence improvement in the track. QC
-  also flags a **failed line carrying no linked punch item** — the source has
-  exactly one such orphan failure, appearing in no action-item list anywhere.
+  ambiguous blank. The strongest single evidence improvement in the track.
+- **Orphan failures are the same class of defect, and the flag fires at
+  sign/freeze — not at turnover.** A **failed line carrying no linked punch
+  item** is a line whose consequence has nowhere to go, exactly like a blank.
+  The source has one: the line confirming automatic recovery from simulated
+  power-loss events, marked N, **note cell empty**, appearing in no action-item
+  list anywhere in the package — and the page was **signed as a whole**
+  immediately afterwards. A turnover-time check would have caught it far too
+  late; the signature had already happened. So it belongs beside §4's
+  blank-result gate at sign time. Whether it hard-blocks (as blanks do) or warns
+  loudly is the open part — §4's gate is the precedent, and the field evidence
+  says a warning would have been clicked through.
 - **Three questions this item must answer before its task is written**
   (source-reading findings, [ADR 0018 review notes](adr/0018-review-notes.md)
   R3–R5, open questions 6–8):
