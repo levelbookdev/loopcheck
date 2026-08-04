@@ -701,7 +701,26 @@ it (`satisfied_by_other_evidence`), ideally carrying a pointer to the check or
 line that did the demonstrating. Without the pointer it is just a nicer-sounding
 blank.
 
-## R16 — Nothing flags a tag with phase evidence and no vendor report · *open*
+## R16 — Nothing flags a tag with phase evidence and no vendor report · **DECIDED — expectation declared by template (ADR §5)**
+
+**Resolved by the maintainer, 2026-08-04.** The finding holds in both directions.
+The recommendation was **broader than its own diagnosis** and is narrowed:
+
+- This comment observed the right signal — "the empty cell in a column that is
+  populated for every sibling" — and then recommended the wrong rule, "tags in
+  scope with no vendor report." Most tags never involve a vendor, so that rule
+  fires on nearly every row and trains people to skip the QC block.
+- Sibling comparison is not the primary rule either, because of **R22's
+  principle**: a rule derived from the reports on hand reports nothing missing
+  in the worst case, where an entire equipment type was never visited at all.
+  So the expectation is **declared by the GC's template**
+  (`vendor_report_expected`, frozen onto the check), and sibling comparison is
+  demoted to a template-quality hint that suggests setting the flag — the same
+  shape as R5's "consider a template split."
+- The **reverse direction is dropped as a separate rule**: a report naming a tag
+  outside the register is §11's existing warning with R13's normalization in
+  front of it, and a report covering tags outside this package's scope is
+  ordinary, not a finding.
 
 **ADR location:** §5 turnover vendor report index, §11 validation.
 

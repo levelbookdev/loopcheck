@@ -18,8 +18,8 @@ directly afterwards, on 2026-08-04, and the reading is recorded in
 Four readings have now happened — a summary, a text-layer pass, a corrected
 render pass, and a full render of the valve reports and clean-water checklists.
 Comments **R2, R6, R7, R8, R21 and R22 are folded in below**; **R3–R5, R9–R13,
-R15 and R18 were decided** and appear as §4, §5, §11, §12 and §§13–14; **R1
-proposed reversing a recommendation and was decided against**; **R14, R16, R17,
+R15, R16 and R18 were decided** and appear as §4, §5, §11, §12 and §§13–14;
+**R1 proposed reversing a recommendation and was decided against**; **R14, R17,
 R19 and R20 remain open** for the maintainer.
 The Context section below is left as originally written rather than retrofitted —
 what the ADR knew when, and from what, is itself part of the record. Three of
@@ -345,6 +345,51 @@ that phase (**R8**: the source package compiles one inspection report dated more
 than two years before the rest of the set, presented as though contemporaneous).
 A warning, not a rejection — an old report may be perfectly valid, and the
 reader decides.
+
+**A missing vendor report is a finding only where one was expected** (**R16**,
+resolved 2026-08-04). The source has the gap in both directions: one valve is
+confirmed in a phase record with **no vendor inspection report anywhere in the
+package** while six sibling valves each have one, and three of the reports that
+do exist cover tags the phase record never mentions.
+
+The expectation is **declared by the GC's template, never inferred from what
+arrived** — R22's principle from §9, and it applies here for the same reason.
+A rule that derives "was a vendor report expected?" from the reports on hand
+reports nothing missing in the worst case, where a whole equipment type was
+never visited at all.
+
+- **`checklist_templates.vendor_report_expected`** (bool), freezing onto the
+  check as `checks.vendor_report_expected` exactly as `required_signature_roles`
+  does (§9) — a template edited next year must not change what a signed check
+  expected. This is the fourth flag of its kind, beside `gate_for_phase` (§12),
+  `required_signature_roles` (§9) and `conditional` (§4); all template metadata,
+  none of it a forms designer.
+- **The QC is derived** and lists, beside the missing countersignatures in the
+  same block, every check whose frozen `vendor_report_expected` is set and whose
+  tag has no `service_visits` record for that phase. Shown before the freeze;
+  **warns, never blocks** (D24).
+- **A template-quality hint closes the loop**, exactly as R5's does: when most
+  tags of a type carry vendor visits for a phase whose template does *not* set
+  the flag, the template page suggests setting it. That is how the flag gets set
+  without an upfront authoring pass nobody will do.
+
+**Rejected — "flag every tag in scope with no vendor report."** Most tags never
+involve a vendor at all; the rule would fire on nearly every row and train
+people to skip the QC block, which is the same noise failure §4's blank gate and
+R3's badge trigger were shaped to avoid.
+
+**Rejected — a separate reverse-direction rule.** A vendor report naming a tag
+outside the register is already §11's non-existent-tag warning, now with R13's
+normalization in front of it. A vendor report covering tags outside this
+package's *scope* is ordinary — vendors do not visit per-system — and is not a
+finding.
+
+**On the tension with R5.** R5 rejected a rule whose applicability depended on
+sibling tags' data; this one embraces it. The difference is the moment, not the
+principle: **that** rule was enforced at capture, against a person in the field
+whose device may be offline and to whom an unpredictable rule is hostile.
+**These** are computed server-side at package build and on the template page,
+where the whole project is in hand and nobody is standing in a dead zone.
 
 **This unparks the ADR 0017 UI** (DECISIONS D7), which was parked pending "a
 real job requests it." These observations are that request.
@@ -823,9 +868,13 @@ decided before the fold ships**, landing together, with the **golden vector
 regenerated** as the acceptance test. Partial folds are forbidden: each one
 alone would change the canonical bytes, so shipping them piecemeal means several
 silent breaks instead of one deliberate one. *Added after this section was
-written:* `check_items.not_performed_reason` and `satisfied_by` (§4, R4). The
-caveated-pass derivation (§4, R3) adds no hashed field — punch items and
-restrictions are already in the manifest.
+written:* `check_items.not_performed_reason` and `satisfied_by` (§4, R4), and
+`checks.vendor_report_expected` (§5, R16), which freezes onto the check like
+`required_signature_roles` and so enters the per-check allowlist. The
+caveated-pass derivation (§4, R3) and the gate/punch reconciliation (§12, R18)
+add no hashed field — punch items and restrictions are already in the manifest,
+and both are derivations. R16's QC line lands inside the QC block that is
+already addition 4, not as a new manifest entry.
 
 **D6 is amended rather than reversed** (DECISIONS D25). D6 froze ADR 0010 on the
 reasoning that "accepting it now hardens hash/attestation semantics that are hard

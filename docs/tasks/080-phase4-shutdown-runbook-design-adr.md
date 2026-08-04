@@ -1,7 +1,9 @@
 # 080 — Phase 4 design: shutdown runbook collections + execution model (ADR first)
 
-Status: BLOCKED (2026-08-02 — the M1 gate is satisfied at v0.9.0; the remaining
-blocker is the domain interview with the maintainer, see Context)
+Status: IN PROGRESS (2026-08-04 — domain interview DONE, six decisions taken;
+`docs/adr/0019-shutdown-runbook-execution.md` written and **awaiting the
+maintainer's acceptance**. Build tasks `100`+ are queued only after acceptance,
+per this task's own acceptance criteria.)
 
 Milestone: M2 Shutdown Runbooks + Punch List (v0.10.0)
 Depends on: 070 (all of M1)
@@ -30,8 +32,10 @@ to the maintainer, then writes the ADR.
 ## Scope
 
 **Create:**
-- `docs/adr/0018-shutdown-runbook-execution.md` (next free ADR number — verify it
-  is still `0018` at execution time; do not reuse a taken number).
+- ~~`docs/adr/0018-shutdown-runbook-execution.md`~~ → **`docs/adr/0019-shutdown-runbook-execution.md`**.
+  This task anticipated the collision and told the agent to check: `0018` was
+  claimed on 2026-08-04 by the multi-vendor startup evidence model. **Next free
+  is `0019`** — claim it in `docs/adr/README.md` before writing the file.
 - After acceptance: append the follow-on build tasks (`100`, `110`, …) to
   `docs/tasks/` using the template in `docs/tasks/README.md`.
 
@@ -68,18 +72,23 @@ to the maintainer, then writes the ADR.
 
 ## Acceptance criteria
 
-- [ ] A domain interview with the maintainer happened and its decisions are
-      recorded in the ADR (not assumed).
-- [ ] `docs/adr/0018-shutdown-runbook-execution.md` exists, is marked `accepted`
-      (or `proposed` awaiting the maintainer's acceptance), and defines the
-      collections, append-only model, offset/hold-point/role representation,
-      derived status, auth posture, and safety framing.
-- [ ] The ADR explicitly states the module records and coordinates but never
+- [x] A domain interview with the maintainer happened and its decisions are
+      recorded in the ADR (not assumed). *(2026-08-04 — six decisions: hold
+      points warn-never-block; both offset forms kept; append-only step-event
+      ledger; per-project role registry; contingencies invocable and recorded;
+      abort is an event with restoration in the same shutdown. Four smaller
+      points are marked in §7 as assumptions from established patterns.)*
+- [x] `docs/adr/0019-shutdown-runbook-execution.md` exists, marked `proposed`
+      awaiting the maintainer's acceptance, and defines the collections,
+      append-only model, offset/hold-point/role representation, derived status,
+      auth posture, and safety framing. *(0018 was taken; 0019 claimed in the
+      register.)*
+- [x] The ADR explicitly states the module records and coordinates but never
       authorizes (no interlocks / "safe to proceed" authority), consistent with
-      the LOTO doctrine.
+      the LOTO doctrine. *("Safety framing — non-negotiable".)*
 - [ ] Follow-on build tasks (`100`+) are appended to `docs/tasks/` **only after**
       the ADR is accepted, using the standard template.
-- [ ] No migration/schema/UI/seed changed in this task.
+- [x] No migration/schema/UI/seed changed in this task.
 
 ## Guardrails
 
