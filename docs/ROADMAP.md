@@ -278,6 +278,14 @@ design capture only, no migration, no UI*). **ADR 0018 must be accepted before
 any task in M4–M6 is written**, per the design-task pattern `CLAUDE.md`
 describes for Phase 4.
 
+**Source verification (2026-08-04).** ADR 0018 was written from a *summary* of
+the observations; the compiled report package was then read directly and the
+reading recorded in [`0018-review-notes.md`](adr/0018-review-notes.md). All ten
+observations were confirmed, several close to verbatim. The reading **reversed
+one recommendation** (per-leg readings, M5.2), **added a fourth tag-validation
+check** (M5.3), and **raised three open questions** the summary did not (M5.1).
+Those changes are folded into the entries below.
+
 **Why this track sits after v1.0, not before it.**
 [D2](DECISIONS.md#d2--trust-before-features-m1-comes-first) (trust before
 features) and [D19](DECISIONS.md#d19--v10-stranger-ready-bar) already fix
@@ -392,15 +400,28 @@ pending a real job asking for it. These observations are that request
   on `tag.html`, and a project vendor-visit ledger. The report is captured in
   the same flow, and a visit whose report never uploaded is **loudly flagged
   and retried** — never silently presented as if the PDF exists (ADR 0017 §2).
-- **Validation.** `result` required; `time_off_site` without `time_on_site`
-  rejected; the existing tag-XOR-system + same-project createRule unchanged;
-  the report stays non-constitutive so a failed second upload can never erase
-  the visit.
+- **Validation.** `result` is required and **always entered explicitly** —
+  never derived or inferred from narrative text, by the UI or any future import
+  path (a real service order in the source both checks "equipment not released
+  for use" and states in prose that the unit is ready; nothing should resolve
+  that automatically). `time_off_site` without `time_on_site` rejected; the
+  existing tag-XOR-system + same-project createRule unchanged; the report stays
+  non-constitutive so a failed second upload can never erase the visit.
+- **The narrative is evidence.** `summary` holds the vendor's own words
+  **verbatim, never paraphrased on entry**, and surfaces on the tag page, not
+  only in the project ledger. The most dispute-relevant text in the source
+  package is five paragraphs of one vendor's technical dissent about another
+  trade's wiring — neither a check result nor a punch item, and worthless the
+  moment someone condenses it.
 - **Turnover.** **A vendor report index keyed by tag** — for every tag in
-  scope, every visit with company, rep, dates, hours, result, open items, and
-  the attachment digest of the report file. This is the highest-value single
-  addition in the whole track: the table that says *here is every vendor who
-  touched this tag, and here is their signed paper.*
+  scope, every visit with company, rep, dates, hours, result, open items,
+  verbatim narrative, and the attachment digest of the report file. This is the
+  highest-value single addition in the whole track: the table that says *here is
+  every vendor who touched this tag, and here is their signed paper.* The index
+  carries each visit's date **relative to the phase it evidences** and flags one
+  materially older than that phase — the source package compiles an inspection
+  report dated over two years before the rest of the set, presented as though
+  contemporaneous. A warning, not a rejection.
 
 **M4 definition of done (testable)**
 - [ ] ADR 0018 is **Accepted** and its §§1, 2, 5, 6 are implemented as written
@@ -450,7 +471,27 @@ gate moves to where ambiguity becomes permanent (ADR 0018 §4).
   Capture itself is never blocked (hard constraint #1).
 - **Turnover.** A **completeness assertion**: the freeze fails while any
   included check item is blank, so a frozen package can never contain an
-  ambiguous blank. The strongest single evidence improvement in the track.
+  ambiguous blank. The strongest single evidence improvement in the track. QC
+  also flags a **failed line carrying no linked punch item** — the source has
+  exactly one such orphan failure, appearing in no action-item list anywhere.
+- **Three questions this item must answer before its task is written**
+  (source-reading findings, [ADR 0018 review notes](adr/0018-review-notes.md)
+  R3–R5, open questions 6–8):
+  **(a)** *Pass with exception.* The source answers lines "see notes", twice
+  with both a checkmark **and** "see notes". Proposed answer: no sixth state —
+  render a `pass` carrying a note **and** a linked punch item differently, as a
+  derivation.
+  **(b)** *A reason vocabulary for `not_performed`.* The source records four
+  sections as logic-tested but not live-tested because "conditions were not
+  available" — not deferred, not N/A, not failed. Proposed:
+  `conditions_unavailable` · `access_blocked` · `equipment_unavailable` ·
+  `out_of_scope` · `other`.
+  **(c)** *Structural vs. situational N/A.* Two lines are marked N/A on **every**
+  unit of a type — a property of the equipment subtype, where the honest fix is
+  a template split, not a typed reason six times. Proposed: keep the rule
+  server-enforced and simple, add a template-page hint when a line is N/A on
+  every tag of its type, and say plainly in the task that this rule will be
+  felt.
 
 ### M5.2 — Typed value fields with expected ranges (observation 5)
 
@@ -471,8 +512,22 @@ desired invariant #3 (explicit units and calculation method) for value lines.
   this number" state. `check_items` += `value_numeric` (number, nullable) and
   **frozen copies** of the four limit fields. Nameplate data goes on `tags`
   beside the existing `manufacturer`/`model`/`serial_number`: `hp`, `voltage`,
-  `full_load_amps`, `phase_count`, `rpm`, `frame`, `nameplate_note` — all
-  CSV-importable through the header-synonym table.
+  `full_load_amps`, **`service_factor`**, `phase_count`, `rpm`, `frame`,
+  `nameplate_note` — all CSV-importable through the header-synonym table.
+  Service factor was missing until the source reading: every motor nameplate
+  block in the package carries one, and it is what makes an over-nameplate amp
+  reading arguable rather than automatically a failure.
+- **Blocked on a shape decision — multi-value readings.** One vendor form
+  records power consumption as **three triplets, nine numbers**, on what it
+  treats as one or two lines (per-leg amps plus two voltage sets). ADR 0018
+  originally recommended one template line per leg; the source **reversed that
+  recommendation** ([review notes R1](adr/0018-review-notes.md#r1--per-leg-readings-the-adrs-recommendation-is-reversed--open-recommendation-changed))
+  — nine lines on a glove-sized phone form is a different form, not more taps.
+  A repeatable value group on one `template_item` is the leading candidate.
+  **Decide before the migration**, and note that per-leg *imbalance* is the
+  thing most worth deriving, so the cheapest option (one free-text line, no
+  numeric) gives up the prize. Also cost the dual-voltage nameplate case: the
+  source records amps as `24.8/12.4`, which a naive parse reads as one value.
 - **UI.** A `value` line shows its limit inline as the tech types, with live
   in-range / out-of-range feedback before submit. Amp-draw lines compare
   against `tags.full_load_amps` and show the percentage. The reading itself is
@@ -495,14 +550,23 @@ mid-startup with nothing prompting re-verification.
 
 - **Data model (this milestone).** None. All three checks below are
   derivations over data that already exists.
-- **UI.** (a) **Unknown-tag warning** wherever a tag number is *typed* rather
-  than picked — vendor visit capture, vendor tag-list import, open-items text —
-  resolved against the project's tag register, offering "create this tag" or
-  "fix the number". A **warning, never a block**: a real tag missing from the
-  register is itself a finding. (b) **Duplicate-serial report** across
-  `tags.serial_number` within a project. (c) **Nameplate-mismatch warning**
-  when a vendor visit's recorded make/model/serial disagrees with the tag's own
-  nameplate — this is what surfaces one tag number claimed by two machines.
+- **UI — four checks, not three.** (a) **Unknown-tag warning** wherever a tag
+  number is *typed* rather than picked — vendor visit capture, vendor tag-list
+  import, open-items text — resolved against the project's tag register,
+  offering "create this tag" or "fix the number". A **warning, never a block**:
+  a real tag missing from the register is itself a finding.
+  (b) **Self-consistency within one report** — a tag claimed **twice inside the
+  same report against two different descriptions**. Added after the source
+  reading ([review notes R2](adr/0018-review-notes.md#r2--tag-validation-must-check-a-report-against-itself--resolved-in-adr-0018-11)):
+  the source lists one flow-control-valve tag as two different valves and one
+  analyzer tag as two different instruments. **Both tags exist and both resolve
+  cleanly**, so checks (a), (c) and (d) all pass and the defect survives. This
+  is the observed failure in its actual form.
+  (c) **Duplicate-serial report** across `tags.serial_number` within a project —
+  the source has one pump serial on two reports with different motor and
+  gear-reducer serials.
+  (d) **Nameplate-mismatch warning** when a vendor visit's recorded
+  make/model/serial disagrees with the tag's own nameplate.
 - **Validation.** Deliberately **no unique index on `serial_number`**: blanks
   are the norm and a duplicate is a finding to investigate, not a write to
   reject.
@@ -740,8 +804,8 @@ Status of each, per the 2026-07-21 planning session:
 | 8 | Offline guarantee | **Doc now, code deferred** ([D13](DECISIONS.md#d13--offline-document-guarantees-now-build-no-second-queue)) |
 | 9 | Min free turnover artifact | **Deferred** with #5; principle recorded (B5) |
 | 10 | Deployment topology | **Doc now** (label honestly), Pi validation M3 ([D14](DECISIONS.md#d14--deployment-topology-labeling)) |
-| 11 | Startup phase vocabulary | **Open** (2026-08-04) — ADR 0018 §1 proposes two additive phases; maintainer confirms the mapping before M4 |
-| 12 | Asset vs. position identity | **Open** (2026-08-04) — needs its own ADR before any equipment-asset work; gates M5.3's re-verification prompt |
+| 11 | Startup phase vocabulary | **Open, likely closeable** — ADR 0018 §1's two additive phases match the source sequence exactly; the dry-check and I/O-check reports map cleanly onto the existing four |
+| 12 | Asset vs. position identity | **Open, and live** — the source has a pump removed, rebuilt with new seals, and re-installed *between* the clean-water and seeding phases. Not hypothetical; needs its own ADR |
 | 13 | Turnover hash versioning | **Open** (2026-08-04) — fold ADR 0018's manifest additions into `sha256-canon-v1` before the first signed package, or plan a v2. Decide **with** #5 |
 
 **Unresolved for the maintainer to answer eventually** (not blocking M1): #3

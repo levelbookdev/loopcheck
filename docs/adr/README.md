@@ -36,3 +36,8 @@ once.
 
 ADR 0010 has a companion, [`0010-review-notes.md`](0010-review-notes.md) — a
 design review, not its own numbered decision.
+
+ADR 0018 has a companion, [`0018-review-notes.md`](0018-review-notes.md) — a
+**source verification**, not its own numbered decision. ADR 0018 was written
+from a summary of the field observations; the notes record what reading the
+source package directly confirmed, corrected, and newly raised.

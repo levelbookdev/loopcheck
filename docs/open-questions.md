@@ -181,8 +181,14 @@ to answer immediately.
 - **Current evidence:** ADR 0018 §1 recommends the first option. The mechanical
   acceptance forms already set the precedent that a new *form* at an existing
   phase costs nothing, while a new *phase* changes every affected tag's derived
-  denominator.
+  denominator. **Strengthened by the 2026-08-04 source reading**: the package's
+  own sequence is dry checks → I/O checks → clean water / wet-mech → seeding →
+  performance, its dry-check report maps onto `installation` and its I/O-check
+  report onto `point_to_point` + `loop_check` without strain, and seeding is
+  recorded as a distinct not-yet-scheduled stage. That is the recommended
+  option, observed.
 - **Recommendation:** the two additive phases; do not re-phase the library.
+  This question is probably closeable on the maintainer's say-so alone.
 - **Validate:** against the maintainer's own phase sequence on a real job, and
   against whether any observed check has no honest home in the existing six.
 - **Decision owner:** Maintainer/domain expert.
@@ -204,7 +210,12 @@ to answer immediately.
 - **Current evidence:** ADR 0018 §11 deliberately defers this and lands only
   the cheap validation half, because a second identity touches every record
   that points at a tag — checks, punch items, warranties, LOTO, calibrations,
-  settings, signatures.
+  settings, signatures. **The 2026-08-04 source reading makes this live rather
+  than hypothetical:** the package records a pump found with a frozen impeller,
+  removed, rebuilt with new seals, and re-installed — *between* the clean-water
+  and seeding phases, with a standing action item to "confirm the pump re-build
+  and installation." Every clean-water result logged against that position was
+  produced by a different machine than the one that will run the plant.
 - **Recommendation:** decide the *goal* first (is the requirement really
   "re-verify after a swap", or is it full asset lifecycle?). If it is the
   former, the lighter event is probably sufficient and far cheaper.

@@ -11,6 +11,15 @@ review of a full compiled vendor startup report package (equipment vendor
 forms, field service reports, I/O check reports, clean water test checklists).
 No project, company, vendor, or person is identified anywhere in this record.
 
+**Provenance — read this before trusting the Context section.** This ADR was
+written from a **summary** of those observations. The source package was read
+directly afterwards, on 2026-08-04, and the reading is recorded in
+[`0018-review-notes.md`](0018-review-notes.md). Every observation was confirmed;
+comments **R2, R6, R7, R8 are folded in below**, **R1 reversed a recommendation**
+in this ADR's open questions, and **R3–R5 remain open** for the maintainer. The
+Context section below is left as originally written rather than retrofitted —
+what the ADR knew when, and from what, is itself part of the record.
+
 ## Context
 
 LoopCheck's engine was designed against a single-party mental model: a crew
@@ -171,22 +180,41 @@ polymorphic `attachments`, idempotent `client_token`. It gains, additively:
 | `date_end` | date, nullable | Multi-day visits; `date` becomes the start. |
 | `result` | select: `complete` / `incomplete` / `deferred` / `informational` | The visit's own outcome, distinct from any check it produced. |
 | `open_items` | text | The verbatim end-of-visit open list ("amp reading, auto/manual, performance test, FLS testing") — the seed for the continuation record in §10. |
+| `summary` | text (exists) | The vendor's own narrative, **verbatim** (R6). |
 | `phase` | select (phase enum), nullable | Which startup phase the visit served, so the rollup can show it in the right column. |
 | `check` | relation → checks, nullable | Optional link when the GC logged a LoopCheck check covering the same work. |
 | `continues` | relation → service_visits, nullable | The follow-up visit chain (§10). |
 
-**Validation:** `result` is required. `time_off_site` without `time_on_site` is
-rejected. The existing tag-XOR-system + same-project createRule is unchanged.
-The attached report stays non-constitutive (ADR 0017 §2) and a visit with no
-attachment stays loudly flagged — a vendor visit with no report is an evidence
-gap, and the UI must nag rather than imply the PDF exists.
+**Validation:** `result` is required and is **always entered explicitly by the
+person logging the visit** — never derived, defaulted, or inferred from
+`summary`/`open_items` text, by the UI or by any future import path (**R7**: a
+real service order in the source simultaneously checks "equipment not released
+for use" and states in prose that the unit is ready for normal operation; no
+parser and no person should be resolving that at import time). `time_off_site`
+without `time_on_site` is rejected. The existing tag-XOR-system + same-project
+createRule is unchanged. The attached report stays non-constitutive (ADR 0017
+§2) and a visit with no attachment stays loudly flagged — a vendor visit with no
+report is an evidence gap, and the UI must nag rather than imply the PDF exists.
+
+**The narrative is evidence** (**R6**). `summary` holds the vendor's own words
+**verbatim, never paraphrased or summarized on entry**, and surfaces on the tag
+page rather than only in the project ledger. In the source package the single
+most dispute-relevant text is five paragraphs of a vendor's technical dissent
+about another trade's wiring — neither a check result nor a punch item, and
+worthless the moment someone condenses it. It enters the turnover manifest as
+frozen text.
 
 **Turnover:** the frozen manifest gains a **vendor report index, keyed by
 tag** — for every tag in scope, every `service_visits` record with its vendor
-company, rep, dates, hours, result, open items, and the attachment digest of
-the report file. This is the single highest-value addition to the package: it
-is the table that says "here is every vendor who touched this tag, and here is
-their signed paper."
+company, rep, dates, hours, result, open items, verbatim narrative, and the
+attachment digest of the report file. This is the single highest-value addition
+to the package: it is the table that says "here is every vendor who touched this
+tag, and here is their signed paper." The index carries each visit's date
+**relative to the phase it evidences** and flags a visit materially older than
+that phase (**R8**: the source package compiles one inspection report dated more
+than two years before the rest of the set, presented as though contemporaneous).
+A warning, not a rejection — an old report may be perfectly valid, and the
+reader decides.
 
 **This unparks the ADR 0017 UI** (DECISIONS D7), which was parked pending "a
 real job requests it." These observations are that request.
@@ -254,9 +282,16 @@ and without a fifth response type.
 
 **Nameplate data belongs on `tags`**, where `manufacturer` / `model` /
 `serial_number` already live. It gains `hp`, `voltage`, `full_load_amps`,
-`phase_count`, `rpm`, `frame`, `nameplate_note` — all capture-side facts in the
-ADR 0002 sense, all CSV-importable via header synonyms. Amp draw derives its
-comparison against `tags.full_load_amps`.
+`service_factor`, `phase_count`, `rpm`, `frame`, `nameplate_note` — all
+capture-side facts in the ADR 0002 sense, all CSV-importable via header
+synonyms. Amp draw derives its comparison against `tags.full_load_amps`.
+(`service_factor` was missing from this list until the source reading — every
+motor nameplate block in the package carries an S.F., and it is what makes an
+over-nameplate amp reading arguable rather than automatically a failure. One
+nameplate in the source is dual-voltage with amps recorded as `24.8/12.4`,
+which a naive numeric parse would read as a single value — a concrete case for
+the §7 rule that an unparseable reading derives nothing and the tech's explicit
+result stands.)
 
 ### 8. Instrument configuration is its own append-only ledger
 
@@ -344,12 +379,22 @@ an immutable record. An incomplete visit is the same shape pointing forward.
 
 The cheap, high-value half lands with M5:
 
+Validation runs **three ways** (**R2**), because the source's worst tag failure
+is invisible to a register check alone:
+
 - **Non-existent tag warning.** Anywhere a tag number is typed rather than
   picked — vendor visit capture, CSV import of a vendor's tag list, the
   `open_items` free text — the UI resolves it against the project's tag
   register and warns loudly on a miss, offering "create this tag" or "fix the
   number." A warning, never a block: a real tag missing from the register is
   itself a finding worth recording.
+- **Self-consistency within one report.** A tag claimed **twice inside the same
+  report, against two different descriptions**, is a warning. In the source one
+  flow-control-valve tag is listed as two different valves and one analyzer tag
+  as two different instruments — both tags exist in the register and both
+  resolve cleanly, so a register check passes and the defect survives. This is
+  "one tag number pasted for two different units" in its actual form, and only
+  comparing a report against itself catches it.
 - **Duplicate serial detection.** A derived check across `tags.serial_number`
   within a project surfaces two tags claiming one serial. Not a unique index —
   blank serials are the norm and a genuine duplicate is a finding to
@@ -516,8 +561,16 @@ change** and must land before the first real package is signed, or behind a
 3. **Numeric parsing of multi-value readings.** "480/478/481 V" is one line
    holding three per-leg values. Does per-leg voltage deserve three template
    lines (simple, more taps), or a structured multi-value reading (fewer taps,
-   more model)? Recommendation: three lines — it stays inside the four response
-   types and each leg gets its own limit.
+   more model)? ~~Recommendation: three lines — it stays inside the four
+   response types and each leg gets its own limit.~~ **Recommendation reversed
+   2026-08-04 after reading the source** ([R1](0018-review-notes.md#r1--per-leg-readings-the-adrs-recommendation-is-reversed--open-recommendation-changed)):
+   one vendor form carries **three triplets — nine numbers** — on what it treats
+   as one or two lines. Three template lines per triplet turns that into nine
+   lines on a glove-sized phone form, which is not "more taps," it is a
+   different form. This question is now genuinely **undecided**; a repeatable
+   value group on one `template_item` is the leading candidate. Note that
+   per-leg *imbalance* is the thing most worth deriving, so the cheapest option
+   (one free-text line, no numeric) quietly gives up the prize.
 4. **Asset/position split** — worth doing at all, or is the re-verification
    prompt achievable with a simpler "nameplate changed on this tag" event?
    (Open question #12.)
@@ -525,3 +578,29 @@ change** and must land before the first real package is signed, or behind a
    additions in (one canonical scheme), or accept it now and plan
    `sha256-canon-v2`? Recommendation: fold first — no real packages are signed
    yet, so the cheap moment is now.
+
+*Questions 6–8 were raised by the source reading, not the summary. Full
+reasoning in [`0018-review-notes.md`](0018-review-notes.md) R3–R5.*
+
+6. **Pass with exception** ([R3](0018-review-notes.md#r3--pass-with-exception-is-a-real-answer-the-state-vocabulary-has-no-home-for--open)).
+   The source answers lines "see notes", and in two cases with both a checkmark
+   *and* "see notes" — it works, and there is a caveat that became a punch item.
+   Five states have no home for that. Recommendation: **do not add a state**;
+   render a `pass` carrying a note **and** a linked punch item differently, as a
+   derivation. Keeps the vocabulary at its ceiling and puts the caveat on the
+   standing plate rather than inside a note field.
+7. **A reason vocabulary for `not_performed`** ([R4](0018-review-notes.md#r4--not_performed-needs-a-small-reason-vocabulary-not-just-a-free-text-note--open)).
+   The source records four sections as tested for logic but not live-tested
+   because "conditions were not available" — not deferred, not N/A, not failed.
+   Recommendation: a short closed vocabulary — `conditions_unavailable` ·
+   `access_blocked` · `equipment_unavailable` · `out_of_scope` · `other` — so
+   the package answers "why not" without a paragraph. Pair it with a turnover QC
+   flag for a **failed line carrying no linked punch item** (the source has
+   exactly one such orphan failure, appearing in no action-item list anywhere).
+8. **Structural vs. situational N/A** ([R5](0018-review-notes.md#r5--required-na_reason-will-be-heavier-than-the-adr-assumes--open)).
+   §4 requires `na_reason` on every N/A. The source marks two lines N/A on
+   *every* unit of a type — a property of the equipment subtype, not of the
+   check, where the honest fix is a template split (ADR 0009's reasoning, one
+   grain finer). Recommendation: keep the rule simple and server-enforced, and
+   add a template-page hint when a line is N/A on every tag of its type. Note
+   honestly in the build task that this rule will be felt.
