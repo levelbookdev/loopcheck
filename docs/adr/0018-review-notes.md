@@ -54,6 +54,15 @@ stand as folded in, and R3–R5 remain open. Method note for whoever reads a
 scanned or form-heavy source next: **render the pages.** A text layer is a
 convenience, not the document.
 
+**Independently re-verified from rendered pages, 2026-08-04.** A page renderer
+was installed and the four checklist pages re-read as images. The corrections
+above are confirmed exactly: twenty rows, blanks at items **6, 12 and 20** only,
+rotation direction (7) and power consumption (19) both marked and initialled,
+and the **Date column empty on every row**. The rendering also produced two
+findings the text layer could not have surfaced — the four checklist pages are
+byte-identical renders (**R14.1**) and the inapplicable equipment-type column is
+left blank rather than marked N/A (**R5**).
+
 The same reading also raised **eleven items the first two passes did not
 reach** — [R9–R19](#third-reading--eleven-items-not-previously-raised) at the
 end of this file. Four carry to the ADR as open questions 9–12; none overturns
@@ -504,6 +513,19 @@ device is.
    findings are either a paste or a genuine coincidence, and the reviewer should
    be told which they are looking at. This sits directly beside **R6** (preserve
    the narrative verbatim): preserve it *and* flag when it is duplicated.
+
+   **Confirmed at a much stronger magnitude by page rendering.** The pump
+   vendor's four checklist pages are **byte-identical renders** — same twenty
+   rows, same seventeen marks, same initials, same three blanks — for four
+   physically different pumps with different serial numbers and different
+   measured amp draws. Because the **Date column is blank on all twenty rows of
+   all four**, the one field that could distinguish them is also absent. On
+   paper, "four units genuinely checked identically" and "one page copied four
+   times" are the same document. Under a per-tag ledger they cannot be: each
+   check is its own record, against its own subject relation, with its own
+   immutable `created` timestamp. That is the single cleanest argument in the
+   whole source for the per-tag-per-phase model — not that the paper is
+   dishonest, but that the paper **cannot express the difference**.
 2. **A field constant across an entire import.** One vendor's "unit position"
    reads the same value on all four machines, which are in different rooms doing
    different jobs. A column with one distinct value carries no information and
