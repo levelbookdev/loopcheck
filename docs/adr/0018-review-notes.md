@@ -54,6 +54,11 @@ stand as folded in, and R3–R5 remain open. Method note for whoever reads a
 scanned or form-heavy source next: **render the pages.** A text layer is a
 convenience, not the document.
 
+The same reading also raised **eleven items the first two passes did not
+reach** — [R9–R19](#third-reading--eleven-items-not-previously-raised) at the
+end of this file. Four carry to the ADR as open questions 9–12; none overturns
+a decision already made.
+
 ---
 
 ## R1 — Per-leg readings: the ADR's recommendation is **reversed** · **DECIDED — original recommendation upheld**
@@ -229,6 +234,18 @@ server-side, and surface the structural case as a template-quality signal
 rather than a per-check exemption. But note the friction honestly in the task:
 this rule will be felt.
 
+**The structural case also appears at column scale, and it appears as a
+blank.** The pump vendor's form is one checklist serving two equipment types —
+it has a `Pump` column and a `Grinder` column. On all four reports the entire
+**Grinder column is blank down all twenty rows**, because the unit is a pump.
+Nobody wrote "N/A"; the column is simply empty. So the honest reading is that
+when a form is structurally inapplicable, the field response is **not** a
+considered N/A — it is a blank, and it is a blank for a reason §4's gate does
+not address (the tech had nothing to say, not something they skipped). That is
+the strongest argument in the source for recommendation (c): the fix belongs in
+the template library, where "this line does not apply to this tag_type" is
+stated once, rather than in twenty per-check reason fields or twenty blanks.
+
 ## R6 — The vendor's own narrative is evidence and must be preserved verbatim · **RESOLVED in ADR 0018 §5**
 
 **ADR location:** §5, the `service_visits` field table.
@@ -304,3 +321,281 @@ with seeding recorded as "To be Scheduled." That is ADR 0018 §1's premise, and
 the I/O check report maps cleanly onto `point_to_point` + `loop_check` while the
 dry check report maps onto `installation`. Open question #11 can probably be
 closed in favour of the two additive phases.
+
+---
+
+# Third reading — eleven items not previously raised
+
+The third reading (2026-08-04, from rendered pages) produced the three
+corrections recorded at the top of this file, and eleven items the first two
+passes did not reach. **None of them overturns anything in ADR 0018.** Four are
+structural and carry to the ADR as open questions 9–12; seven are refinements to
+decisions already made. All are ordered by value, and all are **open**.
+
+## R9 — An accepted operating restriction has no home in the model · *open · ADR open question 9*
+
+**ADR location:** §4 result vocabulary, §6 punch items, §7 typed values.
+
+A blower type in the source exhibits a mechanical fault above a speed threshold.
+The vendor never fixes it. Instead the controls PID is configured to cap the
+speed below the threshold, and the system is accepted that way. The clean-water
+checklist line "blower PID loop is tuned and consistent" is marked **pass**, with
+the fault and the cap described in its note.
+
+This is not any of the five states:
+
+- **not `fail`** — the system is accepted and running;
+- **not `pass`** — the equipment is defective and the acceptance is conditional;
+- **not a punch item** — nobody intends to remove it, and it appears on no punch
+  list in the package;
+- **not `deferred`** — no later phase clears it, ever.
+
+It is a **permanent operating limit created at commissioning**, and its whole
+value is downstream: an operator who raises that blower above the threshold in
+year three reproduces a fault whose diagnosis exists only in a note cell inside
+a submittal PDF. The restriction is also recorded **inconsistently** in the
+source — one page names one threshold, another page three pages away names a
+different one — which is what an unstructured fact looks like after two
+transcriptions.
+
+Two more instances in the same package: a phase run to completion with one of a
+redundant pump pair unavailable (a *temporary* restriction, correctly scoped to
+that phase), and a confirmed shutdown limit recorded as a checklist note.
+
+**Why this is hard here.** ADR 0018's Consequences declare five derived states
+the legibility ceiling and "a hard stop: no sixth state without retiring one."
+So this cannot be state number six.
+
+**Options:** (a) accept the R3 answer — a `pass` carrying a note plus a linked
+punch item renders differently — but the defining feature here is that there
+*is* no punch item and there never will be, so R3's derivation never fires;
+(b) a `restrictions` record attached to tag or system, with a typed limit
+(value + unit + comparison, reusing §7's shape), the check that established it,
+and a required narrative — derived into the standing plate and into turnover,
+no new `result` state; (c) a punch item with a `wont_fix` / `accepted`
+resolution, reusing §6's ball-in-court plumbing.
+
+**Recommendation:** (b). The limit is *data* — it has a number, a unit, and a
+comparison, and §7 already defines exactly that shape. Option (c) abuses the
+punch list to hold something that is not outstanding work, and would make
+"open punch items" an unreliable count. This is the largest genuine gap the
+third reading found: the model can say a thing failed, and can say it passed,
+and cannot say **"it passed, and here is the permanent condition of that
+pass."**
+
+## R10 — Template revision is not captured on the instance · *open · ADR open question 10*
+
+**ADR location:** `checklist_templates` / `checks`.
+
+The system supplier's clean-water checklists carry a **revision marker in the
+form header**. Someone at that vendor already understood that a completed
+checklist is meaningless without knowing which version of the questions was
+asked.
+
+`template_version`, `template_rev`, and `revision` appear nowhere in ADR 0018 or
+`ARCHITECTURE.md`. A check relates to a template, and templates are edited. If a
+line is added, reworded, or removed after a check is signed, the frozen record
+of *answers* no longer reliably reproduces the *questions* — which is precisely
+the failure mode the append-only ledger exists to prevent, one level up.
+
+**Options:** (a) a monotonic `version` integer on `checklist_templates`, bumped
+on any change to its items, copied onto `checks` at capture; (b) freeze the
+resolved template items into the check itself at capture (heavier, fully
+self-contained, and closest to what the turnover manifest needs anyway);
+(c) forbid editing a template that has signed checks, forcing a new template.
+
+**Recommendation:** (a) as the cheap correct floor, and check whether the ADR
+0010 turnover manifest already implies (b) — if the manifest freezes item text,
+the version integer is the index and (b) is already half-built. Worth deciding
+before M5, because retrofitting a version onto already-signed checks is not
+possible.
+
+## R11 — Vendor evidence is many-to-many with tags, not one-to-one · *open · ADR open question 11*
+
+**ADR location:** §5, `service_visits` (tag XOR system) + `attachments`.
+
+§5 treats a vendor report as evidence for one visit against one subject. The
+source does not behave that way. The **unit of record differs per vendor**:
+
+| Vendor | One document covers |
+|---|---|
+| Rotary-lobe pump vendor | one machine (four documents for four machines) |
+| Valve-actuator vendor | one valve |
+| Blower vendor | **two machines**, as two numbered operations inside one service order, under one signature block |
+| Submersible pump vendor | **up to four positions**, in parallel columns on one two-page form, with one comment block and one signature line |
+| System supplier | **every tag touched that week** — one document per visit |
+
+So "attach the vendor's report to the tag" is not a 1:1 operation. One PDF is
+the evidence for two tags; another for three; another for thirty. `tag XOR
+system` cannot express "this report proves these four tags," and splitting one
+PDF into four `service_visits` records fabricates four visits that did not
+happen.
+
+Worse for the reader: even when the attachment is correct, nothing says **which
+part** of a thirty-tag document is the evidence for a given tag.
+
+**Options:** (a) leave `service_visits` at one subject and add a
+`service_visit_tags` join carrying an optional `page_range` per tag;
+(b) allow the visit to stay single-subject but let `attachments` carry a
+`page_range` + repeated tag references; (c) accept duplication — one visit
+record per tag, all pointing at the same attachment digest, with a shared
+`client_token` marking them as one real visit.
+
+**Recommendation:** (a). It keeps `service_visits` honest about what a visit
+*was* (one vendor, one trip, one report) and puts the many-to-many where it
+belongs. (c) inflates the visit count, which is a number the schedule and
+backcharge arguments actually use.
+
+## R12 — `service_visits.phase` is nullable; the source argues it must be required · *open · ADR open question 12*
+
+**ADR location:** §5 field table — `phase` · select (phase enum), **nullable**.
+
+The single most important qualifier on four of the source's vendor reports —
+that the runs were **clean-water** runs and not process runs — exists only as a
+five-word free-text note in a "start-up notes" box. The form has no phase field.
+Strip that sentence and the four reports read as unconditional equipment
+acceptance.
+
+That is the argument for *required*, not nullable: the vendor form will never
+supply the phase, so a human must assert it at capture, and a nullable field on
+a data-entry screen is a field that does not get filled. An unphased vendor
+visit cannot be placed in the §3 rollup at all — it lands in no column.
+
+**Counter-argument to weigh:** some visits genuinely serve no single phase (a
+warranty callback, a sales visit). `informational` already exists as a
+`result`, so the honest shape may be **required unless `result =
+'informational'`**.
+
+**Recommendation:** required, with the `informational` escape. Cheap, and it is
+the difference between a rollup that is complete and one that is quietly
+missing rows.
+
+---
+
+The remaining seven are refinements to decisions already made, not new
+structure. Recorded so they are not rediscovered a fourth time.
+
+## R13 — Tag matching must normalize before it warns · *open*
+
+**ADR location:** §11, "Non-existent tag warning."
+
+§11 resolves a typed tag against the register and warns on a miss. In the source
+the same physical device is written by the actuator vendor with one prefix and
+no zero-padding, and by the system supplier with a different prefix and
+zero-padding — and elsewhere a float tag is written with the hyphen omitted
+while every sibling float on the same page is hyphenated.
+
+Against an exact-match register check these are all "non-existent tag" — which
+is technically true and practically useless, because the tag *does* exist and
+the reader is being asked to spot a one-character difference. **Recommendation:**
+normalize (case, separators, zero-padding) before matching, and when the
+normalized form hits, offer it as a **candidate match** ("did you mean …?")
+rather than reporting a miss. Prefix differences should be surfaced, never
+auto-corrected — a `XV`/`FCV` disagreement is a real question about what the
+device is.
+
+## R14 — Three import-QC signals the source hands over for free · *open*
+
+**ADR location:** §5 import path, §11 validation.
+
+1. **Byte-identical narrative across sibling records.** The blower service
+   order's "additional comments" block is the *same string* for both machines,
+   and states its conclusion twice inside the one comment. Identical per-unit
+   findings are either a paste or a genuine coincidence, and the reviewer should
+   be told which they are looking at. This sits directly beside **R6** (preserve
+   the narrative verbatim): preserve it *and* flag when it is duplicated.
+2. **A field constant across an entire import.** One vendor's "unit position"
+   reads the same value on all four machines, which are in different rooms doing
+   different jobs. A column with one distinct value carries no information and
+   usually means the form field went unused — cheap to detect, and it stops a
+   meaningless value being imported as though it located something.
+3. **Re-submitted content.** Two pages of one field report are bound into the
+   package a second time, *after* the later report that superseded them, with
+   nothing marking the repeat. An import path should recognize the same content
+   arriving twice rather than ingesting it as new evidence.
+
+All three are warnings, never blocks, consistent with §11.
+
+## R15 — A third meaning of N/A: satisfied by other evidence · *open*
+
+**ADR location:** §4 `na_reason`; extends **R5**.
+
+R5 splits N/A into structural (a property of the equipment subtype) and
+situational. The source has a third: a line marked **N/A whose note says the
+function works, verified another way** — the specific test named by the line was
+not run because a different, adjacent test already demonstrated it.
+
+That is not "does not apply." It is "applies, and is satisfied by evidence
+elsewhere" — which for a turnover reader is nearly the opposite conclusion.
+**Recommendation:** if R4's reason vocabulary lands, this is one more value in
+it (`satisfied_by_other_evidence`), ideally carrying a pointer to the check or
+line that did the demonstrating. Without the pointer it is just a nicer-sounding
+blank.
+
+## R16 — Nothing flags a tag with phase evidence and no vendor report · *open*
+
+**ADR location:** §5 turnover vendor report index, §11 validation.
+
+§11 validates the tags that *appear*. The source's gap is the inverse: one valve
+is confirmed in the clean-water phase record with **no vendor inspection report
+anywhere in the package**, while six sibling valves each have one. Nothing
+notices. Symmetrically, three of the six valve reports that *do* exist cover
+tags absent from the phase record.
+
+The vendor report index (§5) already assembles per-tag rows; the QC is the empty
+cell in a column that is populated for every sibling. **Recommendation:** a
+turnover QC line — "tags in scope with no vendor report" and "vendor reports for
+tags not in scope" — as a warning pair. Both directions are findings.
+
+## R17 — Where the limit comes from when the vendor form omits it · *open*
+
+**ADR location:** §7, "limits stored beside the reading."
+
+§7 puts the acceptance limit next to the reading, which is right. The source
+shows the limit is frequently **not on the vendor's form at all**: one pump
+report captures only a maximum for flow and both suction and discharge
+pressure — minimum and normal are blank on all four copies — along with blank
+fields for solids content and daily run hours. The design envelope the form asks
+for is simply not filled in.
+
+So a captured reading often has no vendor-supplied limit to sit beside, and the
+limit has to come from the submittal, the spec, or the nameplate. **This is not
+an argument against §7** — it is a question about where `template_items` gets
+its limit when the vendor supplies none, and whether a value line with no limit
+should be visibly marked as "recorded, not evaluated" rather than looking like a
+pass. Recommendation: the latter, at minimum.
+
+## R18 — A gate is not linked to the punch items that satisfy it · *open*
+
+**ADR location:** §12.
+
+§12 models a phase-entry gate as a check with a system subject — correct, and
+the source confirms the artifact exists and is signed. What it does not model is
+that a gate condition and a punch item are frequently **the same fact recorded
+twice**: a tank-cleanliness item appears as a contractor punch item at one
+phase, and again six weeks later as a line on the phase-entry gate for the next
+phase, with nothing connecting them.
+
+**Recommendation:** allow a gate line to reference the punch item(s) that
+satisfy it, so closing the punch item visibly moves the gate. Without the link
+the gate is re-verified by hand and the punch list is a parallel universe. Low
+cost — `punch_items` and `check_items` both already exist — and it is what makes
+the gate a *derivation* rather than a second checklist.
+
+## R19 — External evidence needs a typed pointer, not prose · *open*
+
+**ADR location:** §5, attachments; §10.
+
+The most load-bearing evidence in the source's first phase is not in the
+package. Three separate observations end with photographs "uploaded to" the
+equipment supplier's own file share, and the specification control narrative
+that governed the logic testing is referenced as "included with this report"
+without being included. §5 already flags a visit with no attachment, which is
+the right instinct — but the honest state here is not "no evidence," it is
+"evidence exists, held by another party, unnamed."
+
+**Recommendation:** a typed external-evidence reference (custodian, location,
+description, date) so the pointer is structured rather than a sentence. It does
+not make the evidence available, but it makes the gap **countable** and tells a
+future reader who to ask. A flag that says "missing" when the truth is
+"elsewhere" trains people to ignore the flag.

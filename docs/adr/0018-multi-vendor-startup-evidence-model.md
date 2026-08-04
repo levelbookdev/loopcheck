@@ -635,3 +635,50 @@ reasoning in [`0018-review-notes.md`](0018-review-notes.md) R3–R5.*
    grain finer). Recommendation: keep the rule simple and server-enforced, and
    add a template-page hint when a line is N/A on every tag of its type. Note
    honestly in the build task that this rule will be felt.
+
+*Questions 9–12 were raised by the third reading (2026-08-04, from rendered
+pages). Full reasoning in [`0018-review-notes.md`](0018-review-notes.md)
+R9–R12; seven further refinements to decisions already made are recorded there
+as R13–R19 and need no question here.*
+
+9. **An accepted operating restriction** ([R9](0018-review-notes.md#r9--an-accepted-operating-restriction-has-no-home-in-the-model--open--adr-open-question-9)).
+   The source accepts a system with a permanent speed cap configured around an
+   unresolved equipment fault: not a fail, not a clean pass, not a punch item
+   (nobody will ever fix it), not a deferral (no later phase clears it). The
+   Consequences section above declares five derived states the hard ceiling, so
+   this cannot be a sixth. Recommendation: a **`restrictions` record** attached
+   to tag or system carrying a typed limit (value + unit + comparison, reusing
+   §7's shape), the check that established it, and a required narrative —
+   derived onto the standing plate and into turnover, no new `result` state.
+   The alternative of a `wont_fix` punch resolution abuses the punch list to
+   hold something that is not outstanding work, and makes the open-punch count
+   unreliable. **This is the largest gap the third reading found:** the model
+   can say a thing passed or failed, and cannot say "it passed, and here is the
+   permanent condition of that pass."
+10. **Template revision on the instance** ([R10](0018-review-notes.md#r10--template-revision-is-not-captured-on-the-instance--open--adr-open-question-10)).
+    `template_version` / `revision` appears nowhere in this ADR or
+    `ARCHITECTURE.md`, while the source's own checklist form carries a revision
+    marker in its header. If a template line is added, reworded, or removed
+    after a check is signed, the frozen answers no longer reproduce the
+    questions. Recommendation: a monotonic `version` on `checklist_templates`
+    copied onto `checks` at capture — and check whether ADR 0010's manifest
+    already freezes item text, in which case the version is just the index and
+    most of the work is done. **Must be decided before M5:** a version cannot be
+    retrofitted onto already-signed checks.
+11. **Vendor evidence is many-to-many with tags** ([R11](0018-review-notes.md#r11--vendor-evidence-is-many-to-many-with-tags-not-one-to-one--open--adr-open-question-11)).
+    §5 assumes one report evidences one subject. In the source one vendor's
+    service order covers two machines under a single signature block, another
+    vendor's form covers four positions in parallel columns, and the system
+    supplier's covers every tag touched that week. `tag XOR system` cannot say
+    "this report proves these four tags," and splitting the PDF into four visit
+    records fabricates four visits. Recommendation: a `service_visit_tags` join
+    carrying an optional `page_range` per tag — keeping `service_visits` honest
+    about what a visit was, and answering *which part* of a thirty-tag document
+    proves a given tag.
+12. **Should `service_visits.phase` be required?** ([R12](0018-review-notes.md#r12--service_visitsphase-is-nullable-the-source-argues-it-must-be-required--open--adr-open-question-12)).
+    §5 has it nullable. The source's argument for required: on four vendor
+    reports the phase exists **only** as a five-word free-text note, because the
+    form has no phase field — so a human must assert it at capture, and a
+    nullable field does not get filled. An unphased visit lands in no column of
+    the §3 rollup. Recommendation: required **unless `result =
+    'informational'`**, which covers the warranty-callback case honestly.
