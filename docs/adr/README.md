@@ -24,7 +24,7 @@ once.
 | [0007](0007-loto-visibility-staleness-asymmetry.md) | LOTO visibility: an append-only lock ledger, and the staleness asymmetry | accepted |
 | [0008](0008-vfd-rotation-check.md) | VFD rotation & parameter check: a specialized capture UI on the ordinary ledger | accepted |
 | [0009](0009-per-tag-phase-applicability.md) | Per-tag phase applicability (`tags.phases_na`) | accepted |
-| [0010](0010-signatures-and-turnover-package.md) | Signatures & the turnover package: a signed, frozen snapshot over the append-only ledger | proposed |
+| [0010](0010-signatures-and-turnover-package.md) | Signatures & the turnover package: a signed, frozen snapshot over the append-only ledger | accepted |
 | [0011](0011-auth-lockdown.md) | Auth lockdown: a small public allowlist, everything else signed in | Accepted |
 | [0012](0012-open-resolve-duration-tests.md) | Open→resolve records: duration/reliability tests and bac-t samples as a linked pair of append-only checks | accepted |
 | [0014](0014-segment-acceptance-records.md) | Segment acceptance records: pipeline segments as the fourth subject kind | superseded — moved to MainLine (2026-07-18) |

@@ -51,7 +51,7 @@ There are **two suites**, and they cover different failure modes:
 
 | Suite | What it proves |
 |---|---|
-| `scripts/smoke_test.sh` | The REST surface: every migration applies, each module's seed populates, append-only and close-once rules hold, and the ADR 0011 access matrix behaves across guest / user / superuser. **89 assertions.** |
+| `scripts/smoke_test.sh` | The REST surface: every migration applies, each module's seed populates, append-only and close-once rules hold, and the ADR 0011 access matrix behaves across guest / user / superuser. **94 assertions.** |
 | `scripts/browser_test.sh` | The *rendered* field path: `/t/{tag}` serves a populated page, the LOTO honesty line and freshness stamp are present (ADR 0007), an accountless punch flag reads back, and a logged check appears in the ledger. **7 assertions.** The REST suite cannot see any of this — a broken Alpine binding would leave it green while the field tier is dead. |
 
 | | What runs them | Behaviour |

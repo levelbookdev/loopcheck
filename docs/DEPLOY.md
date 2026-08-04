@@ -338,7 +338,7 @@ uname -m                       # expect aarch64 — otherwise you are not on ARM
 git clone <repo> loopcheck && cd loopcheck
 ./scripts/setup.sh             # must fetch ..._linux_arm64.zip, not amd64
 ./pocketbase --version         # expect 0.39.6
-sh scripts/smoke_test.sh       # 89 assertions — proves migrations + seed on ARM
+sh scripts/smoke_test.sh       # 94 assertions — proves migrations + seed on ARM
 ```
 
 Then follow **Option A** verbatim for the systemd unit, and confirm:

@@ -249,24 +249,30 @@ signatures               (subject_collection, subject_id → package XOR check) 
 ### Planned collections and active schema work
 
 The twenty-four collections above are the complete **committed** application
-schema at this snapshot. ADR 0010 proposes two more collections, and a staged
-migration was present in the working tree during the 2026-07-12 documentation
-review, but neither the active files nor a Proposed ADR are shipped behavior.
+schema. Both collections this section previously listed as *planned* have
+shipped, and the ADRs behind them are now Accepted:
 
 - **`signatures` + `turnover_packages`**
-  ([ADR 0010](docs/adr/0010-signatures-and-turnover-package.md), *proposed*) —
-  Phase 3. `turnover_packages` is an append-only **frozen snapshot** of a
-  system's checkout at a moment (a manifest of the included records, a
-  canonical content hash, and the derived readiness verdict frozen into the
-  record); `signatures` is an append-only, polymorphic **attestation** bound to
-  that frozen content by its hash. Core stores the facts; the compiled PDF
-  turnover binder stays the paid sidecar (ADR 0003). No committed migration at
-  the 2026-07-12 baseline; staged active work is not shipped.
+  ([ADR 0010](docs/adr/0010-signatures-and-turnover-package.md), **accepted
+  2026-08-04**) — migration `1789000026`, the server builder/canonicalizer
+  (`pb_hooks/turnover.pb.js` + `turnover_canon.js`), and `sign.html` /
+  `turnover.html` are all committed and counted in the twenty-four above.
+  `turnover_packages` is an append-only **frozen snapshot** of a scope's
+  checkout at a moment (a manifest of the included records under a
+  per-collection field allowlist, a `sha256-canon-v1` content hash, and the
+  derived readiness verdict frozen into the record); `signatures` is an
+  append-only, polymorphic **attestation** bound to that frozen content by its
+  hash. The **golden vector is enforced at the build route** — a drifted
+  canonicalizer makes `POST /api/turnover/build` refuse rather than seal a hash
+  no independent verifier could reproduce — and `scripts/smoke_test.sh` asserts
+  the pinned algo, digest shape, hash determinism across a rebuild, and
+  supersession. Core stores the facts; the compiled PDF turnover binder stays
+  the paid sidecar (ADR 0003). The API v1 **contract bump** for these two is
+  still outstanding (M3, [D12](docs/DECISIONS.md#d12--api-v1-reconciliation--version-bump-sequenced-to-m3-v10)):
+  an accepted ADR is a settled design, not a published contract version.
 
 `service_contacts` is no longer planned: migration `1789000020` committed the
-structural PII split. ADR 0011 remains Proposed despite its backend rule/split
-implementation having landed, so decision status and implementation status
-must be reconciled rather than silently equated.
+structural PII split, and ADR 0011 is Accepted.
 
 #### Designed but not built — the multi-vendor startup track (ADR 0018)
 

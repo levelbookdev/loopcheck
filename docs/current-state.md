@@ -179,7 +179,7 @@ existence loop, the tank leak-test seed, the ADR 0012 open→resolve pair
 newer collections' contract rules — capture-route-only creates for
 `calibrations`/`calibration_points`, the auth boundary on `test_standards`, and
 the accountless-but-shape-ruled `service_visits` create.
-**89 assertions total**, a count the script header also records.
+**94 assertions total**, a count the script header also records.
 `.githooks/pre-push` runs it when the binary is present.
 
 Known coverage gaps at this snapshot:

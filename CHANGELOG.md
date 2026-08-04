@@ -10,6 +10,26 @@ All notable changes to LoopCheck are recorded here. Format follows
 Next milestone is **M2 — Shutdown Runbooks + Punch List** (→ v0.10.0). See
 [docs/ROADMAP.md](docs/ROADMAP.md) and the task queue in [docs/tasks/](docs/tasks/).
 
+### Fixed
+
+- **The turnover golden vector is now enforced and tested.** It was a
+  `console.log` at hook load: on canonicalization drift it printed one line to a
+  server console and kept sealing packages with `content_hash` values no
+  independent verifier could reproduce — an unverifiable hash on a signed
+  turnover package looks like evidence and is not. `POST /api/turnover/build`
+  now **refuses** on mismatch, and `scripts/smoke_test.sh` asserts the pinned
+  algo, digest shape, hash determinism across a rebuild, and supersession.
+  Deliberately not a throw at hook load: a drifted *turnover* canonicalizer must
+  not take down an instance serving QR scans, LOTO status, and field checks
+  ([DECISIONS D26](docs/DECISIONS.md#d26--adr-0010-accepted-the-golden-vector-was-not-a-test-until-it-was-made-one)).
+
+### Changed
+
+- **Smoke test expanded 89 → 94 assertions** (the turnover build seal).
+- **ADR 0010 (Signatures & the turnover package) is Accepted.** No behavior
+  change beyond the fix above; the API v1 contract bump for `turnover_packages`
+  and `signatures` remains M3 work.
+
 ## [0.9.0] — 2026-07-30
 
 **First tagged release.** LoopCheck has been feature-broad for a while; this tag
