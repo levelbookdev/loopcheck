@@ -300,12 +300,17 @@ and folded into ADR 0018 §§4, 5 and 11–16. One (R1) proposed reversing the
 multi-value-reading recommendation and the maintainer **decided against it** —
 M5.2 records the settled rule.
 
-> **Resume here.** ADR 0018 is still *proposed*, and accepting it is the gate on
-> every task below. Outstanding before acceptance: **R14** (import-QC signals),
-> **R17** (where a limit comes from when the vendor form omits one), **R19**
-> (typed external-evidence pointer) and **R20** (a signature on a page that
-> identifies nothing) — all marked `*open*` in the review notes — plus the unrun
-> fold precondition in the paragraph below.
+> **Resume here.** ADR 0018 was **accepted 2026-08-04**, so the gate on the tasks
+> below is clear. Two things are still outstanding and neither blocks task
+> writing:
+>
+> - **Four review comments stay open** — **R14** (import-QC signals), **R17**
+>   (where a limit comes from when the vendor form omits one), **R19** (typed
+>   external-evidence pointer) and **R20** (a signature on a page that identifies
+>   nothing), all marked `*open*` in the review notes. They refine decisions
+>   already made rather than reopening them.
+> - **The fold precondition below has never been run** — the only item in this
+>   track with a dependency outside the repo.
 
 **Why this track sits after v1.0, not before it.**
 [D2](DECISIONS.md#d2--trust-before-features-m1-comes-first) (trust before
