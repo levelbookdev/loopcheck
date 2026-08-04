@@ -32,8 +32,8 @@ once.
 | [0015](0015-stored-equipment-preservation-log.md) | Stored-equipment preservation log (recurring, tag-subject) | accepted |
 | [0016](0016-purpose-built-instrument-calibration-records.md) | Instrument calibration uses a purpose-built as-found/as-left ledger | accepted |
 | [0017](0017-vendor-field-service-reports.md) | Vendor field service reports: immutable visits with attached proof | accepted |
-| [0018](0018-multi-vendor-startup-evidence-model.md) | Multi-vendor startup: staged checkout, explicit resolution, and vendor evidence as the GC's master ledger | proposed |
-| [0019](0019-shutdown-runbook-execution.md) | Shutdown runbook execution: a planned outage as an append-only step-event ledger | proposed |
+| [0018](0018-multi-vendor-startup-evidence-model.md) | Multi-vendor startup: staged checkout, explicit resolution, and vendor evidence as the GC's master ledger | accepted |
+| [0019](0019-shutdown-runbook-execution.md) | Shutdown runbook execution: a planned outage as an append-only step-event ledger | accepted |
 
 ADR 0010 has a companion, [`0010-review-notes.md`](0010-review-notes.md) — a
 design review, not its own numbered decision.

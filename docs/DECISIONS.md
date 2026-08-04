@@ -405,3 +405,34 @@ heavier model would be built on.
 every record pointing at a tag); a stored "needs re-verification" flag (status
 that drifts).
 **Cross-ref.** ADR 0018 §§11, 16; open question #12; ROADMAP M5.3.
+
+### D28 — ADR 0018 and ADR 0019 both accepted; M2 build tasks queued
+**Decision.** Both are **Accepted** (2026-08-04). **ADR 0018** (multi-vendor
+startup evidence model) settles the design behind the post-1.0 M4–M6 track after
+four readings of the source package and eighteen of its twenty-two review
+comments decided. **ADR 0019** (shutdown runbook execution) settles Phase 4,
+from a domain interview with the maintainer. Build tasks `100`–`140` are queued
+against ADR 0019 only.
+**What acceptance does and does not authorize.** ADR 0019 authorizes building —
+it is the current milestone. **ADR 0018 authorizes nothing to be built:** M4–M6
+remain post-1.0 ([D20](#d20--the-multi-vendor-startup-track-is-post-10-m4m6)),
+and neither acceptance performs the D12 API contract bump. An accepted ADR is a
+settled design, not a published contract version and not a licence to migrate.
+**Why accept 0018 now rather than at M4.** It was `proposed` while carrying
+eighteen resolved comments, and ADR 0019 already cites it as settled (its
+`not_performed` reason vocabulary). A stale status line on a heavily-decided ADR
+is a live trap: a future agent reads "proposed" and either declines to build
+against it or re-opens questions already answered. Acceptance consolidates the
+work rather than authorizing any of it.
+**Left open deliberately.** ADR 0018: review comments R14, R17, R19, R20 and its
+own questions 1 (phase vocabulary) and 2 (`deferred` at check vs. line level) —
+all additive QC refinements or build-time choices for the milestone that
+implements them. ADR 0019: questions 1 (trim the template side), 2 (subject
+scope) and 4 (T-0 anchoring); question 1 is the only one that changes the
+migration and task `100` calls it out first.
+**Resolved by the pairing.** ADR 0019's question 3 asked whether a `skipped`
+event kind should exist or reuse ADR 0018 §4's `not_performed` vocabulary,
+noting the coupling risk while 0018 was Proposed. Accepting both removes the
+risk: **there is no `skipped` kind** — one vocabulary, not two ways to say the
+same thing.
+**Cross-ref.** ADR 0018, ADR 0019; D20, D12; tasks `080`, `100`–`140`.

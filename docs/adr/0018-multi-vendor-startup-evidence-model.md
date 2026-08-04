@@ -1,6 +1,30 @@
 # ADR 0018 — Multi-vendor startup: staged checkout, explicit resolution, and vendor evidence as the GC's master ledger
 
-**Status:** proposed · **Date:** 2026-08-04
+**Status:** **accepted** (2026-08-04) · **Date:** 2026-08-04
+
+> **Accepted 2026-08-04** by maintainer decision, after four readings of the
+> source package and eighteen of this ADR's twenty-two review comments being
+> decided. Acceptance settles the **design**: the structural answers in §§1–16
+> and every decided review comment are now normative, and a future session must
+> not re-open them without new evidence.
+>
+> **What acceptance does NOT do.** It authorizes no build. The M4–M6 milestones
+> remain post-1.0 ([D20](../DECISIONS.md#d20--the-multi-vendor-startup-track-is-post-10-m4m6)),
+> and it performs no API contract bump — the breaking `punch_items
+> .assigned_party` revocabulary and every additive enum still need the D12 bump
+> at M3. An accepted ADR is a settled design, not a published contract version
+> and not a licence to migrate.
+>
+> **Still open, deliberately** — four review comments (R14, R17, R19, R20) and
+> two of this ADR's own questions (**1**, phase vocabulary; **2**, `deferred` at
+> check vs. line level). None blocks acceptance: all four comments are additive
+> QC refinements, and both questions are build-time choices for the milestone
+> that implements them. R20 needs no schema at all.
+>
+> **The turnover manifest fold (§15) is now cleared to ship** — but its
+> precondition stands: confirm no `turnover_packages` record carrying real
+> signatures exists on any live instance first, or the additions go behind
+> `sha256-canon-v2`.
 **Design capture only — no migration, no UI in this ADR.** It fixes the shapes
 so the post-1.0 milestones M4–M6 ([ROADMAP.md](../ROADMAP.md)) inherit one
 model instead of ten independent ones, and so a future agent does not
@@ -1125,9 +1149,13 @@ it is resolved by open question 5 below: **one fold, now, into v1.**
    one box each. The vendor form's compact layout is a paper constraint, not a
    phone one. Three lines needs no new schema, no value-group concept, and
    gives each leg its own limit and derived verdict.
-4. **Asset/position split** — worth doing at all, or is the re-verification
-   prompt achievable with a simpler "nameplate changed on this tag" event?
-   (Open question #12.)
+4. ~~**Asset/position split**~~ **RESOLVED 2026-08-04: the simpler event.**
+   §16 adds an append-only `equipment_events` ledger and a derived re-verify
+   marker; no second identity, no `equipment_assets` collection. The source's
+   actuators carry no serial number, which is what killed the serial-keyed
+   model. See [D27](../DECISIONS.md#d27--the-asset-behind-a-position-is-an-appended-event-not-a-second-identity)
+   and open question #12. *(This entry was stale — the decision landed in §16
+   without the question list being updated.)*
 5. ~~**Hash versioning.**~~ **RESOLVED by the maintainer, 2026-08-04: fold
    first, into `sha256-canon-v1`, before any real package is signed.** See
    §15.
@@ -1175,7 +1203,7 @@ reasoning in [`0018-review-notes.md`](0018-review-notes.md) R3–R5.*
    that hard-blocks the signature (as blanks do) or warns loudly is the open
    part; §4's gate is the precedent, and the field evidence says a warning would
    have been clicked through.
-8. **Structural vs. situational N/A** ([R5](0018-review-notes.md#r5--required-na_reason-will-be-heavier-than-the-adr-assumes--open)).
+8. ~~**Structural vs. situational N/A**~~ **RESOLVED 2026-08-04: (a) + (c) plus the conditional carve-out** — see [R5](0018-review-notes.md#r5--required-na_reason-will-be-heavier-than-the-adr-assumes--decided--a--c--the-conditional-carve-out-adr-4). *(Entry left below as originally written.)*
    §4 requires `na_reason` on every N/A. The source marks two lines N/A on
    *every* unit of a type — a property of the equipment subtype, not of the
    check, where the honest fix is a template split (ADR 0009's reasoning, one

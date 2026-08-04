@@ -190,10 +190,10 @@ shutdown runbook execution UI — plus the on-mission Punch List report.
 - Paid deliverables (a compiled shutdown report is sidecar work).
 
 **Definition of done (testable)**
-- [~] An ADR defines the shutdown collections and the append-only execution
-      model **before** the migration (the design task's output).
-      *([ADR 0019](adr/0019-shutdown-runbook-execution.md) written 2026-08-04 —
-      **proposed**, not yet accepted. The checkbox closes on acceptance.)*
+- [x] An **accepted** ADR defines the shutdown collections and the append-only
+      execution model **before** the migration (the design task's output).
+      *([ADR 0019](adr/0019-shutdown-runbook-execution.md), accepted
+      2026-08-04.)*
 - [ ] Migrations create the shutdown collections; a fresh DB + smoke test pass.
 - [ ] An operator can execute the seeded tie-in runbook end to end from the UI,
       producing append-only step records; executed steps are never edited.
@@ -203,14 +203,17 @@ shutdown runbook execution UI — plus the on-mission Punch List report.
 - [ ] Docs updated (ARCHITECTURE, ROADMAP checkbox, landing page if
       user-visible); tagged v0.10.0.
 
-**Task status (2026-08-04).** The Punch List task
-([`090`](tasks/090-punch-list-report.md)) is **DONE**. The design/ADR task
-([`080`](tasks/080-phase4-shutdown-runbook-design-adr.md)) is **IN PROGRESS**:
-the domain interview happened and
-[ADR 0019](adr/0019-shutdown-runbook-execution.md) is written and **proposed,
-awaiting the maintainer's acceptance**. The remaining Phase 4 **build** tasks
-(`100`+) are written only after that acceptance — see the roadmap-maintenance
-workflow in `CLAUDE.md`. **Everything else in M2 is gated on it.**
+**Task status (2026-08-04).** The design task
+([`080`](tasks/080-phase4-shutdown-runbook-design-adr.md)) and the Punch List
+task ([`090`](tasks/090-punch-list-report.md)) are **DONE**.
+[ADR 0019](adr/0019-shutdown-runbook-execution.md) is **accepted**, and the
+Phase 4 build tasks are queued in order:
+[`100`](tasks/100-shutdown-collections-migration.md) migration →
+[`110`](tasks/110-shutdown-runbook-seed-loader.md) seed loader →
+[`120`](tasks/120-shutdown-planning-ui.md) planning UI →
+[`130`](tasks/130-shutdown-execution-ui.md) execution UI →
+[`140`](tasks/140-shutdown-board-and-report.md) board + report. `100` is the
+next actionable task.
 
 ---
 

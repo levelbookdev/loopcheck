@@ -1,6 +1,26 @@
 # ADR 0019 — Shutdown runbook execution: a planned outage as an append-only step-event ledger
 
-**Status:** proposed · **Date:** 2026-08-04
+**Status:** **accepted** (2026-08-04) · **Date:** 2026-08-04
+
+> **Accepted 2026-08-04** by maintainer decision. The six interviewed decisions
+> and the four §7 assumptions are now normative, and the build tasks
+> (`100`–`140`) are written against them.
+>
+> **Open question 3 resolves on acceptance.** It asked whether a `skipped` event
+> kind should exist at all, or reuse ADR 0018 §4's `not_performed` reason
+> vocabulary — and noted the coupling risk that ADR 0018 was still Proposed.
+> **ADR 0018 was accepted the same day**, so the coupling is gone and the
+> recommendation applies cleanly: **there is no `skipped` kind.** A step not
+> performed is a `not_performed` event carrying
+> `conditions_unavailable` · `access_blocked` · `equipment_unavailable` ·
+> `satisfied_by_other_evidence` · `out_of_scope` · `other`. One vocabulary, not
+> two ways to say the same thing. Task `100` implements it that way.
+>
+> **Still open:** questions 1 (trim the template side), 2 (is `project` +
+> optional `system` subject enough) and 4 (T-0 anchoring for pre-window steps).
+> Question 1 is the only one that changes the migration and task `100` calls it
+> out as the first thing to settle.
+
 **Design only — no migration, no UI in this ADR** (task
 [`080`](../tasks/080-phase4-shutdown-runbook-design-adr.md)). The build tasks are
 written after this is Accepted, per the roadmap-maintenance workflow in
@@ -82,8 +102,13 @@ the window, which is the most valuable output the module produces.
 
 `shutdown_step_events` — one append-only record per thing that happened, with a
 `kind`: `started` · `completed` · `held` · `released` · `aborted` ·
-`resumed` · `skipped` · `contingency_invoked`. A step's state and the
+`resumed` · `not_performed` · `contingency_invoked`. A step's state and the
 shutdown's standing are **derived** from the events; nothing stores a status.
+
+*(This list said `skipped` when drafted. On acceptance, open question 3 resolved
+in favour of reusing ADR 0018 §4's vocabulary rather than minting a second way
+to say the same thing: a `not_performed` event carries a
+`not_performed_reason` from the pinned set. See the acceptance note above.)*
 
 This mirrors `loto_events` exactly, and it earns its keep in three places a
 one-record-per-step design would not:

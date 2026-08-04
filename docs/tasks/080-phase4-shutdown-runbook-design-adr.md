@@ -1,9 +1,7 @@
 # 080 — Phase 4 design: shutdown runbook collections + execution model (ADR first)
 
-Status: IN PROGRESS (2026-08-04 — domain interview DONE, six decisions taken;
-`docs/adr/0019-shutdown-runbook-execution.md` written and **awaiting the
-maintainer's acceptance**. Build tasks `100`+ are queued only after acceptance,
-per this task's own acceptance criteria.)
+Status: DONE (2026-08-04 — domain interview held, ADR 0019 written and
+**accepted**, build tasks `100`–`140` queued.)
 
 Milestone: M2 Shutdown Runbooks + Punch List (v0.10.0)
 Depends on: 070 (all of M1)
@@ -86,8 +84,10 @@ to the maintainer, then writes the ADR.
 - [x] The ADR explicitly states the module records and coordinates but never
       authorizes (no interlocks / "safe to proceed" authority), consistent with
       the LOTO doctrine. *("Safety framing — non-negotiable".)*
-- [ ] Follow-on build tasks (`100`+) are appended to `docs/tasks/` **only after**
-      the ADR is accepted, using the standard template.
+- [x] Follow-on build tasks (`100`+) are appended to `docs/tasks/` **only after**
+      the ADR is accepted, using the standard template. *(ADR 0019 accepted
+      2026-08-04; tasks `100` migration, `110` seed loader, `120` planning UI,
+      `130` execution UI, `140` board + report.)*
 - [x] No migration/schema/UI/seed changed in this task.
 
 ## Guardrails

@@ -26,9 +26,11 @@ Numbers encode order, in tens (`010`, `020`, …) so tasks can be inserted betwe
 A higher number never runs before a lower one unless the lower is `DONE` or a
 `BLOCKED` reason explicitly says it can be skipped.
 
-- `010`–`070` — **M1 Harden & Reconcile** (→ v0.9.0)
-- `080`–`090` — **M2 Shutdown Runbooks + Punch List** (→ v0.10.0); the remaining
-  Phase 4 build tasks are written after `080` (the design/ADR task) is accepted.
+- `010`–`070` — **M1 Harden & Reconcile** (→ v0.9.0) — closed at v0.9.0.
+- `080`–`140` — **M2 Shutdown Runbooks + Punch List** (→ v0.10.0). `080` (design)
+  and `090` (punch list) are DONE; ADR 0019 was accepted 2026-08-04 and the
+  Phase 4 build tasks `100`–`140` are now queued in order: migration → seed
+  loader → planning UI → execution UI → board + report.
 
 ## Status values
 
