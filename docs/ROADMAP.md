@@ -289,14 +289,23 @@ design capture only, no migration, no UI*). **ADR 0018 must be accepted before
 any task in M4–M6 is written**, per the design-task pattern `CLAUDE.md`
 describes for Phase 4.
 
-**Source verification (2026-08-04).** ADR 0018 was written from a *summary* of
-the observations; the compiled report package was then read directly and the
-reading recorded in [`0018-review-notes.md`](adr/0018-review-notes.md). All ten
-observations were confirmed, several close to verbatim. The reading **added a
-fourth tag-validation check** (M5.3) and **raised three open questions** the
-summary did not (M5.1); it also proposed reversing the multi-value-reading
-recommendation, which the maintainer **decided against** — M5.2 now records the
-settled rule. Those changes are folded into the entries below.
+**Source verification and decisions (2026-08-04).** ADR 0018 was written from a
+*summary* of the observations; the compiled report package was then read
+directly — four times, as [`0018-review-notes.md`](adr/0018-review-notes.md)
+records — and all ten observations were confirmed, several close to verbatim.
+The readings **corrected three claims** that had been taken from the PDF's text
+layer rather than rendered pages, **added a fourth tag-validation check** (M5.3),
+and raised **twenty-two review comments (R1–R22)**. Eighteen are now **decided**
+and folded into ADR 0018 §§4, 5 and 11–16. One (R1) proposed reversing the
+multi-value-reading recommendation and the maintainer **decided against it** —
+M5.2 records the settled rule.
+
+> **Resume here.** ADR 0018 is still *proposed*, and accepting it is the gate on
+> every task below. Outstanding before acceptance: **R14** (import-QC signals),
+> **R17** (where a limit comes from when the vendor form omits one), **R19**
+> (typed external-evidence pointer) and **R20** (a signature on a page that
+> identifies nothing) — all marked `*open*` in the review notes — plus the unrun
+> fold precondition in the paragraph below.
 
 **Why this track sits after v1.0, not before it.**
 [D2](DECISIONS.md#d2--trust-before-features-m1-comes-first) (trust before
@@ -311,9 +320,20 @@ staged lifecycle, ball-in-court punch items, and vendor evidence first.
 
 **One sequencing constraint overrides the rest.** Every turnover addition below
 changes the bytes that `sha256-canon-v1` hashes (ADR 0018, "what this adds to
-the frozen turnover package"). They must land **before the first real package
-is signed**, or behind a `sha256-canon-v2`. That is the strongest argument for
-deciding ADR 0010 and ADR 0018 together — see open question #5.
+the frozen turnover package"). **Resolved 2026-08-04** — they land in **one fold
+into v1**, together, before the first real package is signed, rather than behind
+a `sha256-canon-v2`: a hash version protects history, and there is no history to
+protect ([ADR 0018 §15](adr/0018-multi-vendor-startup-evidence-model.md),
+[D25](DECISIONS.md), open question #13). ADR 0010 was **accepted** the same day
+(open question #5), which closed D6's freeze and made the golden vector an
+enforced build-route refusal rather than a `console.log`.
+
+**The fold's precondition has not been run.** Before it ships, confirm that **no
+`turnover_packages` record carrying real signatures exists on any live
+instance**; if one does, the additions go behind `sha256-canon-v2` instead. The
+build route now refuses on canonicalizer drift, but that check has never been
+exercised against a real deployment — it is the one item in this track with a
+dependency outside the repo.
 
 ---
 
