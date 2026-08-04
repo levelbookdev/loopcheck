@@ -93,7 +93,7 @@ vendor field service visits ([ADR 0017](adr/0017-vendor-field-service-reports.md
 
 ---
 
-## M1 — Harden & Reconcile → **v0.9.0** (current milestone)
+## M1 — Harden & Reconcile → **v0.9.0** ✅ closed 2026-07-30
 
 **Goal.** Make the existing breadth trustworthy enough to deploy on a real job:
 the tests prove the invariants, the docs tell one truth, and a clean install is
@@ -166,7 +166,7 @@ Tasks: [`010`](tasks/010-docs-reconcile-stale-references.md) ·
 
 ---
 
-## M2 — Shutdown Runbooks + Punch List → **v0.10.0**
+## M2 — Shutdown Runbooks + Punch List → **v0.10.0** (current milestone)
 
 **Goal.** Ship the first new feature since hardening — the Phase 4 tie-in
 shutdown runbook execution UI — plus the on-mission Punch List report.
@@ -190,8 +190,10 @@ shutdown runbook execution UI — plus the on-mission Punch List report.
 - Paid deliverables (a compiled shutdown report is sidecar work).
 
 **Definition of done (testable)**
-- [ ] An accepted ADR defines the shutdown collections and the append-only
-      execution model **before** the migration (the design task's output).
+- [~] An ADR defines the shutdown collections and the append-only execution
+      model **before** the migration (the design task's output).
+      *([ADR 0019](adr/0019-shutdown-runbook-execution.md) written 2026-08-04 —
+      **proposed**, not yet accepted. The checkbox closes on acceptance.)*
 - [ ] Migrations create the shutdown collections; a fresh DB + smoke test pass.
 - [ ] An operator can execute the seeded tie-in runbook end to end from the UI,
       producing append-only step records; executed steps are never edited.
@@ -201,11 +203,14 @@ shutdown runbook execution UI — plus the on-mission Punch List report.
 - [ ] Docs updated (ARCHITECTURE, ROADMAP checkbox, landing page if
       user-visible); tagged v0.10.0.
 
-**Task status.** Only the design/ADR task ([`080`](tasks/080-phase4-shutdown-runbook-design-adr.md))
-and the Punch List task ([`090`](tasks/090-punch-list-report.md)) are written
-now. The remaining Phase 4 **build** tasks are written after `080` is accepted
-(they depend on domain decisions deliberately not guessed here) — see the
-roadmap-maintenance workflow in `CLAUDE.md`.
+**Task status (2026-08-04).** The Punch List task
+([`090`](tasks/090-punch-list-report.md)) is **DONE**. The design/ADR task
+([`080`](tasks/080-phase4-shutdown-runbook-design-adr.md)) is **IN PROGRESS**:
+the domain interview happened and
+[ADR 0019](adr/0019-shutdown-runbook-execution.md) is written and **proposed,
+awaiting the maintainer's acceptance**. The remaining Phase 4 **build** tasks
+(`100`+) are written only after that acceptance — see the roadmap-maintenance
+workflow in `CLAUDE.md`. **Everything else in M2 is gated on it.**
 
 ---
 
