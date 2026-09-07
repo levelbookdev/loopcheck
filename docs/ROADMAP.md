@@ -47,7 +47,7 @@ first ([ADR 0003](adr/0003-core-premium-sidecar-boundary.md)).
 ## Shipped (the product today)
 
 Feature-broad and working; never yet tagged, hardened, or validated. A fresh
-database from committed migrations has **24 application collections** plus
+database from committed migrations has **31 application collections** plus
 PocketBase's `users`. Authoritative descriptions live in `ARCHITECTURE.md`;
 this is the index.
 
@@ -131,8 +131,10 @@ validated — all gated by CI. No new features
 - [x] `grep -ri "linecheck" docs/ *.md` returns only historical/superseded
       references explicitly labeled as such (ADR 0014's own record); no doc names
       LineCheck as the *current or future owner* of any scope.
-- [x] Every doc that states a collection count states **24** (application
-      collections); none says 16 or 18 as the current total.
+- [x] Every doc that states a collection count states the same current total
+      (application collections); none says 16 or 18. That total was **24** when
+      M1 closed and is **31** since migration S added the seven shutdown
+      collections (ADR 0019, task 100).
 - [x] `scripts/smoke_test.sh` passes with new assertions for: `segments` in the
       existence loop, a tank leak-test seed/workflow assertion, and an
       open→resolve behavior assertion; run count is documented in the script
@@ -194,7 +196,7 @@ shutdown runbook execution UI — plus the on-mission Punch List report.
       execution model **before** the migration (the design task's output).
       *([ADR 0019](adr/0019-shutdown-runbook-execution.md), accepted
       2026-08-04.)*
-- [ ] Migrations create the shutdown collections; a fresh DB + smoke test pass.
+- [x] Migrations create the shutdown collections; a fresh DB + smoke test pass.
 - [ ] An operator can execute the seeded tie-in runbook end to end from the UI,
       producing append-only step records; executed steps are never edited.
 - [x] The Punch List report renders print-friendly and exports CSV for a system

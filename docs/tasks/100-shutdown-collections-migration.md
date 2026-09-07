@@ -1,6 +1,6 @@
 # 100 — Shutdown collections migration (schema only, no UI)
 
-Status: TODO
+Status: DONE (2026-09-07 — migration `1789000034_migration_s_shutdowns.js`; open question 1 settled as the ADR recommended, contingencies stay a separate collection; smoke test 94 → 112 assertions, green)
 Milestone: M2 Shutdown Runbooks + Punch List (v0.10.0)
 Depends on: 080 (ADR 0019, accepted 2026-08-04)
 
@@ -103,17 +103,17 @@ variant**): `conditions_unavailable` · `access_blocked` ·
 
 ## Acceptance criteria
 
-- [ ] Open question 1 settled and the choice stated in the commit message.
-- [ ] The migration applies to a **fresh** database (delete `pb_data/`, run
+- [x] Open question 1 settled and the choice stated in the commit message.
+- [x] The migration applies to a **fresh** database (delete `pb_data/`, run
       `./pocketbase serve`) and `migrate down` rolls it back cleanly.
-- [ ] `scripts/smoke_test.sh` gains assertions, and its header assertion count
+- [x] `scripts/smoke_test.sh` gains assertions, and its header assertion count
       is updated: all seven collections exist; a `shutdown_step_events` create
       succeeds **without a token**; a PATCH and a DELETE of one are refused; a
       `contingency_invoked` event with no `contingency` is refused; a
       `not_performed` event with no reason is refused; an unauthenticated
       `shutdowns` create is refused and an authenticated one succeeds.
-- [ ] `scripts/smoke_test.sh` passes end to end; the browser test still passes.
-- [ ] No `pb_public/` file and no `seed/` file changed.
+- [x] `scripts/smoke_test.sh` passes end to end; the browser test still passes.
+- [x] No `pb_public/` file and no `seed/` file changed.
 
 ## Guardrails
 

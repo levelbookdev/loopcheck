@@ -28,7 +28,7 @@
 #          LC_TEST_PORT=8500 ./scripts/smoke_test.sh
 # Exit:    0 = all assertions passed;  1 = a regression;  2 = setup failure.
 #
-# Assertion count: 94 as of 2026-08-04. If you add or remove assertions, update
+# Assertion count: 112 as of 2026-09-07. If you add or remove assertions, update
 # this number -- it is the cheap check that a section did not silently stop
 # running (a helper returning empty makes assertions vanish, not fail loudly).
 #
@@ -168,6 +168,14 @@ auth_post_status() {
     "$BASE/api/collections/$1/records" \
     -H "Content-Type: application/json" -H "Authorization: ${TOKEN:-}" -d "$2"
 }
+# auth_post_id COLLECTION JSON  -> the id of a record an ORDINARY USER just
+# created. Sections that must build a small object graph of their own (rather
+# than reading one seed_demo.sh already made) need the new id, not the status.
+auth_post_id() {
+  curl -s -X POST "$BASE/api/collections/$1/records" \
+    -H "Content-Type: application/json" -H "Authorization: ${TOKEN:-}" -d "$2" \
+    | sed -n 's/.*"id":"\([a-z0-9]\{15\}\)".*/\1/p' | head -1
+}
 # auth_delete_status / su_delete_status COLLECTION ID  -> HTTP code of a DELETE
 # as ordinary user / as superuser. Deletes are admin-only everywhere
 # (deleteRule null), so the two together prove the tier boundary: the same
@@ -234,7 +242,9 @@ for c in projects systems tags segments checklist_templates template_items \
          checks check_items punch_items test_equipment attachments \
          warranties closeout_requirements closeout_log warranty_claims \
          services service_contacts loto_events test_standards calibrations \
-         calibration_points service_visits turnover_packages signatures; do
+         calibration_points service_visits turnover_packages signatures \
+         shutdown_templates shutdown_template_steps shutdown_contingencies \
+         shutdown_roles shutdowns shutdown_steps shutdown_step_events; do
   code=$(http_status GET "$BASE/api/collections/$c/records?perPage=1")
   if [ "$code" = "200" ]; then ok "collection $c"; else bad "collection $c (HTTP $code)"; fi
 done
@@ -462,6 +472,62 @@ rejected "service_visits rejects tag AND system together (shape rule)" \
   "$(anon_post_status service_visits "{\"project\":\"$SV_PROJ\",\"tag\":\"$SV_TAG\",\"system\":\"$(first_id systems)\",\"vendor_company\":\"Smoke Vendor\",\"rep_name\":\"S. Tester\",\"date\":\"2026-07-01\",\"purpose\":\"other\",\"summary\":\"invalid two-subject visit\",\"client_token\":\"smoke-sv-token-000002\"}")"
 rejected "service_visits reject PATCH (append-only)" \
   "$(patch_status service_visits "$(first_id service_visits)" '{"summary":"tampered"}')"
+
+# ---- 8d. shutdown runbooks: office plan, accountless execution (ADR 0019) ----
+# The asymmetry IS the design, so both halves are asserted together. PLANNING a
+# shutdown is an office act and needs an account; LOGGING what happened is a
+# gloved hand at 2 AM in the rain on a live main and must work with no account
+# at all (hard constraint #1). A login wall on the execution ledger is the one
+# thing guaranteed to make it get written from memory afterwards, which is the
+# failure the module exists to prevent.
+#
+# The events are append-only, so a malformed record is PERMANENT -- which is why
+# the shape is enforced by the createRule rather than the UI, and why both the
+# accept and the refuse direction are pinned here.
+echo "==> shutdown runbooks: planning gated, execution accountless (ADR 0019)"
+
+SD_PROJ=$(first_id projects)
+rejected "anon shutdowns create denied (planning is an office act)" \
+  "$(anon_post_status shutdowns "{\"project\":\"$SD_PROJ\",\"title\":\"anon plan\"}")"
+SD_ID=$(auth_post_id shutdowns "{\"project\":\"$SD_PROJ\",\"title\":\"Smoke tie-in\"}")
+if [ -n "$SD_ID" ]; then ok "user shutdowns create allowed (same payload)"; else bad "user shutdowns create FAILED"; fi
+
+# A template + contingency, so contingency_invoked has something real to name.
+SD_TPL=$(auth_post_id shutdown_templates '{"name":"Smoke runbook"}')
+SD_CON=$(auth_post_id shutdown_contingencies "{\"template\":\"$SD_TPL\",\"seq\":1,\"trigger\":\"valve fails to hold\",\"action\":\"secondary isolation or abort\"}")
+SD_STEP=$(auth_post_id shutdown_steps "{\"shutdown\":\"$SD_ID\",\"seq\":1,\"group\":\"window\",\"description\":\"Verify zero pressure at work point\",\"hold_point\":true}")
+
+# The accountless half. No token anywhere in these calls.
+accepted "anon shutdown_step_events create (accountless execution logging)" \
+  "$(anon_post_status shutdown_step_events "{\"shutdown\":\"$SD_ID\",\"step\":\"$SD_STEP\",\"kind\":\"completed\",\"performed_by\":\"smoke crew\",\"client_token\":\"smoke-sd-token-000001\"}")"
+# `aborted` is about the whole shutdown, not a step -- `step` is nullable for it.
+accepted "anon aborted event with no step (abort is shutdown-level)" \
+  "$(anon_post_status shutdown_step_events "{\"shutdown\":\"$SD_ID\",\"kind\":\"aborted\",\"performed_by\":\"smoke super\",\"client_token\":\"smoke-sd-token-000002\"}")"
+
+# Shape rule, both directions for each clause.
+rejected "contingency_invoked without a contingency refused" \
+  "$(anon_post_status shutdown_step_events "{\"shutdown\":\"$SD_ID\",\"kind\":\"contingency_invoked\",\"client_token\":\"smoke-sd-token-000003\"}")"
+accepted "contingency_invoked naming a contingency allowed" \
+  "$(anon_post_status shutdown_step_events "{\"shutdown\":\"$SD_ID\",\"kind\":\"contingency_invoked\",\"contingency\":\"$SD_CON\",\"client_token\":\"smoke-sd-token-000004\"}")"
+rejected "not_performed without a reason refused" \
+  "$(anon_post_status shutdown_step_events "{\"shutdown\":\"$SD_ID\",\"step\":\"$SD_STEP\",\"kind\":\"not_performed\",\"client_token\":\"smoke-sd-token-000005\"}")"
+accepted "not_performed with an ADR 0018 reason allowed" \
+  "$(anon_post_status shutdown_step_events "{\"shutdown\":\"$SD_ID\",\"step\":\"$SD_STEP\",\"kind\":\"not_performed\",\"not_performed_reason\":\"access_blocked\",\"client_token\":\"smoke-sd-token-000006\"}")"
+
+# Offline replay: the outbox re-POSTs a queued event after a dead zone. The
+# unique client_token makes the duplicate a refused write rather than a second
+# entry in a ledger nobody can edit afterwards.
+rejected "duplicate client_token refused (idempotent offline replay)" \
+  "$(anon_post_status shutdown_step_events "{\"shutdown\":\"$SD_ID\",\"kind\":\"aborted\",\"performed_by\":\"smoke super\",\"client_token\":\"smoke-sd-token-000002\"}")"
+
+# Append-only, asserted from the ordinary-user tier (deleteRule/updateRule null
+# means superuser-only, and a superuser can always write -- the client tiers are
+# what must be refused).
+SD_EV=$(first_id shutdown_step_events)
+rejected "shutdown_step_events reject PATCH (append-only)" \
+  "$(patch_status shutdown_step_events "$SD_EV" '{"note":"tampered"}')"
+rejected "shutdown_step_events reject DELETE (append-only)" \
+  "$(auth_delete_status shutdown_step_events "$SD_EV")"
 
 # ---- 9. field-level PII: the back-relation expand a guest must not pierce -----
 # The collection rule hides service_contacts as a list/view (section 7). The

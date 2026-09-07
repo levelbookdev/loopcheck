@@ -21,7 +21,7 @@ the same origin it was served from. PocketBase serves `pb_public/`, applies
 
 ## 2. Data model
 
-Twenty-four committed application collections. Relations are drawn
+Thirty-one committed application collections. Relations are drawn
 `child → parent`; PocketBase system/auth collections are not counted.
 
 ```
@@ -58,6 +58,15 @@ loto_events              (project, tag; applies_to → loto_events)   APPEND-ONL
 
 turnover_packages        (project, system?; supersedes → turnover_packages)   APPEND-ONLY frozen snapshot
 signatures               (subject_collection, subject_id → package XOR check)  APPEND-ONLY attestation
+
+shutdown_templates       (library header)                 the runbook, project-agnostic
+  ├── shutdown_template_steps (template)                  ordered steps, role/tag as TEXT
+  └── shutdown_contingencies  (template)                  trigger/action pairs, not steps
+shutdown_roles           (project)                        per-project role + contact registry
+
+shutdowns                (project, system?, template?)    one planned outage; editable plan
+  └── shutdown_steps     (shutdown, responsible_role?, tag?)  instantiated list; editable
+        └── shutdown_step_events (shutdown, step?, contingency?)  APPEND-ONLY execution ledger
 ```
 
 ### Collections
@@ -88,6 +97,13 @@ signatures               (subject_collection, subject_id → package XOR check) 
 | `service_visits`      | Manufacturer-representative visits against a tag XOR system, with report evidence. | **append-only** |
 | `turnover_packages`   | A frozen, sealed snapshot of a scope's checkout — the signed turnover deliverable (built server-side). | **append-only** |
 | `signatures`          | A recorded attestation (name/role/statement) bound to a package or check by content hash. | **append-only** |
+| `shutdown_templates`  | A named shutdown runbook in the library (seeded from `seed/`).  | editable   |
+| `shutdown_template_steps` | Ordered library steps: group, offsets, hold point, role/tag as project-agnostic **text**. | editable |
+| `shutdown_contingencies` | Library trigger/action pairs. Not steps — no seq position, offset, or hold point. | editable |
+| `shutdown_roles`      | Per-project role registry: `role_key`, title, contact, `notify_on` (**stored, never acted on**). | editable |
+| `shutdowns`           | One planned outage. `planned_window_start` is T-0. A planning record, deliberately **not** append-only. | editable |
+| `shutdown_steps`      | The instantiated step list; role and tag are real **relations** here. Editable while planning. | editable |
+| `shutdown_step_events` | What actually happened: started/completed/held/released/aborted/resumed/not_performed/contingency_invoked, with frozen step text. | **append-only** |
 
 ### Field notes worth knowing
 
@@ -544,9 +560,24 @@ re-imports are safe.
   hook serves the file in place instead.
 - **Global tag-number uniqueness.** Rejected — real programs run multiple plants
   that reuse tag numbers. Uniqueness is per project.
-- **Building shutdown/compliance collections now.** Rejected as building ahead.
-  The domain content lives in `seed/` so it is not lost; the collections and
-  UIs come in Phases 4–5.
+- **Building shutdown/compliance collections now.** Rejected as building ahead
+  *while Phases 1–3 were the work*. The domain content lived in `seed/` so it
+  was not lost. **Superseded for the shutdown half on 2026-09-07**: Phase 4 / M2
+  arrived, ADR 0019 was accepted, and migration S created the seven shutdown
+  collections (task `100`). The compliance half still stands — the Phase 5
+  templates remain data with no execution UI.
+- **Anything that makes the shutdown module part of the go/no-go decision.**
+  Rejected permanently (ADR 0019, the LOTO doctrine of ADR 0007 applied to the
+  second module that could plausibly claim authority): no interlocks, no
+  permission-to-proceed, no "safe to cut" indicator, no green all-clear, and no
+  rule that blocks logging past an unsatisfied hold point. A hold point warns
+  and enters the derived standing; it never stands in the doorway at 2 AM when
+  the authorizer is unreachable. The app records; the written energy-control
+  procedure and the people on site authorize. The app must never be usable as
+  evidence that it is safe to cut a live main.
+- **A `status` or `current_step` column on `shutdowns`.** Rejected — hard
+  constraint #4. A step's state is its latest event, a shutdown's standing is a
+  fold over its events, and schedule variance is computed at render.
 - **Seeding the shutdown runbook as flat checklist templates.** Rejected — a
   flattened copy loses the offsets, hold points, and roles, and would diverge
   from the real runbook in `seed/`. One representation, loaded when Phase 4
@@ -742,11 +773,14 @@ Mechanics worth knowing:
   `subject_kind='service'` templates (ADR 0006).
 - `recurrence` blank = a one-time checkout checklist; `daily` / `per_shift` /
   `per_event` are the compliance cadences (Phase 5).
-- **Not loaded:** `seed/shutdown_runbook_tie_in.json`. The runbook's structure
-  (time offsets, hold points, roles with notification triggers) cannot be
-  represented as a flat checklist without losing what makes it a runbook. It
-  stays as captured domain knowledge until Phase 4 builds real shutdown
-  collections.
+- **Not loaded (yet):** `seed/shutdown_runbook_tie_in.json`. The runbook's
+  structure (time offsets, hold points, roles with notification triggers) cannot
+  be represented as a flat checklist without losing what makes it a runbook —
+  which is why it was never flattened into `checklist_templates`. The
+  collections that *can* hold it now exist (migration S, ADR 0019), so the
+  condition this note set has been met; the loader that reads the JSON into
+  them is task `110` and has not landed. Until it does, the file remains
+  captured domain knowledge and the shutdown collections are empty.
 
 *(Resolved 2026-07-09 — this section previously documented a schema divergence
 between the migration seed and `seed/`; the migrations were reconciled to the
