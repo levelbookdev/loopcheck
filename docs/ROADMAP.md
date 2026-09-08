@@ -47,7 +47,7 @@ first ([ADR 0003](adr/0003-core-premium-sidecar-boundary.md)).
 ## Shipped (the product today)
 
 Feature-broad and working; never yet tagged, hardened, or validated. A fresh
-database from committed migrations has **31 application collections** plus
+database from committed migrations has **32 application collections** plus
 PocketBase's `users`. Authoritative descriptions live in `ARCHITECTURE.md`;
 this is the index.
 
@@ -133,8 +133,8 @@ validated — all gated by CI. No new features
       LineCheck as the *current or future owner* of any scope.
 - [x] Every doc that states a collection count states the same current total
       (application collections); none says 16 or 18. That total was **24** when
-      M1 closed and is **31** since migration S added the seven shutdown
-      collections (ADR 0019, task 100).
+      M1 closed and is **32** since migrations S and T added the eight shutdown
+      collections (ADR 0019, tasks 100 and 110).
 - [x] `scripts/smoke_test.sh` passes with new assertions for: `segments` in the
       existence loop, a tank leak-test seed/workflow assertion, and an
       open→resolve behavior assertion; run count is documented in the script

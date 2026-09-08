@@ -21,7 +21,7 @@ the same origin it was served from. PocketBase serves `pb_public/`, applies
 
 ## 2. Data model
 
-Thirty-one committed application collections. Relations are drawn
+Thirty-two committed application collections. Relations are drawn
 `child → parent`; PocketBase system/auth collections are not counted.
 
 ```
@@ -61,7 +61,8 @@ signatures               (subject_collection, subject_id → package XOR check) 
 
 shutdown_templates       (library header)                 the runbook, project-agnostic
   ├── shutdown_template_steps (template)                  ordered steps, role/tag as TEXT
-  └── shutdown_contingencies  (template)                  trigger/action pairs, not steps
+  ├── shutdown_contingencies  (template)                  trigger/action pairs, not steps
+  └── shutdown_template_roles (template)                  the runbook's own role table
 shutdown_roles           (project)                        per-project role + contact registry
 
 shutdowns                (project, system?, template?)    one planned outage; editable plan
@@ -100,6 +101,7 @@ shutdowns                (project, system?, template?)    one planned outage; ed
 | `shutdown_templates`  | A named shutdown runbook in the library (seeded from `seed/`).  | editable   |
 | `shutdown_template_steps` | Ordered library steps: group, offsets, hold point, role/tag as project-agnostic **text**. | editable |
 | `shutdown_contingencies` | Library trigger/action pairs. Not steps — no seq position, offset, or hold point. | editable |
+| `shutdown_template_roles` | The runbook's own role table (`role_key`, `title`, `notify_on`), project-agnostic. Copied into `shutdown_roles` when a shutdown is planned. | editable |
 | `shutdown_roles`      | Per-project role registry: `role_key`, title, contact, `notify_on` (**stored, never acted on**). | editable |
 | `shutdowns`           | One planned outage. `planned_window_start` is T-0. A planning record, deliberately **not** append-only. | editable |
 | `shutdown_steps`      | The instantiated step list; role and tag are real **relations** here. Editable while planning. | editable |
@@ -773,14 +775,16 @@ Mechanics worth knowing:
   `subject_kind='service'` templates (ADR 0006).
 - `recurrence` blank = a one-time checkout checklist; `daily` / `per_shift` /
   `per_event` are the compliance cadences (Phase 5).
-- **Not loaded (yet):** `seed/shutdown_runbook_tie_in.json`. The runbook's
-  structure (time offsets, hold points, roles with notification triggers) cannot
-  be represented as a flat checklist without losing what makes it a runbook —
-  which is why it was never flattened into `checklist_templates`. The
-  collections that *can* hold it now exist (migration S, ADR 0019), so the
-  condition this note set has been met; the loader that reads the JSON into
-  them is task `110` and has not landed. Until it does, the file remains
-  captured domain knowledge and the shutdown collections are empty.
+- **Loaded since 2026-09-07** (migration `1789000036`, task `110`):
+  `seed/shutdown_runbook_tie_in.json`. The runbook's structure — time offsets in
+  two scales, hold points, contingencies, and a role table with notification
+  triggers — cannot survive a flat checklist, which is why it was never
+  flattened into `checklist_templates` and why this file sat captured-but-
+  unloaded from Phase 1 until Phase 4. Migrations S and T built collections that
+  hold all of it, so the condition this note set ("one representation, loaded
+  when Phase 4 can hold it") is met. It loads as 1 template, 22 steps
+  (8 pre-window / 12 window / 2 post-window), 4 contingencies, and 6 template
+  roles, and the loader synthesizes neither offset form.
 
 *(Resolved 2026-07-09 — this section previously documented a schema divergence
 between the migration seed and `seed/`; the migrations were reconciled to the

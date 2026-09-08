@@ -1,6 +1,8 @@
 # 110 — Seed loader: load the tie-in runbook into the shutdown collections
 
-Status: TODO
+Status: DONE (2026-09-07 — loader `1789000036_seed_shutdown_runbook.js`, plus
+`1789000035_migration_t_shutdown_template_roles.js` for the schema gap spec
+item 4 anticipated; smoke test 112 → 122 assertions, green)
 Milestone: M2 Shutdown Runbooks + Punch List (v0.10.0)
 Depends on: 100
 
@@ -55,18 +57,40 @@ finding to raise, not to paper over.
 
 ## Acceptance criteria
 
-- [ ] A fresh database ends with **1** shutdown template, **22** template steps
+- [x] A fresh database ends with **1** shutdown template, **22** template steps
       (8 pre-window, 12 window, 2 post-window), and **4** contingencies.
-- [ ] Window steps have non-null `planned_offset_min` and a null
+- [x] Window steps have non-null `planned_offset_min` and a null
       `offset_label`; pre/post steps have the inverse. Asserted, not eyeballed.
-- [ ] Re-running the loader on a database that already has the template creates
+- [x] Re-running the loader on a database that already has the template creates
       no duplicates.
-- [ ] `migrate down` removes the template, its steps, and its contingencies, and
+- [x] `migrate down` removes the template, its steps, and its contingencies, and
       leaves other seeded content untouched.
-- [ ] `scripts/smoke_test.sh` asserts the counts above (a module whose seed
+- [x] `scripts/smoke_test.sh` asserts the counts above (a module whose seed
       silently skips is exactly the failure the smoke test exists to catch); the
       header assertion count is updated.
-- [ ] `seed/shutdown_runbook_tie_in.json` is **unchanged**.
+- [x] `seed/shutdown_runbook_tie_in.json` is **unchanged**.
+
+## Execution notes (2026-09-07)
+
+Two places where the written spec did not match the source file:
+
+1. **Spec item 4's schema gap was real.** The JSON's `roles` array had nowhere
+   to go — `shutdown_roles` requires a project and none exists at migration
+   time. Raised rather than improvised, and resolved by maintainer ruling: a new
+   `shutdown_template_roles` collection (migration T), with `notify_on` as
+   comma-joined text so task `120`'s copy into `shutdown_roles` needs no
+   transform. This shifted the loader to `1789000036`; ADR 0019 carries an
+   amendment note.
+2. **`tag_ref` is not null throughout**, as spec item 3 states. Two steps
+   (`seq` 11 and 16) carry instructional placeholders — "OPTIONAL: reference
+   isolation valve tags here". The guardrail forbids improving runbook content,
+   so they load verbatim. **Worth a maintainer look**: as loaded, those strings
+   will render as tag hints in the planning UI.
+
+Also noted for whoever builds the execution view: window step `seq: 10` sits at
+`planned_offset_min: 0` — T-0 exactly, a real value and not an unset field.
+`planned_duration_min` is the honest discriminator between the two offset forms,
+since every window step has one and no pre/post step does.
 
 ## Guardrails
 

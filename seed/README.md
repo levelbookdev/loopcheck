@@ -3,8 +3,11 @@
 Domain seed content for LoopCheck: checkout checklist templates (tag_type × phase),
 compliance log templates (recurring, location-subject), and a generic wet-tap/tie-in
 shutdown runbook. The seed migration (`pb_migrations/1789000009_seed_templates.js`)
-loads the checkout and compliance files directly on first startup; the runbook stays
-JSON-only until Phase 4 builds the shutdown collections.
+loads the checkout and compliance files directly on first startup. The runbook was
+JSON-only until Phase 4; it is **now loaded** by
+`pb_migrations/1789000036_seed_shutdown_runbook.js` into the shutdown collections
+(ADR 0019), which can hold its offsets, hold points, contingencies, and role table
+without flattening them.
 
 ## Files
 
@@ -17,7 +20,7 @@ JSON-only until Phase 4 builds the shutdown collections.
 | `segment_templates.json` | Segment acceptance templates (Phase 6, ADR 0014): hydrostatic test, C651 disinfection, and bac-t collection for pressure/force mains; low-pressure air, mandrel/deflection, and manhole vacuum for gravity sewers — `subject_kind: "segment"`, keyed by `segment_type` via `tag_type`, loaded by `1789000025_seed_segment_templates.js` |
 | `tank_templates.json` | Tank/basin acceptance: the 48-hr **Leak Test** — a `tag` subject with `tag_type: "tank"` at the `leakTest` phase (enums added by migration `1789000027_N`), loaded by `1789000028_seed_tank_templates.js`. The OPEN half of an ADR-0012 open→resolve test (see the open→resolve note below) |
 | `preservation_templates.json` | Stored-equipment **preservation logs** (ADR 0015): a **weekly** log (shaft rotation, protection, heaters) and a **monthly** log (oil, rust/preservative, condensate, lubrication, desiccant) for the delivered-but-not-yet-installed window — recurring `subject_kind: "tag"` templates, `recurrence` weekly/monthly (enum added by migration `1789000031_Q`), loaded by `1789000032_seed_preservation_templates.js`. The append-only warranty-provenance ledger (ADR 0005) |
-| `shutdown_runbook_tie_in.json` | Generic pressurized-main tie-in runbook: steps, offsets, roles, notification triggers |
+| `shutdown_runbook_tie_in.json` | Generic pressurized-main tie-in runbook: 22 steps in three groups, both offset forms, hold points, 4 contingencies, and a 6-role table with notification triggers. Loaded by `1789000036_seed_shutdown_runbook.js` into `shutdown_templates` / `shutdown_template_steps` / `shutdown_contingencies` / `shutdown_template_roles` (ADR 0019) |
 
 ## Template schema
 
@@ -206,10 +209,29 @@ signatures, same PDF engine.
 
 ## Runbook schema
 
-See `shutdown_runbook_tie_in.json`. Steps carry `planned_offset_min` (T+minutes),
-`planned_duration_min`, `responsible_party`, `hold_point` (requires witness ack before
-proceeding), and optional `tag_ref` — a step like "Close 30-inch BFV" references the
-actual valve tag with its own checkout history. Roles carry `notify_on` triggers.
+See `shutdown_runbook_tie_in.json`. Steps carry `responsible_party`, `hold_point`,
+and optional `tag_ref` — a step like "Close 30-inch BFV" references the actual valve
+tag with its own checkout history. Roles carry `notify_on` triggers.
+
+**`hold_point` warns; it never blocks.** ADR 0019 §1 settled this: an unsatisfied
+hold point renders prominently and enters the shutdown's derived standing, but it
+never prevents anyone from logging any step. The app records; it never authorizes,
+and it must never stand in the doorway at 2 AM when the authorizer is unreachable.
+(An earlier revision of this note said a hold point "requires witness ack before
+proceeding" — that was never built and is the opposite of the accepted decision.)
+
+**Two offset forms, deliberately.** Pre- and post-window steps carry a calendar-scale
+`offset_label` (`T-14d`, `T+24h`) and **no** minute fields; window steps carry
+`planned_offset_min` and `planned_duration_min` from T-0 and **no** label. Each is
+right at its own scale and the loader synthesizes neither (ADR 0019 §2). Note window
+step `seq: 10` is at `planned_offset_min: 0` — that is T-0 exactly, a real value.
+
+**Roles are template metadata.** The `roles` array loads into
+`shutdown_template_roles` (project-agnostic), *not* `shutdown_roles` (per project) —
+there is no project at migration time. Planning a shutdown copies them into the
+project, where the operator adds the contact name and phone a library cannot know.
+Six roles are defined though only four are named by a step: `standby_crew` and
+`emergency` exist to be phoned.
 
 ## Open confirmations (resolve per project before first live use)
 

@@ -28,7 +28,7 @@
 #          LC_TEST_PORT=8500 ./scripts/smoke_test.sh
 # Exit:    0 = all assertions passed;  1 = a regression;  2 = setup failure.
 #
-# Assertion count: 112 as of 2026-09-07. If you add or remove assertions, update
+# Assertion count: 122 as of 2026-09-07. If you add or remove assertions, update
 # this number -- it is the cheap check that a section did not silently stop
 # running (a helper returning empty makes assertions vanish, not fail loudly).
 #
@@ -95,6 +95,12 @@ zero() {
     ''|*[!0-9]*) bad "$1: expected 0, got '$2'" ;;
     *)           bad "$1: guest saw $2 (office data LEAKED to anon)" ;;
   esac
+}
+# exactly LABEL EXPECTED ACTUAL  -- pass when ACTUAL == EXPECTED. Seeded content
+# has a known size, and `atleast` would not catch a loader that ran twice.
+exactly() {
+  case "$3" in ''|*[!0-9]*) bad "$1: got '$3'"; return;; esac
+  if [ "$3" -eq "$2" ]; then ok "$1 ($3)"; else bad "$1: expected $2, got $3"; fi
 }
 # atleast LABEL FLOOR ACTUAL  -- pass when ACTUAL >= FLOOR.
 atleast() {
@@ -244,7 +250,8 @@ for c in projects systems tags segments checklist_templates template_items \
          services service_contacts loto_events test_standards calibrations \
          calibration_points service_visits turnover_packages signatures \
          shutdown_templates shutdown_template_steps shutdown_contingencies \
-         shutdown_roles shutdowns shutdown_steps shutdown_step_events; do
+         shutdown_roles shutdowns shutdown_steps shutdown_step_events \
+         shutdown_template_roles; do
   code=$(http_status GET "$BASE/api/collections/$c/records?perPage=1")
   if [ "$code" = "200" ]; then ok "collection $c"; else bad "collection $c (HTTP $code)"; fi
 done
@@ -269,6 +276,32 @@ nonzero "tank leak-test template items" \
 # percent-encoded as %26%26 so it is not read as a query-parameter separator.
 nonzero "tank template keyed to tag_type=tank, phase=leak_test" \
   "$(total checklist_templates "&filter=(tag_type='tank'%26%26phase='leak_test')")"
+
+# The tie-in shutdown runbook (migration 1789000036, ADR 0019 / task 110). It
+# was captured-but-unloaded since Phase 1 and only became loadable once
+# migrations S and T built collections that can hold offsets, hold points,
+# contingencies and a role table. Counts are EXACT: a loader that silently ran
+# twice is as broken as one that skipped, and both look fine from a floor check.
+echo "==> tie-in shutdown runbook loaded (ADR 0019)"
+exactly "shutdown template seeded"        1  "$(total shutdown_templates)"
+exactly "shutdown template steps"         22 "$(total shutdown_template_steps)"
+exactly "  pre_window steps"              8  "$(total shutdown_template_steps "&filter=(group='pre_window')")"
+exactly "  window steps"                  12 "$(total shutdown_template_steps "&filter=(group='window')")"
+exactly "  post_window steps"             2  "$(total shutdown_template_steps "&filter=(group='post_window')")"
+exactly "shutdown contingencies"          4  "$(total shutdown_contingencies)"
+# Six roles, though only four are named by any step -- standby_crew and
+# emergency exist to be phoned. That is why the role table is loaded rather
+# than inferred from the steps.
+exactly "shutdown template roles"         6  "$(total shutdown_template_roles)"
+# ADR 0019 §2's asymmetry, asserted rather than eyeballed: window steps carry
+# minute fields and NO label; pre/post steps carry a label and NO minutes. The
+# loader must never synthesize the missing form in either direction. Note the
+# discriminator is planned_duration_min, not planned_offset_min -- window step
+# seq 10 sits at offset 0 (T-0 exactly), which is a real value, not an absence.
+exactly "no window step carries an offset_label" 0 \
+  "$(total shutdown_template_steps "&filter=(group='window'%26%26offset_label!='')")"
+exactly "no pre/post step carries a planned_duration_min" 0 \
+  "$(total shutdown_template_steps "&filter=(group!='window'%26%26planned_duration_min>0)")"
 
 # ---- 4. run the real demo seed ----------------------------------------------
 echo "==> creating demo user + running scripts/seed_demo.sh"

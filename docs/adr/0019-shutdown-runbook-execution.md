@@ -21,6 +21,28 @@
 > Question 1 is the only one that changes the migration and task `100` calls it
 > out as the first thing to settle.
 
+> **Amendment (2026-09-07, task `110`) — the template side needed its own role
+> table.** §4 below defines `shutdown_roles` as a **per-project** registry, and
+> §7 assumes the template side is project-agnostic. Both hold. What neither
+> anticipated is that `seed/shutdown_runbook_tie_in.json` carries its own
+> `roles` array (`role_key`, `title`, `notify_on`) as part of the *template* —
+> and with no project in existence at migration time, the seed loader had
+> nowhere to put it. Migration T adds **`shutdown_template_roles`**, applying to
+> roles the same template/instance split the module already uses for steps:
+>
+> ```
+> shutdown_template_steps  (project-agnostic)  ->  shutdown_steps  (a project's)
+> shutdown_template_roles  (project-agnostic)  ->  shutdown_roles  (a project's)
+> ```
+>
+> Planning (task `120`) copies the template roles into the project and the
+> operator adds the contact name and phone a library cannot know. `shutdown_roles`
+> keeps exactly the meaning §4 gives it. `notify_on` is comma-joined text on both
+> sides so the copy needs no transform (maintainer ruling). The role table is
+> **not** derivable from the steps — the runbook defines six roles but only four
+> are named by any step; `standby_crew` and `emergency` exist to be phoned. This
+> takes the module to **eight** collections and the schema to **32**.
+
 **Design only — no migration, no UI in this ADR** (task
 [`080`](../tasks/080-phase4-shutdown-runbook-design-adr.md)). The build tasks are
 written after this is Accepted, per the roadmap-maintenance workflow in
@@ -126,6 +148,11 @@ it would need `pending` to mean two different things).
 
 ### 4. Roles are a per-project registry
 
+> Amended 2026-09-07: per-project is right for the *instance* side, but the
+> template carries its own role table too. See the amendment note at the top —
+> `shutdown_template_roles` holds the library's roles; this section's
+> `shutdown_roles` is unchanged.
+
 `shutdown_roles`: `project` · `role_key` · `title` · `contact_name` ·
 `contact_phone` · `notify_on`. Steps reference a role; the shutdown resolves it
 to the project's record.
@@ -229,7 +256,9 @@ built in this ADR.**
 
 ## Consequences
 
-- **Seven new collections** — `shutdown_templates`, `shutdown_template_steps`,
+- **Seven new collections** (**eight** as built — see the amendment note:
+  `shutdown_template_roles` was added by migration T) —
+  `shutdown_templates`, `shutdown_template_steps`,
   `shutdown_contingencies`, `shutdown_roles` (template/reference, small, seeded)
   and `shutdowns`, `shutdown_steps`, `shutdown_step_events` (instance and
   execution). That takes the committed schema from **24 to 31**, the largest

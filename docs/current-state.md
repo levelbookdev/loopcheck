@@ -64,7 +64,7 @@ workflow**. See migrations `1789000023`, `1789000024`, `1789000025`,
 ## Current collections
 
 **CURRENT (revised 2026-09-07).** A fresh database from committed migrations
-contains **31 application collections**, excluding PocketBase system/auth
+contains **32 application collections**, excluding PocketBase system/auth
 collections (`users` is the auth collection and is additional):
 
 - Project/equipment: `projects`, `systems`, `tags`, `segments`
@@ -78,13 +78,15 @@ collections (`users` is the auth collection and is additional):
   `calibration_points`
 - Vendor service visits: `service_visits`
 - Signatures and turnover: `turnover_packages`, `signatures`
-- Shutdown runbooks (ADR 0019, schema only — no UI yet): `shutdown_templates`,
-  `shutdown_template_steps`, `shutdown_contingencies`, `shutdown_roles`,
-  `shutdowns`, `shutdown_steps`, `shutdown_step_events`
+- Shutdown runbooks (ADR 0019, schema + seeded library, no UI yet):
+  `shutdown_templates`, `shutdown_template_steps`, `shutdown_contingencies`,
+  `shutdown_template_roles`, `shutdown_roles`, `shutdowns`, `shutdown_steps`,
+  `shutdown_step_events`. The tie-in runbook is loaded (migration `1789000036`);
+  the execution UI is tasks `120`–`140`.
 
 The authoritative schema is the ordered migration set in `pb_migrations/`; the
 count above is verifiable with `grep -c "new Collection(" pb_migrations/*.js`.
-Of these, **16 are published as API contract v1 and 15 are marked delta**
+Of these, **16 are published as API contract v1 and 16 are marked delta**
 pending a version bump — that bump is a deliberate M3 decision, not an
 oversight. See [`API.md`](API.md).
 
@@ -176,7 +178,7 @@ PII/auth boundaries, and checks the `/t/` and `/s/` routes. It asserts the
 ADR 0011 access matrix across all three tiers — guest denial,
 authenticated-user reads/writes, the user-vs-superuser delete boundary,
 segment-create in both directions, and the field-level PII back-relation
-expand. As of the 2026-09-07 revision it also covers all 31 collections in the
+expand. As of the 2026-09-07 revision it also covers all 32 collections in the
 existence loop, the shutdown planning/execution auth asymmetry and its
 append-only event shape rules (ADR 0019), the tank leak-test seed, the ADR 0012 open→resolve pair
 (asserting the open record is **not** mutated by its resolution), and the

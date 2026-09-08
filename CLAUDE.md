@@ -266,8 +266,8 @@ block (grey).
 - Design tokens in `app.css`: one action accent (safety orange), system fonts
   for zero webfont bytes, monospace for tag numbers, severity color language.
 - **The collections are a published API contract** (`docs/API.md`, ADR 0003).
-  Sixteen are published as **v1**; the committed schema now has **31**, the
-  extra fifteen marked *delta* pending a contract version bump (an M3 decision).
+  Sixteen are published as **v1**; the committed schema now has **32**, the
+  extra sixteen marked *delta* pending a contract version bump (an M3 decision).
   Breaking changes to any of their shapes, semantics, or rules need an ADR and a
   contract version bump — not just a migration. Premium is a sidecar on that
   contract; capabilities it needs land in core first.
