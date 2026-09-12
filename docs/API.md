@@ -30,7 +30,7 @@ REST behavior is a breaking change to this contract.
 
 ## Contract collections
 
-The committed schema has twenty-four application collections. The original
+The committed schema has thirty-two application collections. The original
 sixteen are the published v1 set; rows marked **delta** are implemented but
 await a contract decision. `public` means no user token, `auth` means an
 ordinary authenticated user, and `admin-only` means no ordinary record-rule
@@ -62,14 +62,33 @@ operation. Shape-specific create rules still apply in addition to auth.
 | `service_visits` | **delta; ADR 0017** | public | public, tag XOR system + same-project rule | **never** | **never** |
 | `turnover_packages` | **delta; ADR 0010** | public | build route only (createRule `null`) | **never** | **never** |
 | `signatures` | **delta; ADR 0010** | public | auth | **never** | **never** |
+| `shutdown_templates` | **delta; ADR 0019** | public | auth | auth | admin-only |
+| `shutdown_template_steps` | **delta; ADR 0019** | public | auth | auth | admin-only |
+| `shutdown_template_roles` | **delta; ADR 0019** | public | auth | auth | admin-only |
+| `shutdown_contingencies` | **delta; ADR 0019** | public | auth | auth | admin-only |
+| `shutdown_roles` | **delta; ADR 0019** | public | auth | auth | admin-only |
+| `shutdowns` | **delta; ADR 0019** | public | auth | auth | admin-only |
+| `shutdown_steps` | **delta; ADR 0019** | public | auth | auth | **auth, only while unexecuted** |
+| `shutdown_step_events` | **delta; ADR 0019** | public | public, event shape rule | **never** | **never** |
 
 `segments` was created after the auth migration and had briefly kept public
 create/update rules; migration `1789000033` (ADR 0011) closed that gap, so its
 create/update now require auth like `tags`, with reads public. No collection
 carries a public write rule except the deliberate accountless field paths
 (`checks`/`check_items`/`punch_items` create, `test_equipment` create, the
-`loto_events` and `service_visits` shape-ruled creates, and the parent-scoped
-`attachments` create).
+`loto_events`, `service_visits` and `shutdown_step_events` shape-ruled creates,
+and the parent-scoped `attachments` create).
+
+**`shutdown_steps` carries the schema's one non-admin delete** (migration
+`1789000037`, ADR 0019). Its rule is
+`@request.auth.id != "" && shutdown_step_events_via_step.id = ""` — a signed-in
+planner may remove a plan line that has no events against it, and may not touch
+one that has. A shutdown step is a DRAFT the planner is still writing; it stops
+being a draft the moment the first event lands, and the back-relation is what
+detects that with no status column. The evidence itself
+(`shutdown_step_events`) remains append-only and superuser-only-delete, as does
+`shutdowns` — deleting an outage would cascade its steps and orphan every event
+for that night at once.
 
 Field-level shapes are defined by the migrations in `pb_migrations/` and
 explained in [ARCHITECTURE.md](../ARCHITECTURE.md). Load-bearing semantics

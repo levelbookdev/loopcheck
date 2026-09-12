@@ -43,6 +43,23 @@
 > are named by any step; `standby_crew` and `emergency` exist to be phoned. This
 > takes the module to **eight** collections and the schema to **32**.
 
+> **Amendment (2026-09-07, task `120`) — a planner may delete an UNEXECUTED
+> step.** Task 120 requires removing steps ("a real tie-in is never exactly the
+> generic runbook"), but every collection shipped `deleteRule: null` and
+> `docs/API.md` publishes admin-only deletes as a contract property. Maintainer
+> ruling: migration U sets
+> `shutdown_steps.deleteRule = '@request.auth.id != "" && shutdown_step_events_via_step.id = ""'`
+> — the schema's first and only non-admin delete.
+>
+> The line it draws is draft vs. record. A `shutdown_steps` row is the plan
+> someone is still writing, already freely editable for that reason; the
+> evidentiary weight lives in `shutdown_step_events`, which stays append-only
+> and superuser-only-delete. The back-relation guard means a step stops being
+> deletable the instant its first event lands — the draft/record transition
+> derives itself, with no status column (constraint #4). `shutdowns` itself is
+> NOT included: deleting one would cascade its steps and orphan every event for
+> that night at once.
+
 **Design only — no migration, no UI in this ADR** (task
 [`080`](../tasks/080-phase4-shutdown-runbook-design-adr.md)). The build tasks are
 written after this is Accepted, per the roadmap-maintenance workflow in

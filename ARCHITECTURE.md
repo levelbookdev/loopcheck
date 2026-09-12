@@ -486,6 +486,26 @@ re-imports are safe.
   A pure presentation join: no schema, every cell derived at render from
   records other pages already write. This is the free deliverable; the
   compiled, hyperlinked PDF binder is the paid sidecar (ADR 0003).
+- **Shutdown planning (`shutdown_plan.html`, ADR 0019)** turns a library
+  runbook into a planned outage. Two modes off the query string: `?project=`
+  lists a job's shutdowns and creates one; `?shutdown=` is the editable plan.
+  Instantiating **copies** the template's steps into `shutdown_steps`, which is
+  what makes the plan job-specific and editable without touching the library.
+  **Order matters in that copy**: `shutdown_steps.responsible_role` is a
+  relation while the template names roles by text key, so the project's
+  `shutdown_roles` are created from `shutdown_template_roles` *first* and the
+  steps bound to them — copying steps first would silently lose which role each
+  wanted, since the instance side has no key to fall back on. The planner then
+  fills in contact name and phone, which is the whole point of the registry.
+  The **schedule is derived at render** from `planned_window_start` +
+  `planned_offset_min` and never stored: move the window and every window step
+  moves with it with no other write. Reordering swaps `seq` through a parked
+  value, because the unique `(shutdown, seq)` index makes a direct two-row swap
+  collide. Removal is refused server-side once a step has events (migration U).
+  The whole page requires auth — the deliberate opposite of the accountless
+  execution view — and it **never writes a `shutdown_step_events` record**: if
+  the planning page could log a step, the planning/execution split would
+  already have collapsed. Hold points are marked and gate nothing.
 - **Punch list (`punchlist.html`)** answers the second of the three questions
   as a listing rather than a counter. `system.html` and `project.html` show
   open A/B/C **counts**; this is the report behind them — every item grouped

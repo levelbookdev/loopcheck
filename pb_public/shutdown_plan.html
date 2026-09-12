@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoopCheck — Shutdown Planning</title>
+
+<!--
+  Shutdown planning (ADR 0019, task 120) — turning a library runbook into a
+  planned outage for a real project, system and window.
+
+  Open as:  shutdown_plan.html?project={projectId}   the project's shutdowns
+       or:  shutdown_plan.html?shutdown={shutdownId} one plan, editable
+
+  PLANNING IS NOT EXECUTION, and the split is deliberate: this happens at a
+  desk days ahead, by an office user with an account. Execution (task 130)
+  happens at 2 AM in the rain with no account at all. THIS PAGE NEVER WRITES A
+  shutdown_step_events RECORD — if it could, the split would already have
+  collapsed. The whole page is an office write and requires auth (ADR 0011),
+  which is the exact opposite of the execution view.
+
+  What this page does, and the reasoning behind each part:
+
+  - INSTANTIATE. The template's steps are COPIED into shutdown_steps. The copy
+    is what makes the plan job-specific and editable without touching the
+    library, and it is why a template edited next year cannot rewrite a plan
+    already written (the check_items.prompt pattern).
+
+  - ROLES FIRST, THEN STEPS. shutdown_steps carries `responsible_role` as a
+    RELATION, while the template carries `responsible_role_key` as TEXT — so a
+    step copied before its role exists would lose which role it wanted. The
+    order therefore matters: create the project's shutdown_roles from the
+    template's role table (titles prefilled, contacts blank), THEN copy the
+    steps and bind them. The planner fills in the contact afterwards, which is
+    the entire point of the registry — at 2 AM you need the district operator's
+    phone number, not a role name.
+
+  - TAGS WARN, NEVER BLOCK. `tag_ref_hint` is a generic string ("isolation
+    valve"). The planner may bind it to a real tag; leaving it unbound is
+    normal and saves fine (ADR 0018 §11).
+
+  - THE SCHEDULE IS DERIVED AT RENDER, never stored. Wall-clock time is
+    window_start + planned_offset_min. Move the window and every time moves
+    with it, with no other write — a stored copy would drift the moment the
+    window was renegotiated, which is the one thing that always happens.
+
+  - NO STORED STATUS anywhere (constraint #4): no current_step, no progress,
+    no status on `shutdowns`.
+
+  - HOLD POINTS WARN, THEY NEVER BLOCK (ADR 0019 §1). This page marks them; it
+    does not gate anything on them. The app records; it never authorizes.
+-->
+<link rel="stylesheet" href="/app.css">
+<script defer src="/lc-auth.js"></script>
+<script defer src="/vendor/alpine.min.js"></script>
+<style>
+  /* Planning components, on top of app.css tokens. */
+  .sd-list { display: grid; gap: 8px; margin-bottom: 22px; }
+  .sd-form { display: grid; gap: 10px; max-width: 620px; margin-bottom: 20px; }
+  .sd-form label { font-size: 13px; color: var(--steel); }
+  .sd-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 560px) { .sd-row2 { grid-template-columns: 1fr; } }
+
+  .grp { margin: 22px 0 8px; padding-bottom: 4px; border-bottom: 2px solid var(--line);
+         font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--steel); }
+
+  .step { border: 1px solid var(--line); border-left: 3px solid var(--line);
+          border-radius: 4px; padding: 10px 12px; margin-bottom: 8px; background: var(--paper); }
+  .step.hold { border-left-color: var(--sev-b); }
+  .step-head { display: flex; gap: 10px; align-items: baseline; }
+  .step-seq { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+              color: var(--steel); font-size: 13px; min-width: 2.4em; }
+  .step-when { margin-left: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+               font-size: 13px; color: var(--ink); white-space: nowrap; }
+  .step-body { margin-top: 6px; display: grid; gap: 6px; }
+  .step-meta { font-size: 12px; color: var(--steel); display: flex; flex-wrap: wrap; gap: 10px; }
+  .step-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .step-tools button { font-size: 12px; padding: 4px 9px; }
+
+  .hold-flag { color: var(--sev-b); font-weight: 600; }
+  .warn { color: var(--sev-b); }
+  .rolecard { border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; margin-bottom: 8px; }
+  .rolecard.missing { border-color: var(--sev-b); }
+  .rolecard .rk { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--steel); }
+  .banner { border: 1px solid var(--line); border-left: 3px solid var(--safety);
+            background: var(--wash); padding: 10px 12px; border-radius: 4px; margin: 14px 0; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<div x-data="planPage()" x-init="load()">
+
+  <header class="bar">
+    <span class="mark"><a href="/">LoopCheck</a></span>
+    <span class="tag" x-text="shutdown ? shutdown.title : (project ? project.name : '—')"></span>
+  </header>
+
+  <template x-if="state === 'loading'"><p class="loading">Loading…</p></template>
+  <template x-if="state === 'error'"><div class="error" x-text="errorMsg"></div></template>
+
+  <!-- ============ LIST: a project's shutdowns + plan a new one ============ -->
+  <template x-if="state === 'list'">
+    <main>
+      <a class="crumb" :href="'/project.html?id=' + project.id" x-text="'← ' + project.name"></a>
+      <h1>Shutdowns</h1>
+      <p class="meta">Planned outages for this project. Planning is office work;
+        executing one is a separate, accountless view.</p>
+
+      <template x-if="!shutdowns.length">
+        <p class="empty">No shutdowns planned yet.</p>
+      </template>
+      <div class="sd-list">
+        <template x-for="s in shutdowns" :key="s.id">
+          <a class="card" :href="'/shutdown_plan.html?shutdown=' + s.id">
+            <div class="title" x-text="s.title"></div>
+            <div class="sub">
+              <span x-text="s.expand?.system ? s.expand.system.number + ' ' + s.expand.system.name : 'No system'"></span>
+              <span x-text="' · ' + (s.planned_window_start ? fmtDateTime(s.planned_window_start) : 'window not set')"></span>
+            </div>
+          </a>
+        </template>
+      </div>
+
+      <h2 class="section">Plan a shutdown</h2>
+      <template x-if="!templates.length">
+        <p class="empty">No shutdown runbooks in the library.</p>
+      </template>
+      <div class="sd-form" x-show="templates.length">
+        <div>
+          <label>Runbook</label>
+          <select x-model="nf.template">
+            <option value="">— ad-hoc (no runbook) —</option>
+            <template x-for="t in templates" :key="t.id">
+              <option :value="t.id" x-text="t.name"></option>
+            </template>
+          </select>
+        </div>
+        <div>
+          <label>Title</label>
+          <input x-model="nf.title" placeholder="e.g. 30-inch main tie-in at Sta 142+00">
+        </div>
+        <div>
+          <label>System (optional)</label>
+          <select x-model="nf.system">
+            <option value="">— none —</option>
+            <template x-for="sy in systems" :key="sy.id">
+              <option :value="sy.id" x-text="sy.number + ' ' + sy.name"></option>
+            </template>
+          </select>
+        </div>
+        <div class="sd-row2">
+          <div>
+            <label>Window start (T-0)</label>
+            <input type="datetime-local" x-model="nf.start">
+          </div>
+          <div>
+            <label>Window end</label>
+            <input type="datetime-local" x-model="nf.end">
+          </div>
+        </div>
+        <div x-show="createError" class="error" x-text="createError"></div>
+        <button class="go" :disabled="busy || !nf.title"
+                @click="createShutdown()"
+                x-text="busy ? 'Creating…' : 'Create plan'"></button>
+      </div>
+    </main>
+  </template>
+
+  <!-- ============ PLAN: one shutdown, editable ============ -->
+  <template x-if="state === 'plan'">
+    <main>
+      <a class="crumb" :href="'/shutdown_plan.html?project=' + shutdown.project"
+         x-text="'← shutdowns'"></a>
+      <h1 x-text="shutdown.title"></h1>
+      <p class="meta">
+        <span x-text="shutdown.expand?.system ? shutdown.expand.system.number + ' ' + shutdown.expand.system.name : 'No system'"></span>
+        <span x-show="shutdown.expand?.template" x-text="' · ' + (shutdown.expand?.template?.name || '')"></span>
+      </p>
+
+      <!-- The window. Every window-step time below derives from this. -->
+      <h2 class="section">Window</h2>
+      <div class="sd-form">
+        <div class="sd-row2">
+          <div>
+            <label>Start (T-0)</label>
+            <input type="datetime-local" x-model="wf.start">
+          </div>
+          <div>
+            <label>End</label>
+            <input type="datetime-local" x-model="wf.end">
+          </div>
+        </div>
+        <p class="meta">Step times are computed from this start; nothing is stored.
+          Move the window and every window step moves with it.</p>
+        <button class="go secondary" :disabled="busy" @click="saveWindow()"
+                x-text="busy ? 'Saving…' : 'Save window'"></button>
+      </div>
+
+      <!-- Roles: the contact details are the point of the registry. -->
+      <h2 class="section">Roles</h2>
+      <template x-if="rolesMissingContact.length">
+        <div class="banner">
+          <strong x-text="rolesMissingContact.length"></strong>
+          role(s) have no contact yet. At 2 AM the phone number is the useful part.
+        </div>
+      </template>
+      <template x-for="r in roles" :key="r.id">
+        <div class="rolecard" :class="{ missing: !r.contact_phone }">
+          <div><strong x-text="r.title || r.role_key"></strong>
+            <span class="rk" x-text="' · ' + r.role_key"></span></div>
+          <div class="sd-row2" style="margin-top:8px">
+            <input x-model="r.contact_name" placeholder="Contact name">
+            <input x-model="r.contact_phone" placeholder="Phone">
+          </div>
+          <div class="step-tools">
+            <button :disabled="busy" @click="saveRole(r)">Save contact</button>
+            <span class="meta" x-show="r.notify_on" x-text="'notify: ' + r.notify_on"></span>
+          </div>
+        </div>
+      </template>
+      <template x-if="!roles.length">
+        <p class="empty">No roles on this project yet.</p>
+      </template>
+
+      <!-- Steps, grouped. Reorder/edit/remove all happen before execution. -->
+      <h2 class="section">Steps</h2>
+      <div x-show="stepError" class="error" x-text="stepError"></div>
+
+      <template x-for="g in GROUPS" :key="g.key">
+        <div>
+          <div class="grp" x-text="g.label + ' · ' + stepsIn(g.key).length"></div>
+          <template x-if="!stepsIn(g.key).length">
+            <p class="empty">No steps in this group.</p>
+          </template>
+          <template x-for="st in stepsIn(g.key)" :key="st.id">
+            <div class="step" :class="{ hold: st.hold_point }">
+              <div class="step-head">
+                <span class="step-seq" x-text="'#' + st.seq"></span>
+                <strong x-show="st.hold_point" class="hold-flag">HOLD</strong>
+                <span class="step-when" x-text="whenLabel(st)"></span>
+              </div>
+
+              <div class="step-body">
+                <textarea rows="2" x-model="st.description"></textarea>
+                <div class="sd-row2">
+                  <div>
+                    <label>Responsible role</label>
+                    <select x-model="st.responsible_role">
+                      <option value="">— unassigned —</option>
+                      <template x-for="r in roles" :key="r.id">
+                        <option :value="r.id" x-text="r.title || r.role_key"></option>
+                      </template>
+                    </select>
+                  </div>
+                  <div>
+                    <label>Equipment tag</label>
+                    <select x-model="st.tag">
+                      <option value="">— none —</option>
+                      <template x-for="t in tags" :key="t.id">
+                        <option :value="t.id" x-text="t.tag_number"></option>
+                      </template>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Both offset forms, each shown only where it belongs
+                     (ADR 0019 §2). Never synthesize the missing one. -->
+                <div class="sd-row2" x-show="st.group === 'window'">
+                  <div>
+                    <label>Offset from T-0 (min)</label>
+                    <input type="number" x-model.number="st.planned_offset_min">
+                  </div>
+                  <div>
+                    <label>Duration (min)</label>
+                    <input type="number" x-model.number="st.planned_duration_min">
+                  </div>
+                </div>
+                <div x-show="st.group !== 'window'">
+                  <label>Offset label</label>
+                  <input x-model="st.offset_label" placeholder="e.g. T-14d">
+                </div>
+
+                <div class="step-meta">
+                  <label><input type="checkbox" x-model="st.hold_point"> Hold point</label>
+                  <span x-show="st.tag_ref_hint_note" class="warn"
+                        x-text="st.tag_ref_hint_note"></span>
+                </div>
+              </div>
+
+              <div class="step-tools">
+                <button :disabled="busy" @click="saveStep(st)">Save</button>
+                <button :disabled="busy || isFirst(st)" @click="move(st, -1)">↑</button>
+                <button :disabled="busy || isLast(st)" @click="move(st, 1)">↓</button>
+                <button :disabled="busy" @click="removeStep(st)">Remove</button>
+              </div>
+            </div>
+          </template>
+
+          <button class="go secondary" :disabled="busy" @click="addStep(g.key)"
+                  x-text="'+ Add ' + g.label.toLowerCase() + ' step'"></button>
+        </div>
+      </template>
+
+      <h2 class="section">Contingencies</h2>
+      <p class="meta">Reference material from the runbook, read when something has
+        already gone wrong. Invoking one is an execution act, not a planning one.</p>
+      <template x-if="!contingencies.length">
+        <p class="empty">No contingencies on this runbook.</p>
+      </template>
+      <template x-for="c in contingencies" :key="c.id">
+        <div class="rolecard">
+          <div><strong x-text="c.trigger"></strong></div>
+          <div class="meta" x-text="c.action"></div>
+        </div>
+      </template>
+    </main>
+  </template>
+</div>
+
+<script>
+function planPage() {
+  const PB = window.location.origin;
+
+  // The three step groups, in execution order. `window` is the only one that
+  // carries minute offsets (ADR 0019 §2).
+  const GROUPS = [
+    { key: 'pre_window',  label: 'Pre-window' },
+    { key: 'window',      label: 'Window' },
+    { key: 'post_window', label: 'Post-window' },
+  ];
+
+  return {
+    GROUPS,
+    projectId: new URLSearchParams(location.search).get('project') || '',
+    shutdownId: new URLSearchParams(location.search).get('shutdown') || '',
+    state: 'loading', errorMsg: '', createError: '', stepError: '',
+    busy: false,
+    project: null, shutdown: null,
+    shutdowns: [], templates: [], systems: [], tags: [],
+    steps: [], roles: [], contingencies: [],
+    nf: { template: '', title: '', system: '', start: '', end: '' },
+    wf: { start: '', end: '' },
+
+    // ---- formatting helpers ------------------------------------------------
+    // PocketBase hands back "2026-09-10 02:00:00.000Z"; Safari will not parse
+    // that with a space, so normalise to ISO before constructing a Date.
+    toDate(s) { return s ? new Date(String(s).replace(' ', 'T')) : null; },
+    fmtDateTime(s) {
+      const d = this.toDate(s);
+      return d && !isNaN(d) ? d.toLocaleString(undefined,
+        { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+    },
+    // <input type="datetime-local"> wants local "YYYY-MM-DDTHH:MM".
+    toLocalInput(s) {
+      const d = this.toDate(s);
+      if (!d || isNaN(d)) return '';
+      const p = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+    },
+    // ...and PocketBase wants "YYYY-MM-DD HH:MM:SS".
+    fromLocalInput(v) { return v ? v.replace('T', ' ') + ':00' : ''; },
+
+    // THE DERIVED SCHEDULE (spec item 5). Window steps get a wall-clock time
+    // computed from the shutdown's window start + their offset; pre/post steps
+    // show their calendar-scale label. Nothing here is ever written back — the
+    // window moves and these move with it.
+    whenLabel(st) {
+      if (st.group !== 'window') return st.offset_label || '';
+      const start = this.toDate(this.shutdown && this.shutdown.planned_window_start);
+      if (!start || isNaN(start)) return 'T+' + (st.planned_offset_min || 0) + 'm';
+      const at = new Date(start.getTime() + (st.planned_offset_min || 0) * 60000);
+      const dur = st.planned_duration_min ? ' (' + st.planned_duration_min + 'm)' : '';
+      return at.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) + dur;
+    },
+
+    stepsIn(group) { return this.steps.filter(s => s.group === group); },
+    isFirst(st) { const g = this.stepsIn(st.group); return g.length && g[0].id === st.id; },
+    isLast(st)  { const g = this.stepsIn(st.group); return g.length && g[g.length - 1].id === st.id; },
+
+    // ---- load --------------------------------------------------------------
+    async load() {
+      // Planning is an office act end to end (ADR 0011): validate/renew the
+      // token, then bounce to login preserving ?next= so the planner lands
+      // back on this exact plan. Task 130's execution view does the opposite.
+      await lcAuth.refresh();
+      if (!lcAuth.requireAuth()) return;
+
+      try {
+        if (this.shutdownId) await this.loadPlan();
+        else if (this.projectId) await this.loadList();
+        else throw new Error('Open as ?project={id} or ?shutdown={id}.');
+      } catch (err) {
+        this.state = 'error';
+        this.errorMsg = 'Could not load: ' + err.message;
+      }
+    },
+
+    async loadList() {
+      const pRes = await fetch(`${PB}/api/collections/projects/records/${this.projectId}`, { headers: { ...lcAuth.header() } });
+      if (!pRes.ok) throw new Error('project not found (' + pRes.status + ')');
+      this.project = await pRes.json();
+
+      // expand=system pulls the system record inline so the list can name it
+      // without a second round trip per row.
+      const f = encodeURIComponent(`project='${this.projectId}'`);
+      const [sdRes, tRes, syRes] = await Promise.all([
+        fetch(`${PB}/api/collections/shutdowns/records?filter=(${f})&expand=system&sort=-created&perPage=200`, { headers: { ...lcAuth.header() } }),
+        fetch(`${PB}/api/collections/shutdown_templates/records?sort=name&perPage=100`, { headers: { ...lcAuth.header() } }),
+        fetch(`${PB}/api/collections/systems/records?filter=(${f})&sort=startup_sequence,number&perPage=500`, { headers: { ...lcAuth.header() } }),
+      ]);
+      this.shutdowns = (await sdRes.json()).items || [];
+      this.templates = (await tRes.json()).items || [];
+      this.systems = (await syRes.json()).items || [];
+      this.state = 'list';
+    },
+
+    async loadPlan() {
+      const sRes = await fetch(
+        `${PB}/api/collections/shutdowns/records/${this.shutdownId}?expand=system,template`);
+      if (!sRes.ok) throw new Error('shutdown not found (' + sRes.status + ')');
+      this.shutdown = await sRes.json();
+      this.wf.start = this.toLocalInput(this.shutdown.planned_window_start);
+      this.wf.end = this.toLocalInput(this.shutdown.planned_window_end);
+
+      const sf = encodeURIComponent(`shutdown='${this.shutdown.id}'`);
+      const pf = encodeURIComponent(`project='${this.shutdown.project}'`);
+      const [stRes, rRes, tgRes] = await Promise.all([
+        fetch(`${PB}/api/collections/shutdown_steps/records?filter=(${sf})&sort=seq&perPage=500`, { headers: { ...lcAuth.header() } }),
+        fetch(`${PB}/api/collections/shutdown_roles/records?filter=(${pf})&sort=role_key&perPage=200`, { headers: { ...lcAuth.header() } }),
+        fetch(`${PB}/api/collections/tags/records?filter=(${pf})&sort=tag_number&perPage=1000&fields=id,tag_number`, { headers: { ...lcAuth.header() } }),
+      ]);
+      this.steps = (await stRes.json()).items || [];
+      this.roles = (await rRes.json()).items || [];
+      this.tags = (await tgRes.json()).items || [];
+
+      // Contingencies belong to the runbook, not the shutdown — an ad-hoc
+      // shutdown simply has none.
+      if (this.shutdown.template) {
+        const cf = encodeURIComponent(`template='${this.shutdown.template}'`);
+        const cRes = await fetch(
+          `${PB}/api/collections/shutdown_contingencies/records?filter=(${cf})&sort=seq&perPage=100`);
+        this.contingencies = (await cRes.json()).items || [];
+      }
+      this.state = 'plan';
+    },
+
+    get rolesMissingContact() { return this.roles.filter(r => !r.contact_phone); },
+
+    // ---- instantiate -------------------------------------------------------
+    async createShutdown() {
+      if (!lcAuth.isAuthed()) { lcAuth.requireAuth(); return; }
+      this.busy = true; this.createError = '';
+      try {
+        // 1. The shutdown itself first, so a later failure leaves a visible,
+        //    correctable record rather than losing the plan entirely (the
+        //    check.html write-order reasoning).
+        const body = {
+          project: this.projectId,
+          title: this.nf.title,
+          created_by: lcAuth.displayName() || '',
+        };
+        if (this.nf.system) body.system = this.nf.system;
+        if (this.nf.template) body.template = this.nf.template;
+        if (this.nf.start) body.planned_window_start = this.fromLocalInput(this.nf.start);
+        if (this.nf.end) body.planned_window_end = this.fromLocalInput(this.nf.end);
+
+        const res = await fetch(`${PB}/api/collections/shutdowns/records`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', ...lcAuth.header() },
+          body: JSON.stringify(body) });
+        if (!res.ok) throw new Error('rejected (' + res.status + ')');
+        const sd = await res.json();
+
+        if (this.nf.template) await this.instantiate(sd, this.nf.template);
+        location.href = '/shutdown_plan.html?shutdown=' + sd.id;
+      } catch (err) {
+        this.createError = 'Could not create: ' + err.message;
+        this.busy = false;
+      }
+    },
+
+    // Copy a runbook into this shutdown. ORDER MATTERS: roles before steps.
+    // shutdown_steps.responsible_role is a RELATION while the template names a
+    // role by TEXT key, so a step copied before its role record exists would
+    // silently lose which role it wanted — there is no key field on the
+    // instance side to fall back to.
+    async instantiate(sd, templateId) {
+      const tf = encodeURIComponent(`template='${templateId}'`);
+
+      // 1. Template roles -> this project's shutdown_roles, titles prefilled
+      //    and contacts blank for the planner to fill. Skipped where the
+      //    project already has that role_key (unique index on project+role_key).
+      const trRes = await fetch(
+        `${PB}/api/collections/shutdown_template_roles/records?filter=(${tf})&sort=role_key&perPage=200`);
+      const tplRoles = (await trRes.json()).items || [];
+
+      const pf = encodeURIComponent(`project='${sd.project}'`);
+      const exRes = await fetch(
+        `${PB}/api/collections/shutdown_roles/records?filter=(${pf})&perPage=200`);
+      const existing = (await exRes.json()).items || [];
+
+      const roleIdByKey = {};
+      for (const r of existing) roleIdByKey[r.role_key] = r.id;
+      for (const tr of tplRoles) {
+        if (roleIdByKey[tr.role_key]) continue;
+        const rRes = await fetch(`${PB}/api/collections/shutdown_roles/records`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', ...lcAuth.header() },
+          body: JSON.stringify({
+            project: sd.project, role_key: tr.role_key, title: tr.title,
+            notify_on: tr.notify_on || '',
+          }) });
+        if (rRes.ok) roleIdByKey[tr.role_key] = (await rRes.json()).id;
+      }
+
+      // 2. Template steps -> shutdown_steps, binding the role relation and
+      //    carrying BOTH offset forms exactly as the template holds them.
+      const tsRes = await fetch(
+        `${PB}/api/collections/shutdown_template_steps/records?filter=(${tf})&sort=seq&perPage=500`);
+      const tplSteps = (await tsRes.json()).items || [];
+
+      for (const ts of tplSteps) {
+        const body = {
+          shutdown: sd.id,
+          seq: ts.seq,
+          group: ts.group,
+          description: ts.description,
+          hold_point: !!ts.hold_point,
+          offset_label: ts.offset_label || '',
+          planned_offset_min: ts.planned_offset_min,
+          planned_duration_min: ts.planned_duration_min,
+        };
+        const rid = roleIdByKey[ts.responsible_role_key];
+        if (rid) body.responsible_role = rid;
+        // tag_ref_hint is a generic string and stays UNBOUND — the planner
+        // resolves it to a real tag, and leaving it unresolved is normal and
+        // must never block (ADR 0018 §11).
+        await fetch(`${PB}/api/collections/shutdown_steps/records`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', ...lcAuth.header() },
+          body: JSON.stringify(body) });
+      }
+    },
+
+    // ---- edits -------------------------------------------------------------
+    async saveWindow() {
+      if (!lcAuth.isAuthed()) { lcAuth.requireAuth(); return; }
+      this.busy = true; this.stepError = '';
+      try {
+        const res = await fetch(`${PB}/api/collections/shutdowns/records/${this.shutdown.id}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json', ...lcAuth.header() },
+          body: JSON.stringify({
+            planned_window_start: this.fromLocalInput(this.wf.start),
+            planned_window_end: this.fromLocalInput(this.wf.end),
+          }) });
+        if (!res.ok) throw new Error('window rejected (' + res.status + ')');
+        // Re-read so every derived step time recomputes from the new T-0.
+        // Nothing else is written: the schedule was never stored.
+        this.shutdown = await res.json();
+      } catch (err) { this.stepError = err.message; }
+      this.busy = false;
+    },
+
+    async saveRole(r) {
+      if (!lcAuth.isAuthed()) { lcAuth.requireAuth(); return; }
+      this.busy = true; this.stepError = '';
+      try {
+        const res = await fetch(`${PB}/api/collections/shutdown_roles/records/${r.id}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json', ...lcAuth.header() },
+          body: JSON.stringify({
+            title: r.title, contact_name: r.contact_name, contact_phone: r.contact_phone }) });
+        if (!res.ok) throw new Error('role rejected (' + res.status + ')');
+      } catch (err) { this.stepError = err.message; }
+      this.busy = false;
+    },
+
+    async saveStep(st) {
+      if (!lcAuth.isAuthed()) { lcAuth.requireAuth(); return; }
+      this.busy = true; this.stepError = '';
+      try {
+        const body = {
+          description: st.description,
+          hold_point: !!st.hold_point,
+          responsible_role: st.responsible_role || '',
+          tag: st.tag || '',
+        };
+        // Only send the offset form this group actually uses, so editing a
+        // window step can never quietly stamp a label onto it (ADR 0019 §2).
+        if (st.group === 'window') {
+          body.planned_offset_min = Number(st.planned_offset_min) || 0;
+          body.planned_duration_min = Number(st.planned_duration_min) || 0;
+        } else {
+          body.offset_label = st.offset_label || '';
+        }
+        const res = await fetch(`${PB}/api/collections/shutdown_steps/records/${st.id}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json', ...lcAuth.header() },
+          body: JSON.stringify(body) });
+        if (!res.ok) throw new Error('step rejected (' + res.status + ')');
+        st.tag_ref_hint_note = '';
+      } catch (err) { this.stepError = err.message; }
+      this.busy = false;
+    },
+
+    async addStep(group) {
+      if (!lcAuth.isAuthed()) { lcAuth.requireAuth(); return; }
+      this.busy = true; this.stepError = '';
+      try {
+        // seq is unique per shutdown, so a new line goes after everything.
+        const maxSeq = this.steps.reduce((m, s) => Math.max(m, s.seq || 0), 0);
+        const res = await fetch(`${PB}/api/collections/shutdown_steps/records`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', ...lcAuth.header() },
+          body: JSON.stringify({
+            shutdown: this.shutdown.id, seq: maxSeq + 1, group,
+            description: 'New step', hold_point: false }) });
+        if (!res.ok) throw new Error('add rejected (' + res.status + ')');
+        this.steps.push(await res.json());
+        this.sortSteps();
+      } catch (err) { this.stepError = err.message; }
+      this.busy = false;
+    },
+
+    // Removal is guarded SERVER-SIDE (migration U): a step with any event
+    // against it is no longer a draft and the delete is refused. The UI does
+    // not decide this; it only reports it.
+    async removeStep(st) {
+      if (!lcAuth.isAuthed()) { lcAuth.requireAuth(); return; }
+      this.busy = true; this.stepError = '';
+      try {
+        const res = await fetch(
+          `${PB}/api/collections/shutdown_steps/records/${st.id}`, { method: 'DELETE', headers: { ...lcAuth.header() } });
+        if (!res.ok) {
+          throw new Error(res.status === 404
+            ? 'This step cannot be removed — it already has execution events against it.'
+            : 'remove rejected (' + res.status + ')');
+        }
+        this.steps = this.steps.filter(s => s.id !== st.id);
+      } catch (err) { this.stepError = err.message; }
+      this.busy = false;
+    },
+
+    // Reorder within a group by swapping seq with the neighbour. The unique
+    // (shutdown, seq) index means the two cannot simply trade values — the
+    // first write would collide with the row still holding the target seq. So
+    // park one at a seq known to be free (max+1) for the duration of the swap.
+    async move(st, dir) {
+      if (!lcAuth.isAuthed()) { lcAuth.requireAuth(); return; }
+      const group = this.stepsIn(st.group);
+      const i = group.findIndex(s => s.id === st.id);
+      const other = group[i + dir];
+      if (!other) return;
+
+      this.busy = true; this.stepError = '';
+      try {
+        const park = this.steps.reduce((m, s) => Math.max(m, s.seq || 0), 0) + 1;
+        const a = st.seq, b = other.seq;
+        await this.patchSeq(st.id, park);
+        await this.patchSeq(other.id, a);
+        await this.patchSeq(st.id, b);
+        st.seq = b; other.seq = a;
+        this.sortSteps();
+      } catch (err) { this.stepError = 'Reorder failed: ' + err.message; }
+      this.busy = false;
+    },
+
+    async patchSeq(id, seq) {
+      const res = await fetch(`${PB}/api/collections/shutdown_steps/records/${id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json', ...lcAuth.header() },
+        body: JSON.stringify({ seq }) });
+      if (!res.ok) throw new Error('seq ' + seq + ' rejected (' + res.status + ')');
+    },
+
+    sortSteps() { this.steps.sort((x, y) => (x.seq || 0) - (y.seq || 0)); },
+  };
+}
+</script>
+</body>
+</html>

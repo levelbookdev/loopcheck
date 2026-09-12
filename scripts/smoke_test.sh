@@ -28,7 +28,7 @@
 #          LC_TEST_PORT=8500 ./scripts/smoke_test.sh
 # Exit:    0 = all assertions passed;  1 = a regression;  2 = setup failure.
 #
-# Assertion count: 122 as of 2026-09-07. If you add or remove assertions, update
+# Assertion count: 124 as of 2026-09-07. If you add or remove assertions, update
 # this number -- it is the cheap check that a section did not silently stop
 # running (a helper returning empty makes assertions vanish, not fail loudly).
 #
@@ -552,6 +552,17 @@ accepted "not_performed with an ADR 0018 reason allowed" \
 # entry in a ledger nobody can edit afterwards.
 rejected "duplicate client_token refused (idempotent offline replay)" \
   "$(anon_post_status shutdown_step_events "{\"shutdown\":\"$SD_ID\",\"kind\":\"aborted\",\"performed_by\":\"smoke super\",\"client_token\":\"smoke-sd-token-000002\"}")"
+
+# Migration U: a planner may delete an UNEXECUTED plan line, and may NOT delete
+# one that already has an event against it. This is the ONE non-admin delete in
+# the schema, so both directions are pinned here -- a plan is a draft, the
+# ledger is not, and the guard is what keeps that line from moving. The
+# transition happens by itself when the first event lands: no status column.
+SD_DRAFT=$(auth_post_id shutdown_steps "{\"shutdown\":\"$SD_ID\",\"seq\":90,\"group\":\"post_window\",\"description\":\"draft line, never executed\"}")
+accepted "planner deletes an UNEXECUTED plan step (migration U)" \
+  "$(auth_delete_status shutdown_steps "$SD_DRAFT")"
+rejected "planner CANNOT delete a step that has events (the guard)" \
+  "$(auth_delete_status shutdown_steps "$SD_STEP")"
 
 # Append-only, asserted from the ordinary-user tier (deleteRule/updateRule null
 # means superuser-only, and a superuser can always write -- the client tiers are

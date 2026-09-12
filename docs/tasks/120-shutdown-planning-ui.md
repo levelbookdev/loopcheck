@@ -1,6 +1,7 @@
 # 120 — Shutdown planning UI: instantiate a runbook into a real outage
 
-Status: TODO
+Status: DONE (2026-09-07 — `pb_public/shutdown_plan.html` + migration U for the
+delete gap; smoke test 122 → 124 assertions, green)
 Milestone: M2 Shutdown Runbooks + Punch List (v0.10.0)
 Depends on: 110
 
@@ -46,21 +47,44 @@ if a genuinely new component is needed.
 
 ## Acceptance criteria
 
-- [ ] From a seeded database, a signed-in user can create a shutdown from the
+- [x] From a seeded database, a signed-in user can create a shutdown from the
       tie-in template against a project + system, and 22 `shutdown_steps` are
       created with their groups, offsets and hold points intact.
-- [ ] Missing `shutdown_roles` can be created inline; the shutdown's steps then
+- [x] Missing `shutdown_roles` can be created inline; the shutdown's steps then
       resolve to real role records with contact details.
-- [ ] A step can be bound to a project tag; an unmatched hint warns and does not
+- [x] A step can be bound to a project tag; an unmatched hint warns and does not
       block saving.
-- [ ] Steps can be added, removed, reordered and edited **before** execution,
+- [x] Steps can be added, removed, reordered and edited **before** execution,
       and the page never writes a `shutdown_step_events` record.
-- [ ] Wall-clock times are derived at render — confirmed by changing
+- [x] Wall-clock times are derived at render — confirmed by changing
       `planned_window_start` and seeing every window step's time move with no
       other write.
-- [ ] An unauthenticated visitor cannot create or edit; the page says so rather
+- [x] An unauthenticated visitor cannot create or edit; the page says so rather
       than failing silently.
-- [ ] Page JS stays within the ~50 KB budget; no new library; no build step.
+- [x] Page JS stays within the ~50 KB budget; no new library; no build step.
+
+## Execution notes (2026-09-07)
+
+- **Spec item 4 needed a schema change.** Every collection shipped
+  `deleteRule: null`, so "remove a step" was impossible as written. Raised, and
+  resolved by maintainer ruling: migration U, a guarded rule that permits the
+  delete only while the step has no events. ADR 0019 carries the amendment.
+- **Roles are created before steps, not offered after.** `shutdown_steps` holds
+  `responsible_role` as a relation and has no text-key fallback, so a step
+  copied before its role record existed would lose which role it wanted. The
+  page therefore creates the project's roles from the template's role table
+  (titles prefilled, contacts blank) and then binds the steps; the planner
+  fills in contacts on the plan page, flagged by a banner. This satisfies spec
+  item 2's intent — the contact details are the point — without a schema change.
+- **Two bugs the render check caught that the API tests could not**: the page
+  called a `lcAuth.authFetch()` helper that does not exist in this codebase
+  (rendered a blank shell), and sorted systems by `sequence` when the field is
+  `startup_sequence` (400, empty picker). Both fixed.
+
+**Coverage gap worth a future task:** `scripts/browser_test.sh` covers only the
+accountless field path, so no office page has render coverage. This task shipped
+an empty shell and a 400 that only a throwaway headless check caught. A small
+office-path browser suite would have caught both automatically.
 
 ## Guardrails
 

@@ -111,6 +111,15 @@
         <div class="sub">Every active lock, grouped by system, oldest first — visibility only, never authority</div>
       </a>
 
+      <!-- Planned outages (ADR 0019). Planning is office work and the page
+           requires a sign-in; executing a shutdown is a separate, accountless
+           view (task 130) reached from the shutdown itself. -->
+      <h2 class="section">Shutdowns</h2>
+      <a class="card" :href="'/shutdown_plan.html?project=' + project.id">
+        <div class="title">Shutdown planning</div>
+        <div class="sub">Turn a runbook into a planned outage — steps, roles, hold points, derived window times</div>
+      </a>
+
       <!-- Service cutover (ADR 0006) — only shown when the job has service
            connections, so plant-only projects never see it. -->
       <template x-if="hasServices">
