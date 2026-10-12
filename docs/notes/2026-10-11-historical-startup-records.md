@@ -48,6 +48,12 @@ These records add weight to decisions already made. None needs new work.
   storage record signed over to the owner is evidence for
   [open question 3](../open-questions.md#3-where-does-equipment-preservation-change-ownership)
   (who owns preservation once custody changes).
+- **A failed operational acceptance is a real event, on the critical path.**
+  The same pump station's first startup attempt failed in a day. A field
+  directive reconfiguring telemetry, an RFI and PLC rewiring followed, then a
+  second attempt and the 10-day operational test. The ledger already holds this
+  shape: the failed check stays, the retest is a new record, and any pass
+  satisfies the phase.
 
 ## New: findings with no home yet
 
@@ -100,10 +106,17 @@ job.
 
 ### 4. The test medium drives the schedule
 
-One pump station's baseline allowed 28 days for commissioning. It became 136
-when the owner moved loop checks **from simulated to actual water
-recirculation**. The contract had no control narrative, and the owner's
-narrative arrived after the first plan was submitted.
+One pump station's baseline schedule allowed **23 working days** from loop
+checks to operational acceptance: 13 for loop checks, 10 for training, startup
+and operational acceptance. The actual window, from the first loop check to
+startup complete, ran about **103 working days** (148 calendar) after the owner
+moved loop checks **from simulated to actual water recirculation**. The
+contract had no control narrative, and the owner's narrative arrived after the
+first plan was submitted.
+
+*Corrected 2026-10-12.* This paragraph first said 28 days became 136. Those are
+a later schedule narrative's figures, which count loop checks at 18 days; the
+numbers above are read from the baseline and update schedules themselves.
 
 Other records make the same point. An owner's startup considerations tabulate
 the test medium (water, air, sludge) per equipment and phase, require an 8-hour
@@ -158,3 +171,29 @@ Its defects are the ones derived status prevents: days out with the sign
 reversed, severity written two ways for the same level, status typed into the
 author column. Its 1-to-4 severity does not map onto A/B/C. An import or export
 of an owner's log needs an explicit mapping, not an assumed one.
+
+### 8. Sign-off columns exist; executed sign-offs do not
+
+The same pump station's startup plan took seven submissions over eleven months
+before it was accepted as noted, and its demonstration sheet grew from 318 test
+rows to 476; one reviewer log alone held 51 comments. The as-built draft gives
+every row manufacturer, owner and contractor sign-off and date columns. **Every
+one is empty.** The executed proof is scanned vendor field reports and two
+signed installation certificates, none of it tied to a row.
+
+So the plan is negotiated in detail and executed with no row-level record.
+Recorded attestations bound to a check ([ADR 0010](../adr/0010-signatures-and-turnover-package.md))
+with the roles named as template data (ADR 0018 §9) are the piece that fills
+this gap; the plan's row count says how many checks a job like this needs.
+
+### 9. The approved submittal is not the installed configuration
+
+On that job the approved pump submittal had the wrong cable count, found only
+when the cables were pulled; the RFI took about six months to resolve. Cable
+supports, guide-rail brackets and identification markings followed the same
+pattern, two to six months each.
+
+An installation check that passes against the approved submittal can still be
+wrong. Whether a check records which submittal revision it verified against,
+and how a mismatch is raised, has no home yet; under hard constraint 4 a
+mismatch would be an appended finding, never an edit to the check.
