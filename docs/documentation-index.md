@@ -29,6 +29,7 @@ the document's role, not whether every sentence is current.
 | [`docs/adr/`](adr/) | Normative + historical + proposed | One decision per file; the status inside each ADR controls. Accepted ADRs are normative, Proposed ADRs are not authorization to implement. |
 | [`docs/adr/README.md`](adr/README.md) | Descriptive index | ADR navigation; must be kept synchronized with the directory and statuses. |
 | [`docs/notes/lookahead-sidecar-scope.md`](notes/lookahead-sidecar-scope.md) | Proposed working note | Sidecar scope ideas subordinate to ADR 0003 and the public API contract. |
+| [`docs/notes/2026-10-11-historical-startup-records.md`](notes/2026-10-11-historical-startup-records.md) | Descriptive working note | Structural findings from historical contractor startup and commissioning records, anonymized. Evidence for open questions and future ADRs; decides and authorizes nothing. |
 | [`docs/index.html`](index.html) | Descriptive public page | Self-contained GitHub Pages landing page. User-visible claims must match shipped code; screenshots under `docs/img/` are illustrative assets. |
 
 ## Evidence precedence
