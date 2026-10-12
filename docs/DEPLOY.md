@@ -61,6 +61,16 @@ backups, no containers.
 > `curl` on a URL with spaces), verify with something that cannot — raw bytes,
 > not rendered output.
 
+> **That droplet is gone (historical record).** The deployment the notes above
+> describe — the maintainer's DigitalOcean droplet behind `app.ringout.app` —
+> was retired on 2026-08-05 and destroyed on 2026-08-23. `app.ringout.app` no
+> longer serves LoopCheck. The maintainer's dev instance now runs privately,
+> off the internet, as one of several PocketBase apps sharing a container
+> image in the maintainer's own infrastructure configuration. That is a
+> personal hosting choice, not a supported option: this repository ships no
+> Dockerfile or compose file, and the self-hosting paths below — systemd +
+> Caddy, no containers — are unchanged.
+
 ## First-boot hardening (any internet-reachable box)
 
 Before the app, in this order. On a LAN-only trailer box this is optional; on
